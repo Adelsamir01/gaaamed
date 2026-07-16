@@ -94,9 +94,9 @@ npm run dev          # http://localhost:3000
 npm run server       # ws://0.0.0.0:8787
 ```
 
+- **Production (default)**: the Android app connects to the public server at `wss://gaaamed.adelsamir.com` — a Cloudflare Tunnel in front of this machine's local server (`HTTP → localhost:8787`). Any phone with the APK can play from anywhere.
 - Web preview connects to `ws://localhost:8787` automatically.
-- Android emulator connects to `ws://10.0.2.2:8787` automatically (10.0.2.2 = host machine).
-- Physical phones on the same LAN: set the PC's LAN IP in **Profile → إعدادات الخادم** (e.g. `ws://192.168.1.20:8787`).
+- Override anytime in **Profile → إعدادات الخادم** (e.g. `ws://192.168.1.20:8787` for LAN play, or `ws://10.0.2.2:8787` for emulator-to-localhost dev).
 
 ### Protocol tests
 
@@ -127,6 +127,19 @@ adb -s emulator-5554 install -r app-debug.apk
 adb -s emulator-5556 install -r app-debug.apk
 ```
 
+### Public tunnel (production server)
+
+The public endpoint `wss://gaaamed.adelsamir.com` is a Cloudflare Tunnel to this machine:
+
+```bash
+# cloudflared (Windows binary) — runs detached, keeps the tunnel alive
+cloudflared.exe tunnel --no-autoupdate --protocol http2 run --token <TUNNEL_TOKEN>
+```
+
+- Dashboard route: Zero Trust → Networks → Tunnels → gaaamed → Public Hostname → `gaaamed.adelsamir.com` → service `HTTP → localhost:8787` (Cloudflare handles the WS Upgrade automatically).
+- `--protocol http2` is required on networks that block QUIC/UDP.
+- The tunnel token is a secret — keep it in the dashboard / your password manager, never in this repo.
+
 ---
 
 ## شخبطة — rules
@@ -149,7 +162,7 @@ Arabic answer checking normalizes alef/hamza forms, taa marbuta, yaa/alef maqsur
 
 ## Roadmap
 
-- [ ] Public server deployment (Cloudflare tunnel / VPS) so any phone can join
+- [x] Public server deployment (Cloudflare Tunnel — `wss://gaaamed.adelsamir.com`)
 - [ ] Voice chat in rooms
 - [ ] More party games (مافيا، تحدي الرسم السريع)
 - [ ] Release-signed APK + Play Store listing

@@ -20,8 +20,8 @@
 The client is a single-page React app. The same build runs three ways:
 
 1. **Web dev/preview** — Vite dev server; WS connects to `ws://localhost:8787`.
-2. **Android APK** — Capacitor wraps `dist/` in a WebView; WS connects to `ws://10.0.2.2:8787` on emulators.
-3. **Physical phones** — same APK; server URL overridable in Profile → إعدادات الخادم (persisted in `localStorage` key `gaaamed_server_url`).
+2. **Android APK (default)** — Capacitor wraps `dist/` in a WebView; WS connects to the public production endpoint **`wss://gaaamed.adelsamir.com`** — a Cloudflare Tunnel (`--protocol http2`) forwarding `HTTP → localhost:8787` on the host machine.
+3. **Override** — server URL is overridable in Profile → إعدادات الخادم (persisted in `localStorage` key `gaaamed_server_url`), e.g. `ws://10.0.2.2:8787` for emulator dev or a LAN IP.
 
 URL resolution lives in `src/online/client.ts` (`Capacitor.isNativePlatform()` check).
 
