@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">قييمد</string>
-    <string name="title_activity_main">قييمد</string>
+    <string name="app_name">جااامد</string>
+    <string name="title_activity_main">جااامد</string>
     <string name="package_name">com.gaaamed.app</string>
     <string name="custom_url_scheme">com.gaaamed.app</string>
 </resources>

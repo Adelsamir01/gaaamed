@@ -1,9 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import type { ChatThread, Friend, GameResult, GameStats, Profile, Settings } from '@/types'
+import type { GameResult, GameStats, Profile, Settings } from '@/types'
 import { levelFromXp } from '@/types'
-import { FRIENDS_SEED } from '@/data/friends'
-import { CHAT_SEED } from '@/data/chat'
 import { setSoundEnabled } from '@/lib/sounds'
 
 const STORAGE_KEY = 'gaaamed-state-v1'
@@ -12,22 +10,18 @@ interface PersistedState {
   onboarded: boolean
   profile: Profile
   stats: Record<string, GameStats>
-  friends: Friend[]
-  threads: ChatThread[]
   settings: Settings
   lastDailyClaim: string | null
 }
 
 interface AppContextValue extends PersistedState {
-  completeOnboarding: (name: string, avatar: string) => void
+  completeOnboarding: (name: string, avatar: string, handle?: string) => void
   addCoins: (n: number) => void
   addXp: (n: number) => void
   finishGame: (result: GameResult) => void
   claimDailyReward: () => boolean
   canClaimDaily: boolean
-  sendMessage: (threadId: string, text: string) => void
-  receiveMessage: (threadId: string, senderName: string, senderAvatar: string, text: string) => void
-  markThreadRead: (threadId: string) => void
+  setIdentity: (userId: string, handle: string) => void
   updateProfile: (name: string, avatar: string) => void
   toggleSound: () => void
   resetProgress: () => void
@@ -37,8 +31,6 @@ const defaultState: PersistedState = {
   onboarded: false,
   profile: { name: '', avatar: '😎', xp: 0, coins: 100 },
   stats: {},
-  friends: FRIENDS_SEED,
-  threads: CHAT_SEED,
   settings: { sound: true },
   lastDailyClaim: null,
 }
@@ -48,7 +40,7 @@ function loadState(): PersistedState {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultState
     const parsed = JSON.parse(raw) as PersistedState
-    return { ...defaultState, ...parsed, friends: parsed.friends?.length ? parsed.friends : FRIENDS_SEED }
+    return { ...defaultState, ...parsed }
   } catch {
     return defaultState
   }
@@ -71,8 +63,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSoundEnabled(state.settings.sound)
   }, [state.settings.sound])
 
-  const completeOnboarding = useCallback((name: string, avatar: string) => {
-    setState((s) => ({ ...s, onboarded: true, profile: { ...s.profile, name, avatar } }))
+  const completeOnboarding = useCallback((name: string, avatar: string, handle?: string) => {
+    setState((s) => ({
+      ...s,
+      onboarded: true,
+      profile: { ...s.profile, name, avatar, handle: handle || s.profile.handle },
+    }))
   }, [])
 
   const addCoins = useCallback((n: number) => {
@@ -136,45 +132,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return ok
   }, [])
 
-  const sendMessage = useCallback((threadId: string, text: string) => {
-    setState((s) => ({
-      ...s,
-      threads: s.threads.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              messages: [
-                ...t.messages,
-                { id: `me-${Date.now()}`, senderId: 'me', senderName: s.profile.name || 'أنا', senderAvatar: s.profile.avatar, text, time: Date.now() },
-              ],
-            }
-          : t,
-      ),
-    }))
-  }, [])
-
-  const receiveMessage = useCallback((threadId: string, senderName: string, senderAvatar: string, text: string) => {
-    setState((s) => ({
-      ...s,
-      threads: s.threads.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              messages: [
-                ...t.messages,
-                { id: `bot-${Date.now()}-${Math.random()}`, senderId: 'bot', senderName, senderAvatar, text, time: Date.now() },
-              ],
-            }
-          : t,
-      ),
-    }))
-  }, [])
-
-  const markThreadRead = useCallback((threadId: string) => {
-    setState((s) => ({
-      ...s,
-      threads: s.threads.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t)),
-    }))
+  const setIdentity = useCallback((userId: string, handle: string) => {
+    setState((s) => ({ ...s, profile: { ...s.profile, userId, handle } }))
   }, [])
 
   const updateProfile = useCallback((name: string, avatar: string) => {
@@ -203,14 +162,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addXp,
       finishGame,
       claimDailyReward,
-      sendMessage,
-      receiveMessage,
-      markThreadRead,
+      setIdentity,
       updateProfile,
       toggleSound,
       resetProgress,
     }),
-    [state, canClaimDaily, completeOnboarding, addCoins, addXp, finishGame, claimDailyReward, sendMessage, receiveMessage, markThreadRead, updateProfile, toggleSound, resetProgress],
+    [state, canClaimDaily, completeOnboarding, addCoins, addXp, finishGame, claimDailyReward, setIdentity, updateProfile, toggleSound, resetProgress],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

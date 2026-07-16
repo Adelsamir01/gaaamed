@@ -46,7 +46,7 @@ export default function OnlineTicTacToe({ onFinish }: GameProps) {
       setEndMsg(winner === 'draw' ? 'تعادل! 🤝' : won ? 'فزت! 🏆' : 'خسر الخصم؟ لا… أنت! 😅')
       setTimeout(() => {
         onFinish({
-          gameId: 'tictactoe-online',
+          gameId: 'tictactoe',
           outcome,
           coinsEarned: outcome === 'win' ? 30 : outcome === 'draw' ? 10 : 5,
           xpEarned: outcome === 'win' ? 40 : outcome === 'draw' ? 15 : 8,

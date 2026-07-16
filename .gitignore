@@ -27,3 +27,11 @@ template-info.md
 .idea/
 .vscode/
 .DS_Store
+
+# local runtime & data
+runtime/
+server/data/
+test-shots/
+third-user.log
+third-user.err
+sdk-installer/tunnel-token.txt

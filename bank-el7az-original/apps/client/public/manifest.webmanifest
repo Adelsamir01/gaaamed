@@ -1,0 +1,24 @@
+{
+  "name": "بنك الحظ",
+  "short_name": "الحظ",
+  "display": "fullscreen",
+  "start_url": "/",
+  "scope": "/",
+  "orientation": "landscape",
+  "background_color": "#0c1f24",
+  "theme_color": "#0f6f78",
+  "icons": [
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

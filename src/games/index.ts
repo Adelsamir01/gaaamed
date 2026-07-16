@@ -10,6 +10,7 @@ import ConnectFour from './online/ConnectFour'
 import OnlineRps from './online/OnlineRps'
 import OnlineReaction from './online/OnlineReaction'
 import Shakhbata from './online/Shakhbata'
+import BankEl7az from './online/bankel7az/App'
 
 export interface GameProps {
   config: GameConfig
@@ -27,6 +28,8 @@ export interface GameDef {
   supportsTwoPlayer: boolean
   difficulties?: boolean
   online?: boolean
+  /** نسخة الأونلاين من نفس اللعبة (للألعاب التي تدعم الوضعين) */
+  onlineComponent?: ComponentType<GameProps>
   component: ComponentType<GameProps>
 }
 
@@ -45,6 +48,8 @@ export const GAMES: GameDef[] = [
     supportsBot: true,
     supportsTwoPlayer: true,
     difficulties: true,
+    online: true,
+    onlineComponent: OnlineTicTacToe,
     component: TicTacToe,
   },
   {
@@ -92,6 +97,8 @@ export const GAMES: GameDef[] = [
     supportsBot: true,
     supportsTwoPlayer: false,
     difficulties: true,
+    online: true,
+    onlineComponent: OnlineRps,
     component: RpsGame,
   },
   {
@@ -108,25 +115,11 @@ export const GAMES: GameDef[] = [
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    online: true,
+    onlineComponent: OnlineReaction,
     component: ReactionGame,
   },
   // ===== ألعاب الأونلاين =====
-  {
-    id: 'tictactoe-online',
-    name: 'إكس أو أونلاين',
-    description: 'تحدَّ صديقًا على جهاز آخر عبر الشبكة — من يصفّ الثلاثة أولًا؟',
-    emoji: '🌐',
-    category: 'أونلاين',
-    howToPlay: [
-      'أنشئ غرفة وشارك الرمز مع صديقك، أو انضم برمز غرفته',
-      'صاحب الغرفة يلعب ✕ ويبدأ أولًا',
-      'أول من يصفّ ثلاثة رموز متطابقة يفوز بالمباراة',
-    ],
-    supportsBot: false,
-    supportsTwoPlayer: false,
-    online: true,
-    component: OnlineTicTacToe,
-  },
   {
     id: 'connect4',
     name: 'أربعة تربح',
@@ -144,38 +137,6 @@ export const GAMES: GameDef[] = [
     component: ConnectFour,
   },
   {
-    id: 'rps-online',
-    name: 'حجر ورقة مقص أونلاين',
-    description: 'التحدي الكلاسيكي وجهًا لوجه ضد صديق — الأفضل من ٥ جولات',
-    emoji: '🪨',
-    category: 'أونلاين',
-    howToPlay: [
-      'اختر حجر أو ورقة أو مقص — اختيارك يبقى سرًا',
-      'يكشف الخادم الاختيارين معًا في نفس اللحظة',
-      'أول من يفوز بثلاث جولات يفوز بالمباراة',
-    ],
-    supportsBot: false,
-    supportsTwoPlayer: false,
-    online: true,
-    component: OnlineRps,
-  },
-  {
-    id: 'reaction-online',
-    name: 'سباق البرق',
-    description: 'من يضغط أولًا بعد الإشارة؟ سباق ردة فعل مباشر — الأول إلى ٣',
-    emoji: '⚡',
-    category: 'أونلاين',
-    howToPlay: [
-      'انتظرا إشارة "اضغط الآن!" معًا في نفس الوقت',
-      'أسرع لاعب يضغط يفوز بالجولة — الضغط المبكر خطأ!',
-      'الخادم يحسم الفائز — أول ٣ جولات تكسب المباراة',
-    ],
-    supportsBot: false,
-    supportsTwoPlayer: false,
-    online: true,
-    component: OnlineReaction,
-  },
-  {
     id: 'shakhbata',
     name: 'شخبطة',
     description: 'ارسم وخمّن مع أصدقائك — حتى ٨ لاعبين في الغرفة',
@@ -191,6 +152,23 @@ export const GAMES: GameDef[] = [
     supportsTwoPlayer: false,
     online: true,
     component: Shakhbata,
+  },
+  {
+    id: 'bank-el7az',
+    name: 'بنك الحظ',
+    description: 'لعبة محافظات مصرية أونلاين — ارمِ الزهر واشترِ وابنِ حتى يفلس خصومك',
+    emoji: '🏦',
+    category: 'أونلاين',
+    howToPlay: [
+      'ارمِ الزهر وتحرك حول اللوحة — ٢٧ محافظة في ٩ مجموعات',
+      'اشترِ المحافظات وأكمل المجموعة الواحدة لتفتح البناء (حتى ٣ مبانٍ)',
+      'اللي يقف على ملكك يدفع إيجار — والمباني ترفع الإيجار',
+      'كروت الحظ والضرائب والقسم تقلب الموازين — آخر لاعب واقف يكسب',
+    ],
+    supportsBot: false,
+    supportsTwoPlayer: false,
+    online: true,
+    component: BankEl7az,
   },
 ]
 

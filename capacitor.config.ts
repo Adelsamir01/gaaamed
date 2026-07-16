@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.gaaamed.app',
-  appName: 'قييمد',
+  appName: 'جااامد',
   webDir: 'dist',
   server: {
     androidScheme: 'http',

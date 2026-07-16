@@ -82,7 +82,7 @@ export default function OnlineRps({ onFinish }: GameProps) {
             timersRef.current.push(
               setTimeout(() => {
                 onFinish({
-                  gameId: 'rps-online',
+                  gameId: 'rps',
                   outcome: won ? 'win' : 'loss',
                   coinsEarned: won ? 30 : 5,
                   xpEarned: won ? 40 : 8,

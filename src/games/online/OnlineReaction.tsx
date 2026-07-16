@@ -99,7 +99,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
         timersRef.current.push(
           setTimeout(() => {
             onFinish({
-              gameId: 'reaction-online',
+              gameId: 'reaction',
               outcome: won ? 'win' : 'loss',
               coinsEarned: won ? 30 : 5,
               xpEarned: won ? 40 : 8,

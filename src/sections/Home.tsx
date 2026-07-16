@@ -1,10 +1,12 @@
 import { motion } from 'framer-motion'
-import { Gift, Crown, Flame, ChevronLeft, MessageCircle } from 'lucide-react'
+import { Gift, Crown, Flame, ChevronLeft, MessageCircle, UserPlus } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import { useApp } from '@/store/AppContext'
-import { AvatarCircle, CoinChip, LevelBar, SectionTitle } from './components'
+import { useOnline } from '@/online/OnlineContext'
+import { AvatarCircle, CoinChip, LevelBar, SectionTitle, StatusDot } from './components'
 import { GAMES } from '@/games'
 import { levelFromXp } from '@/types'
+import { statusLabel } from '@/data/friends'
 import { sounds } from '@/lib/sounds'
 import type { TabId } from './TabBar'
 
@@ -15,7 +17,8 @@ interface Props {
 }
 
 export default function Home({ goTab, openGame, openChat }: Props) {
-  const { profile, friends, threads, canClaimDaily, claimDailyReward, stats } = useApp()
+  const { profile, canClaimDaily, claimDailyReward, stats } = useApp()
+  const { friends, threads, status } = useOnline()
 
   const claim = () => {
     if (claimDailyReward()) {
@@ -23,13 +26,6 @@ export default function Home({ goTab, openGame, openChat }: Props) {
       confetti({ particleCount: 90, spread: 75, origin: { y: 0.3 }, colors: ['#10b981', '#f59e0b', '#ffffff'] })
     }
   }
-
-  const leaderboard = [
-    { id: 'me', name: `${profile.name} (أنت)`, avatar: profile.avatar, xp: profile.xp, me: true },
-    ...friends.map((f) => ({ id: f.id, name: f.name, avatar: f.avatar, xp: f.xp, me: false })),
-  ]
-    .sort((a, b) => b.xp - a.xp)
-    .slice(0, 5)
 
   const activeThreads = threads.filter((t) => t.unread > 0).length > 0 ? threads.filter((t) => t.unread > 0) : threads.slice(0, 2)
   const featured = GAMES[0]
@@ -43,6 +39,10 @@ export default function Home({ goTab, openGame, openChat }: Props) {
           <p className="text-xs text-muted-foreground">مرحبًا 👋</p>
           <h1 className="text-xl font-extrabold truncate">{profile.name}</h1>
         </div>
+        <span className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground glass rounded-full px-2.5 py-1">
+          <span className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-emerald-400 animate-pulse' : status === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-400'}`} />
+          {status === 'online' ? 'أونلاين' : status === 'connecting' ? 'يتصل…' : 'أوفلاين'}
+        </span>
         <CoinChip coins={profile.coins} />
       </div>
 
@@ -134,19 +134,40 @@ export default function Home({ goTab, openGame, openChat }: Props) {
       {/* المتصدرون */}
       <SectionTitle title="المتصدرون 🏆" />
       <div className="glass rounded-3xl p-2">
-        {leaderboard.map((p, i) => (
-          <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-2xl ${p.me ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}>
-            <span className="w-6 text-center font-black text-sm">
-              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-muted-foreground">{i + 1}</span>}
-            </span>
-            <AvatarCircle emoji={p.avatar} size="sm" />
-            <span className="flex-1 font-bold text-sm truncate">{p.name}</span>
-            <span className="text-xs font-bold text-emerald-300 flex items-center gap-1">
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-              مستوى {levelFromXp(p.xp)}
-            </span>
+        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-400/30">
+          <span className="w-6 text-center font-black text-sm">🥇</span>
+          <AvatarCircle emoji={profile.avatar} size="sm" />
+          <span className="flex-1 font-bold text-sm truncate">{profile.name} (أنت)</span>
+          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1">
+            <Crown className="w-3.5 h-3.5 text-amber-400" />
+            مستوى {levelFromXp(profile.xp)}
+          </span>
+        </div>
+        {friends.slice(0, 4).map((f, i) => (
+          <div key={f.userId} className="flex items-center gap-3 p-2.5 rounded-2xl">
+            <span className="w-6 text-center font-black text-sm text-muted-foreground">{i + 2}</span>
+            <div className="relative">
+              <AvatarCircle emoji={f.avatar} size="sm" />
+              <span className="absolute -bottom-0.5 -end-0.5">
+                <StatusDot status={f.presence} />
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm truncate">{f.name}</p>
+              <p className="text-[10px] text-emerald-300 font-bold" dir="ltr">@{f.handle}</p>
+            </div>
+            <span className="text-[11px] font-bold text-muted-foreground">{statusLabel[f.presence]}</span>
           </div>
         ))}
+        {friends.length === 0 && (
+          <button
+            onClick={() => goTab('friends')}
+            className="w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-dashed border-white/15 text-muted-foreground text-xs font-bold hover:bg-white/5 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            ضيف صاحبك بالمعرّف وتحدّوه
+          </button>
+        )}
       </div>
 
       {/* غرف الدردشة النشطة */}
@@ -160,26 +181,36 @@ export default function Home({ goTab, openGame, openChat }: Props) {
         }
       />
       <div className="flex flex-col gap-2">
-        {activeThreads.slice(0, 2).map((t) => {
-          const last = t.messages[t.messages.length - 1]
-          return (
-            <button key={t.id} onClick={() => openChat(t.id)} className="glass rounded-3xl p-3.5 flex items-center gap-3 text-start hover:bg-white/10 transition-colors">
-              <AvatarCircle emoji={t.avatar} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-extrabold text-sm">{t.name}</span>
-                  {t.unread > 0 && (
-                    <span className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">{t.unread}</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5 flex items-center gap-1">
-                  <MessageCircle className="w-3 h-3 shrink-0" />
-                  {last ? last.text : 'لا رسائل بعد'}
-                </p>
+        {activeThreads.slice(0, 2).map((t) => (
+          <button key={t.id} onClick={() => openChat(t.id)} className="glass rounded-3xl p-3.5 flex items-center gap-3 text-start hover:bg-white/10 transition-colors">
+            <AvatarCircle emoji={t.avatar} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-extrabold text-sm">{t.name}</span>
+                {t.unread > 0 && (
+                  <span className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">{t.unread}</span>
+                )}
               </div>
-            </button>
-          )
-        })}
+              <p className="text-xs text-muted-foreground truncate mt-0.5 flex items-center gap-1">
+                <MessageCircle className="w-3 h-3 shrink-0" />
+                {t.lastMessage
+                  ? t.lastMessage.kind === 'game_invite'
+                    ? `🎮 دعوة لعبة ${t.lastMessage.invite?.gameName ?? ''}`
+                    : t.lastMessage.text
+                  : 'لا رسائل بعد'}
+              </p>
+            </div>
+          </button>
+        ))}
+        {activeThreads.length === 0 && (
+          <button
+            onClick={() => goTab('chat')}
+            className="w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-dashed border-white/15 text-muted-foreground text-xs font-bold hover:bg-white/5 transition-colors"
+          >
+            <MessageCircle className="w-4 h-4" />
+            ابدأ محادثة مع صاحبك
+          </button>
+        )}
       </div>
     </div>
   )

@@ -1,149 +1,230 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, Send } from 'lucide-react'
-import { useApp } from '@/store/AppContext'
+import { motion } from 'framer-motion'
+import { ChevronRight, Gamepad2, Send } from 'lucide-react'
+import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle } from './components'
-import { BOT_REPLIES } from '@/data/botReplies'
+import { ONLINE_GAMES } from '@/games'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
+import type { ServerChatMessage } from '@/types'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Props {
   threadId: string
   onBack: () => void
+  onJoinRoom: (code: string) => void
 }
 
-export default function ChatRoom({ threadId, onBack }: Props) {
-  const { threads, sendMessage, receiveMessage, markThreadRead } = useApp()
-  const thread = threads.find((t) => t.id === threadId)
-  const [draft, setDraft] = useState('')
-  const [typing, setTyping] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+function fmtTime(ts: number) {
+  return new Date(ts).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })
+}
 
+export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
+  const { me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatSendInvite } = useOnline()
+  const thread = threads.find((t) => t.id === threadId)
+  const msgs: ServerChatMessage[] = messages[threadId] ?? []
+  const [draft, setDraft] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const dmFriend = thread?.kind === 'dm' ? friends.find((f) => thread.memberIds.includes(f.userId)) : undefined
+
+  // عند الفتح: حمّل التاريخ وعلّم كمقروء — وعند الخروج أغلق المؤشر
   useEffect(() => {
-    markThreadRead(threadId)
-  }, [threadId, markThreadRead, thread?.messages.length])
+    setOpenThreadId(threadId)
+    loadThread(threadId)
+    return () => setOpenThreadId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [thread?.messages.length, typing])
-
-  useEffect(() => {
-    const timers = timersRef.current
-    return () => timers.forEach(clearTimeout)
-  }, [])
-
-  if (!thread) return null
+  }, [msgs.length])
 
   const send = () => {
     const text = draft.trim()
     if (!text) return
-    sounds.pop()
-    sendMessage(threadId, text)
+    sounds.click()
+    chatSend(threadId, text)
     setDraft('')
+  }
 
-    // رد وهمي بعد فترة قصيرة
-    const responder = thread.id === 't1' || thread.id === 't2' ? 'سارة' : 'روبوت قييمد'
-    const avatar = responder === 'سارة' ? '🦋' : '🤖'
-    timersRef.current.push(
-      setTimeout(() => setTyping(responder), 700),
-      setTimeout(() => {
-        setTyping(null)
-        const reply = BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)]
-        receiveMessage(threadId, responder, avatar, reply)
-        sounds.tick()
-      }, 2200),
-    )
+  const sendInvite = (gameId: string) => {
+    sounds.pop()
+    chatSendInvite(threadId, gameId)
+    setInviteOpen(false)
   }
 
   return (
     <div className="flex flex-col h-dvh">
-      {/* ترويسة الغرفة */}
-      <div className="glass-strong border-x-0 border-t-0 px-4 py-3 flex items-center gap-3 shrink-0" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-        <button onClick={onBack} className="p-1.5 -m-1.5 rounded-full hover:bg-white/10 transition-colors">
+      {/* الترويسة */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-white/10 shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ChevronRight className="w-5 h-5" />
+          رجوع
         </button>
-        <AvatarCircle emoji={thread.avatar} size="sm" />
+        <AvatarCircle emoji={thread?.avatar ?? '💬'} size="sm" />
         <div className="flex-1 min-w-0">
-          <h1 className="font-extrabold text-sm truncate">{thread.name}</h1>
-          <p className="text-[11px] text-emerald-300">{typing ? `${typing} يكتب الآن…` : `${thread.members} عضو`}</p>
+          <p className="font-extrabold text-sm truncate">{thread?.name ?? 'محادثة'}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {thread?.kind === 'group'
+              ? `${thread.memberIds.length} أعضاء`
+              : dmFriend?.handle
+                ? <span dir="ltr">@{dmFriend.handle}</span>
+                : ''}
+          </p>
         </div>
       </div>
 
       {/* الرسائل */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-        {thread.messages.map((m) => {
-          const mine = m.senderId === 'me'
+      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 flex flex-col gap-2.5">
+        {msgs.length === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+            <div className="text-4xl mb-2">💬</div>
+            <p className="text-xs font-bold">لا رسائل بعد — ابدأ المحادثة!</p>
+          </div>
+        )}
+        {msgs.map((m) => {
+          const mine = m.senderId === me?.userId
+
+          // فقاعة دعوة اللعبة الغنية
+          if (m.kind === 'game_invite' && m.invite) {
+            return (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn('max-w-[82%]', mine ? 'self-end' : 'self-start')}
+              >
+                {!mine && thread?.kind === 'group' && (
+                  <span className="text-[10px] font-bold text-emerald-300 mb-1 block ps-2">
+                    {m.senderAvatar} {m.senderName}
+                  </span>
+                )}
+                <div
+                  className={cn(
+                    'rounded-3xl p-4 border',
+                    mine
+                      ? 'bg-emerald-500/15 border-emerald-400/40 rounded-bl-md'
+                      : 'bg-white/5 border-white/15 rounded-br-md',
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-4xl">{m.invite.gameEmoji}</span>
+                    <div className="flex-1">
+                      <p className="font-extrabold text-sm">{m.invite.gameName}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {mine ? 'أرسلت دعوة لعب 🎮' : `${m.senderName} بيتحداك!`}
+                      </p>
+                    </div>
+                  </div>
+                  {!mine && (
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        sounds.pop()
+                        onJoinRoom(m.invite!.roomCode)
+                      }}
+                      className="mt-3 w-full py-2.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold text-sm glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
+                    >
+                      انضم الآن 🎮
+                    </motion.button>
+                  )}
+                  <p className="text-[9px] text-muted-foreground mt-2 text-end">{fmtTime(m.time)}</p>
+                </div>
+              </motion.div>
+            )
+          }
+
           return (
             <motion.div
               key={m.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className={cn('flex gap-2 max-w-[85%]', mine ? 'self-end flex-row-reverse' : 'self-start')}
+              className={cn('max-w-[82%]', mine ? 'self-end' : 'self-start')}
             >
-              {!mine && <AvatarCircle emoji={m.senderAvatar} size="sm" />}
-              <div className={cn('flex flex-col', mine ? 'items-start' : 'items-end')}>
-                {!mine && <span className="text-[10px] text-muted-foreground mb-1 px-1">{m.senderName}</span>}
-                <div
-                  className={cn(
-                    'rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed border',
-                    mine
-                      ? 'bg-emerald-500/85 border-emerald-400/50 text-white rounded-tl-md'
-                      : 'bg-slate-700/70 border-white/10 text-slate-100 rounded-tr-md',
-                  )}
-                >
-                  {m.text}
-                </div>
-                <span className="text-[9px] text-muted-foreground mt-1 px-1">
-                  {new Date(m.time).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })}
+              {!mine && thread?.kind === 'group' && (
+                <span className="text-[10px] font-bold text-emerald-300 mb-1 block ps-2">
+                  {m.senderAvatar} {m.senderName}
                 </span>
+              )}
+              <div
+                className={cn(
+                  'rounded-3xl px-4 py-2.5',
+                  mine
+                    ? 'bg-gradient-to-l from-emerald-500 to-teal-500 text-white rounded-bl-md'
+                    : 'bg-white/8 border border-white/12 rounded-br-md',
+                )}
+              >
+                <p className="text-sm font-medium whitespace-pre-wrap break-words">{m.text}</p>
+                <p className={cn('text-[9px] mt-1 text-end', mine ? 'text-white/70' : 'text-muted-foreground')}>
+                  {fmtTime(m.time)}
+                </p>
               </div>
             </motion.div>
           )
         })}
-
-        {/* مؤشر الكتابة */}
-        <AnimatePresence>
-          {typing && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="self-start flex gap-2 items-center">
-              <div className="bg-slate-700/70 border border-white/10 rounded-2xl rounded-tr-md px-4 py-3 flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <motion.span
-                    key={i}
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.15 }}
-                    className="w-1.5 h-1.5 rounded-full bg-slate-300"
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* حقل الإدخال */}
-      <div className="shrink-0 px-3 pb-3 safe-bottom">
-        <div className="glass-strong rounded-full flex items-center gap-2 p-1.5">
+      {/* الإدخال */}
+      <div className="px-4 pb-4 pt-2 shrink-0">
+        <div className="flex items-center gap-2 glass rounded-3xl p-2">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              sounds.click()
+              setInviteOpen(true)
+            }}
+            className="w-11 h-11 rounded-2xl bg-amber-400/15 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0 glow-amber"
+            aria-label="دعوة لعبة"
+          >
+            <Gamepad2 className="w-5 h-5" />
+          </motion.button>
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
-            placeholder="اكتب رسالتك…"
-            className="flex-1 bg-transparent px-3 py-2 text-sm font-bold placeholder:text-muted-foreground/60 focus:outline-none"
+            placeholder="اكتب رسالة…"
+            className="flex-1 min-w-0 bg-transparent text-sm font-medium placeholder:text-muted-foreground/60 focus:outline-none"
           />
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={send}
             disabled={!draft.trim()}
-            className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0',
-              draft.trim() ? 'bg-emerald-500 text-white glow-emerald' : 'bg-white/10 text-muted-foreground',
-            )}
+            className="w-11 h-11 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 disabled:opacity-40 glow-emerald"
+            aria-label="إرسال"
           >
-            <Send className="w-4 h-4 -scale-x-100" />
+            <Send className="w-5 h-5 -scale-x-100" />
           </motion.button>
         </div>
       </div>
+
+      {/* منتقي لعبة الدعوة */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="max-w-[380px] rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-center">تحدّاهم في لعبة 🎮</DialogTitle>
+            <DialogDescription className="text-center">هتوصلهم دعوة بزر انضمام مباشر</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 py-2">
+            {ONLINE_GAMES.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => sendInvite(g.id)}
+                className="glass rounded-2xl p-3.5 flex flex-col items-center gap-1.5 hover:bg-white/10 transition-colors"
+              >
+                <span className="text-3xl">{g.emoji}</span>
+                <span className="font-extrabold text-xs">{g.name}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

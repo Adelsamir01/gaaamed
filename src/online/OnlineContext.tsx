@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { onlineClient, getServerUrl, saveServerUrl, type ConnectionStatus, type ServerMessage } from './client'
+import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, type ConnectionStatus, type ServerMessage } from './client'
+import { useApp } from '@/store/AppContext'
+import type { PublicUserCard, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 
 export interface Opponent {
   name: string
@@ -22,16 +24,22 @@ export type GameEvent =
   | { kind: 'rps_reveal'; choices: Record<number, string> }
   | { kind: 'react_result'; winnerSlot: number; times: Record<number, number | null>; fouls: Record<number, boolean> }
   | { kind: 'sh'; msg: ServerMessage }
+  | { kind: 'bank'; msg: ServerMessage }
 
 type GameEventHandler = (ev: GameEvent) => void
 
 const SHAKHBATA_MSGS = new Set(['round_choosing', 'word_options', 'your_word', 'round', 'draw', 'hint', 'chat', 'scores', 'round_end', 'ended'])
 
+export interface MeIdentity {
+  userId: string
+  handle: string
+}
+
 interface OnlineContextValue {
   status: ConnectionStatus
   phase: OnlinePhase
   code: string | null
-  slot: 1 | 2 | null
+  slot: number | null
   gameId: string | null
   opponent: Opponent | null
   players: RoomPlayer[]
@@ -52,15 +60,42 @@ interface OnlineContextValue {
   subscribe: (h: GameEventHandler) => () => void
   updateServerUrl: (url: string) => void
   reconnect: () => void
+  // الهوية والاجتماعي (خادم حقيقي)
+  me: MeIdentity | null
+  friends: ServerFriend[]
+  threads: ServerThread[]
+  messages: Record<string, ServerChatMessage[]>
+  openThreadId: string | null
+  setOpenThreadId: (id: string | null) => void
+  searchUser: (handle: string) => Promise<PublicUserCard | null>
+  setHandle: (handle: string) => Promise<{ ok: boolean; message?: string }>
+  friendAdd: (userId: string) => void
+  friendRemove: (userId: string) => void
+  createDm: (userId: string) => Promise<ServerThread | null>
+  createGroup: (name: string, memberIds: string[]) => Promise<ServerThread | null>
+  loadThread: (threadId: string) => void
+  chatSend: (threadId: string, text: string) => void
+  chatSendInvite: (threadId: string, gameId: string) => void
+  refreshSocial: () => void
+  // المباراة السريعة
+  quickMatchGame: string | null
+  quickMatch: (gameId: string) => void
+  quickMatchCancel: () => void
+  /** الغرفة الحالية جاءت من مباراة سريعة (تُستخدم للبدء التلقائي في بنك الحظ) */
+  fromQuickMatch: boolean
+  // غرفة دعوة أرسلها المستخدم — ليدخلها تلقائيًا فور إرسالها
+  ownInviteRoom: { code: string; gameId: string } | null
+  clearOwnInviteRoom: () => void
 }
 
 const OnlineContext = createContext<OnlineContextValue | null>(null)
 
 export function OnlineProvider({ children }: { children: ReactNode }) {
+  const app = useApp()
   const [status, setStatus] = useState<ConnectionStatus>(onlineClient.status)
   const [phase, setPhase] = useState<OnlinePhase>('idle')
   const [code, setCode] = useState<string | null>(null)
-  const [slot, setSlot] = useState<1 | 2 | null>(null)
+  const [slot, setSlot] = useState<number | null>(null)
   const [gameId, setGameId] = useState<string | null>(null)
   const [opponent, setOpponent] = useState<Opponent | null>(null)
   const [players, setPlayers] = useState<RoomPlayer[]>([])
@@ -68,10 +103,37 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [rematchMine, setRematchMine] = useState(false)
   const [rematchTheirs, setRematchTheirs] = useState(false)
   const [serverUrl, setServerUrl] = useState(getServerUrl())
+  // الاجتماعي
+  const [me, setMe] = useState<MeIdentity | null>(null)
+  const [friends, setFriends] = useState<ServerFriend[]>([])
+  const [threads, setThreads] = useState<ServerThread[]>([])
+  const [messages, setMessages] = useState<Record<string, ServerChatMessage[]>>({})
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const [quickMatchGame, setQuickMatchGame] = useState<string | null>(null)
+  const [fromQuickMatch, setFromQuickMatch] = useState(false)
+  const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string } | null>(null)
+  const clearOwnInviteRoom = useCallback(() => setOwnInviteRoom(null), [])
+
   const gameHandlersRef = useRef(new Set<GameEventHandler>())
   const rematchRef = useRef({ mine: false, theirs: false })
   const phaseRef = useRef<OnlinePhase>('idle')
   phaseRef.current = phase
+  const meRef = useRef<MeIdentity | null>(null)
+  meRef.current = me
+  const openThreadRef = useRef<string | null>(null)
+  openThreadRef.current = openThreadId
+  const searchResolversRef = useRef(new Map<string, (card: PublicUserCard | null) => void>())
+  const handleResolverRef = useRef<((r: { ok: boolean; message?: string }) => void) | null>(null)
+  const threadResolverRef = useRef<((t: ServerThread | null) => void) | null>(null)
+  const startGameRef = useRef<() => void>(() => {})
+
+  const upsertThread = useCallback((thread: ServerThread) => {
+    setThreads((list) => {
+      const next = list.filter((t) => t.id !== thread.id)
+      next.unshift(thread)
+      return next.sort((a, b) => b.updatedAt - a.updatedAt)
+    })
+  }, [])
 
   useEffect(() => {
     onlineClient.connect()
@@ -85,7 +147,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           break
         case 'joined':
           setCode(msg.code as string)
-          setSlot(msg.slot as 1 | 2)
+          setSlot(msg.slot as number)
           if (msg.gameId) setGameId(msg.gameId as string)
           if (msg.players) setPlayers(msg.players as RoomPlayer[])
           if (msg.opponent) {
@@ -156,6 +218,112 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'opponent_left':
           setPhase('opponent_left')
           break
+        case 'bank':
+          // نفق بنك الحظ: تمرير رسالة البروتوكول الأصلية لشاشة اللعبة
+          gameHandlersRef.current.forEach((h) => h({ kind: 'bank', msg: msg.msg as ServerMessage }))
+          break
+
+        // ---------------- الهوية والاجتماعي ----------------
+        case 'identified': {
+          const user = msg.user as PublicUserCard & { createdAt?: number }
+          const identity = { userId: user.userId, handle: user.handle }
+          setMe(identity)
+          app.setIdentity(user.userId, user.handle)
+          onlineClient.send({ type: 'friends_list' })
+          onlineClient.send({ type: 'chat_list' })
+          break
+        }
+        case 'handle_set': {
+          const user = msg.user as PublicUserCard
+          setMe((m) => (m ? { ...m, handle: user.handle } : m))
+          app.setIdentity(user.userId, user.handle)
+          handleResolverRef.current?.({ ok: true })
+          handleResolverRef.current = null
+          break
+        }
+        case 'handle_error':
+          handleResolverRef.current?.({ ok: false, message: msg.message as string })
+          handleResolverRef.current = null
+          break
+        case 'search_result': {
+          const handle = msg.handle as string
+          const resolver = searchResolversRef.current.get(handle)
+          if (resolver) {
+            searchResolversRef.current.delete(handle)
+            resolver((msg.user as PublicUserCard | null) ?? null)
+          }
+          break
+        }
+        case 'friends_update':
+          setFriends((msg.friends as ServerFriend[]) ?? [])
+          break
+        case 'friend_added':
+          toast.success('تمت الإضافة لأصدقائك 🎉')
+          break
+        case 'chat_threads':
+          setThreads((msg.threads as ServerThread[]) ?? [])
+          break
+        case 'chat_thread': {
+          const thread = msg.thread as ServerThread
+          upsertThread(thread)
+          threadResolverRef.current?.(thread)
+          threadResolverRef.current = null
+          break
+        }
+        case 'chat_update':
+          upsertThread(msg.thread as ServerThread)
+          break
+        case 'chat_history': {
+          const threadId = msg.threadId as string
+          setMessages((m) => ({ ...m, [threadId]: (msg.messages as ServerChatMessage[]) ?? [] }))
+          if (msg.thread) upsertThread(msg.thread as ServerThread)
+          break
+        }
+        case 'chat_message': {
+          const threadId = msg.threadId as string
+          const message = msg.message as ServerChatMessage
+          setMessages((m) => {
+            const list = m[threadId] ?? []
+            if (list.some((x) => x.id === message.id)) return m
+            return { ...m, [threadId]: [...list, message] }
+          })
+          if (msg.thread) upsertThread(msg.thread as ServerThread)
+          // دعوتي أنا: الخادم أنشأ الغرفة — أدخلها تلقائيًا لأنتظر الخصم داخلها
+          if (
+            message.kind === 'game_invite' &&
+            message.senderId === meRef.current?.userId &&
+            message.invite?.roomCode
+          ) {
+            setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId })
+          }
+          if (message.senderId !== meRef.current?.userId && openThreadRef.current !== threadId) {
+            const threadName = (msg.thread as ServerThread | undefined)?.name ?? message.senderName
+            toast.info(`💬 ${message.senderName} في ${threadName}`, {
+              description: message.kind === 'game_invite' ? 'دعوة للعب 🎮' : message.text.slice(0, 60),
+            })
+          }
+          break
+        }
+        case 'quick_match_waiting':
+          break
+        case 'quick_match_cancelled':
+          setQuickMatchGame(null)
+          break
+        case 'matched': {
+          setQuickMatchGame(null)
+          setFromQuickMatch(true)
+          setCode(msg.code as string)
+          setSlot(msg.slot as number)
+          setGameId(msg.gameId as string)
+          setOpponent(msg.opponent as Opponent)
+          setPhase('ready')
+          toast.success('وجدنا لك خصمًا! ⚡', { description: (msg.opponent as Opponent)?.name })
+          // الدخول المباشر: المضيف يبدأ تلقائيًا (إلا بنك الحظ — يبدأ من لوبي اللعبة)
+          if ((msg.slot as number) === 1 && msg.gameId !== 'bank-el7az') {
+            window.setTimeout(() => startGameRef.current(), 700)
+          }
+          break
+        }
         default:
           // رسائل شخبطة تمر لشاشة اللعبة
           if (SHAKHBATA_MSGS.has(msg.type)) {
@@ -167,16 +335,32 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       offStatus()
       offMsg()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // identify عند الاتصال (وعند تغيّر الملف) — بعد اكتمال الأونبوردنج فقط
+  const { onboarded, profile } = app
+  useEffect(() => {
+    if (status !== 'online' || !onboarded || !profile.name) return
+    onlineClient.send({
+      type: 'identify',
+      deviceId: getDeviceId(),
+      name: profile.name,
+      avatar: profile.avatar,
+      handle: profile.handle,
+    })
+  }, [status, onboarded, profile.name, profile.avatar, profile.handle])
 
   const createRoom = useCallback((gid: string, name: string, avatar: string) => {
     setGameId(gid)
     setOpponent(null)
+    setFromQuickMatch(false)
     onlineClient.send({ type: 'create', gameId: gid, name, avatar })
   }, [])
 
   const joinRoom = useCallback((c: string, name: string, avatar: string) => {
     setOpponent(null)
+    setFromQuickMatch(false)
     onlineClient.send({ type: 'join', code: c.trim(), name, avatar })
   }, [])
 
@@ -191,6 +375,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     setGameId(null)
     setOpponent(null)
     setPlayers([])
+    setFromQuickMatch(false)
   }, [])
 
   const startGame = useCallback(() => {
@@ -198,7 +383,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       if (gid === 'shakhbata') {
         // شخبطة: الخادم يبدأ المباراة ويبث أول جولة
         onlineClient.send({ type: 'start' })
-      } else {
+      } else if (gid && gid !== 'bank-el7az') {
         onlineClient.send({ type: 'action', action: { kind: 'start' } })
         rematchRef.current = { mine: false, theirs: false }
         setRematchMine(false)
@@ -209,6 +394,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       return gid
     })
   }, [])
+  startGameRef.current = startGame
 
   const sendAction = useCallback((action: Record<string, unknown>) => {
     onlineClient.send({ type: 'action', action })
@@ -264,6 +450,98 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     onlineClient.reconnect()
   }, [])
 
+  // ---------------- الاجتماعي ----------------
+  const searchUser = useCallback((handle: string) => {
+    const clean = handle.trim().toLowerCase().replace(/^@/, '')
+    if (!clean) return Promise.resolve(null)
+    return new Promise<PublicUserCard | null>((resolvePromise) => {
+      searchResolversRef.current.set(clean, resolvePromise)
+      onlineClient.send({ type: 'search_user', handle: clean })
+      window.setTimeout(() => {
+        if (searchResolversRef.current.delete(clean)) resolvePromise(null)
+      }, 5000)
+    })
+  }, [])
+
+  const setHandle = useCallback((handle: string) => {
+    return new Promise<{ ok: boolean; message?: string }>((resolvePromise) => {
+      handleResolverRef.current = resolvePromise
+      onlineClient.send({ type: 'set_handle', handle: handle.trim().toLowerCase() })
+      window.setTimeout(() => {
+        if (handleResolverRef.current) {
+          handleResolverRef.current = null
+          resolvePromise({ ok: false, message: 'الخادم لم يرد.' })
+        }
+      }, 5000)
+    })
+  }, [])
+
+  const friendAdd = useCallback((userId: string) => {
+    onlineClient.send({ type: 'friend_add', userId })
+  }, [])
+
+  const friendRemove = useCallback((userId: string) => {
+    onlineClient.send({ type: 'friend_remove', userId })
+  }, [])
+
+  const createDm = useCallback((userId: string) => {
+    return new Promise<ServerThread | null>((resolvePromise) => {
+      threadResolverRef.current = resolvePromise
+      onlineClient.send({ type: 'chat_create_dm', userId })
+      window.setTimeout(() => {
+        if (threadResolverRef.current) {
+          threadResolverRef.current = null
+          resolvePromise(null)
+        }
+      }, 5000)
+    })
+  }, [])
+
+  const createGroup = useCallback((name: string, memberIds: string[]) => {
+    return new Promise<ServerThread | null>((resolvePromise) => {
+      threadResolverRef.current = resolvePromise
+      onlineClient.send({ type: 'chat_create_group', name, memberIds })
+      window.setTimeout(() => {
+        if (threadResolverRef.current) {
+          threadResolverRef.current = null
+          resolvePromise(null)
+        }
+      }, 5000)
+    })
+  }, [])
+
+  const loadThread = useCallback((threadId: string) => {
+    onlineClient.send({ type: 'chat_history', threadId })
+    setThreads((list) => list.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t)))
+  }, [])
+
+  const chatSend = useCallback((threadId: string, text: string) => {
+    onlineClient.send({ type: 'chat_send', threadId, text })
+  }, [])
+
+  const chatSendInvite = useCallback((threadId: string, gameId: string) => {
+    onlineClient.send({ type: 'chat_send', threadId, kind: 'game_invite', invite: { gameId } })
+  }, [])
+
+  const refreshSocial = useCallback(() => {
+    onlineClient.send({ type: 'friends_list' })
+    onlineClient.send({ type: 'chat_list' })
+  }, [])
+
+  // ---------------- المباراة السريعة ----------------
+  const quickMatch = useCallback(
+    (gid: string) => {
+      setQuickMatchGame(gid)
+      onlineClient.send({ type: 'quick_match', gameId: gid, name: app.profile.name, avatar: app.profile.avatar })
+    },
+    [app.profile.name, app.profile.avatar],
+  )
+
+  const quickMatchCancel = useCallback(() => {
+    onlineClient.send({ type: 'quick_match_cancel' })
+    setQuickMatchGame(null)
+  }, [])
+
   const value = useMemo<OnlineContextValue>(
     () => ({
       status, phase, code, slot, gameId, opponent, players, matchId,
@@ -271,10 +549,20 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       createRoom, joinRoom, leaveRoom, startGame,
       sendAction, sendRpsChoice, sendReactTap, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
+      me, friends, threads, messages, openThreadId, setOpenThreadId,
+      searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
+      loadThread, chatSend, chatSendInvite, refreshSocial,
+      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch,
+      ownInviteRoom, clearOwnInviteRoom,
     }),
     [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl,
       createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap, sendRaw,
-      requestRematch, resetRematch, subscribe, updateServerUrl, reconnect],
+      requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
+      me, friends, threads, messages, openThreadId,
+      searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
+      loadThread, chatSend, chatSendInvite, refreshSocial,
+      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch,
+      ownInviteRoom, clearOwnInviteRoom],
   )
 
   return <OnlineContext.Provider value={value}>{children}</OnlineContext.Provider>

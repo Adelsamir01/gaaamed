@@ -11,7 +11,21 @@ type MessageHandler = (msg: ServerMessage) => void
 type StatusHandler = (status: ConnectionStatus) => void
 
 const STORAGE_KEY = 'gaaamed_server_url'
+const DEVICE_KEY = 'gaaamed_device_id'
 const MAX_RETRIES = 3
+
+/** معرّف الجهاز: يُولّد مرة واحدة ويُخزن محليًا */
+export function getDeviceId(): string {
+  try {
+    const saved = localStorage.getItem(DEVICE_KEY)
+    if (saved) return saved
+    const id = crypto.randomUUID()
+    localStorage.setItem(DEVICE_KEY, id)
+    return id
+  } catch {
+    return 'unknown-device'
+  }
+}
 
 export function getServerUrl(): string {
   try {

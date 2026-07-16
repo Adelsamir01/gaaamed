@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { AppProvider, useApp } from '@/store/AppContext'
-import { OnlineProvider } from '@/online/OnlineContext'
+import { OnlineProvider, useOnline } from '@/online/OnlineContext'
 import type { GameConfig, GameResult } from '@/types'
 import { getGame } from '@/games'
 import Onboarding from '@/sections/Onboarding'
@@ -27,19 +27,30 @@ type View =
   | { kind: 'online' }
 
 function Shell() {
-  const { onboarded, threads, finishGame } = useApp()
+  const { onboarded, profile, finishGame } = useApp()
+  const online = useOnline()
   const [tab, setTab] = useState<TabId>('home')
   const [view, setView] = useState<View>({ kind: 'tabs' })
   const [chatRoomId, setChatRoomId] = useState<string | null>(null)
 
-  const unreadChats = useMemo(() => threads.reduce((a, t) => a + t.unread, 0), [threads])
+  const unreadChats = useMemo(() => online.threads.reduce((a, t) => a + t.unread, 0), [online.threads])
+
+  // عندما أرسل دعوة لعبة: الخادم ينشئ الغرفة وأنا أدخلها تلقائيًا لأنتظر أصدقائي
+  const ownInvite = online.ownInviteRoom
+  useEffect(() => {
+    if (!ownInvite) return
+    online.clearOwnInviteRoom()
+    online.joinRoom(ownInvite.code, profile.name, profile.avatar)
+    setChatRoomId(null)
+    setView({ kind: 'online' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownInvite])
 
   if (!onboarded) return <Onboarding />
 
   const openGame = (id: string) => {
     sounds.click()
-    if (getGame(id)?.online) setView({ kind: 'online' })
-    else setView({ kind: 'lobby', gameId: id })
+    setView({ kind: 'lobby', gameId: id })
   }
 
   const openOnline = () => {
@@ -51,6 +62,13 @@ function Shell() {
     setTab('chat')
     setChatRoomId(id)
     setView({ kind: 'tabs' })
+  }
+
+  // انضمام لغرفة من دعوة دردشة
+  const joinRoomFromInvite = (code: string) => {
+    online.joinRoom(code, profile.name, profile.avatar)
+    setChatRoomId(null)
+    setView({ kind: 'online' })
   }
 
   const handleFinish = (result: GameResult, config: GameConfig) => {
@@ -108,6 +126,7 @@ function Shell() {
         <GameLobby
           game={game}
           onStart={(config) => setView({ kind: 'playing', gameId: view.gameId, config })}
+          onOnline={() => setView({ kind: 'online' })}
           onBack={() => setView({ kind: 'tabs' })}
         />
       </div>
@@ -132,7 +151,7 @@ function Shell() {
   if (tab === 'chat' && chatRoomId) {
     return (
       <div className="mx-auto max-w-[420px] min-h-dvh">
-        <ChatRoom threadId={chatRoomId} onBack={() => setChatRoomId(null)} />
+        <ChatRoom threadId={chatRoomId} onBack={() => setChatRoomId(null)} onJoinRoom={joinRoomFromInvite} />
       </div>
     )
   }
@@ -150,7 +169,7 @@ function Shell() {
           {tab === 'home' && <Home goTab={setTab} openGame={openGame} openChat={openChat} />}
           {tab === 'games' && <Games openGame={openGame} openOnline={openOnline} />}
           {tab === 'chat' && <Chat openChat={(id) => setChatRoomId(id)} />}
-          {tab === 'friends' && <Friends />}
+          {tab === 'friends' && <Friends openChat={openChat} />}
           {tab === 'profile' && <Profile />}
         </motion.div>
       </AnimatePresence>

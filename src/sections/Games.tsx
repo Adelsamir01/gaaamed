@@ -1,17 +1,11 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Globe, Search, Users } from 'lucide-react'
+import { Bot, Globe, Search, Users } from 'lucide-react'
 import { useApp } from '@/store/AppContext'
 import { GAMES, CATEGORIES } from '@/games'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
 import type { GameCategory } from '@/types'
-
-function livePlayers(id: string) {
-  // عدد لاعبين وهمي ثابت لكل لعبة خلال الجلسة
-  const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  return 40 + ((seed * 7919) % 360)
-}
 
 export default function Games({ openGame, openOnline }: { openGame: (id: string) => void; openOnline: () => void }) {
   const { stats } = useApp()
@@ -27,11 +21,6 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
       ),
     [query, category],
   )
-
-  const handleGameTap = (id: string, online?: boolean) => {
-    if (online) openOnline()
-    else openGame(id)
-  }
 
   return (
     <div className="px-4 pt-6 pb-28">
@@ -53,7 +42,7 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
           </div>
           <div className="flex-1">
             <p className="font-black text-lg">🌐 العب أونلاين</p>
-            <p className="text-xs text-slate-300 mt-0.5">تحدَّ أصدقاءك على أجهزتهم — أنشئ غرفة أو انضم برمز</p>
+            <p className="text-xs text-slate-300 mt-0.5">غرف برمز، مباراة سريعة، وتحديات مباشرة مع أصدقائك</p>
           </div>
           <span className="text-xs font-extrabold bg-emerald-400 text-emerald-950 rounded-full px-3 py-1.5 shrink-0">العب الآن</span>
         </div>
@@ -102,29 +91,43 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleGameTap(g.id, g.online)}
+              onClick={() => {
+                sounds.click()
+                openGame(g.id)
+              }}
               className="glass rounded-3xl p-4 flex items-center gap-4 text-start hover:bg-white/10 transition-colors"
             >
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center text-4xl shrink-0">
                 {g.emoji}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-extrabold">{g.name}</h3>
                   <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 rounded-full px-2 py-0.5">
                     {g.category}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{g.description}</p>
-                <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {livePlayers(g.id)} يلعبون الآن
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3" />
-                    لعبت {s?.played ?? 0} مرة
-                  </span>
+                <div className="flex items-center gap-2 mt-2">
+                  {g.supportsBot && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 rounded-full px-2 py-0.5">
+                      <Bot className="w-3 h-3" />
+                      كمبيوتر
+                    </span>
+                  )}
+                  {g.supportsTwoPlayer && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-violet-300 bg-violet-500/10 border border-violet-400/30 rounded-full px-2 py-0.5">
+                      <Users className="w-3 h-3" />
+                      لاعبان
+                    </span>
+                  )}
+                  {g.online && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-400/30 rounded-full px-2 py-0.5">
+                      <Globe className="w-3 h-3" />
+                      أونلاين
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground ms-auto">لعبت {s?.played ?? 0} مرة</span>
                 </div>
               </div>
             </motion.button>

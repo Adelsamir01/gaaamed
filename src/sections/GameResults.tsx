@@ -71,23 +71,23 @@ export default function GameResults({ result, onReplay, onExit, replayLabel = 'Ø
           </div>
         </div>
 
-        <div className="flex flex-col gap-2.5 w-full">
+        <div className="flex flex-col gap-3 w-full">
           {!hideReplay && (
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={onReplay}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold flex items-center justify-center gap-2 glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
+              className="w-full min-h-14 py-4 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold text-lg flex items-center justify-center gap-2 glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-5 h-5" />
               {replayLabel}
             </motion.button>
           )}
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={onExit}
-            className="w-full py-3.5 rounded-2xl bg-white/10 border border-white/15 font-extrabold flex items-center justify-center gap-2 hover:bg-white/15 transition-colors"
+            className="w-full min-h-14 py-4 rounded-2xl bg-white/10 border border-white/15 font-extrabold text-lg flex items-center justify-center gap-2 hover:bg-white/15 transition-colors"
           >
-            <LayoutGrid className="w-4 h-4" />
+            <LayoutGrid className="w-5 h-5" />
             {exitLabel}
           </motion.button>
         </div>

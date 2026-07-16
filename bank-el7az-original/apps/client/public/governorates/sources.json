@@ -1,0 +1,208 @@
+[
+  {
+    "slug": "cairo",
+    "fileName": "Flag of Cairo.svg",
+    "local": "/governorates/cairo.png",
+    "source": "File:Flag of Cairo.svg",
+    "reused": true
+  },
+  {
+    "slug": "giza",
+    "fileName": "Flag_of_Giza_Governorate.png",
+    "local": "/governorates/giza.png",
+    "source": "File:Flag_of_Giza_Governorate.png",
+    "reused": true
+  },
+  {
+    "slug": "qalyubia",
+    "fileName": "Flag of Qalyubia Governorate.png",
+    "local": "/governorates/qalyubia.png",
+    "source": "File:Flag of Qalyubia Governorate.png",
+    "reused": true
+  },
+  {
+    "slug": "alexandria",
+    "fileName": "Flag of Alexandria.svg",
+    "local": "/governorates/alexandria.png",
+    "source": "File:Flag of Alexandria.svg",
+    "reused": true
+  },
+  {
+    "slug": "matruh",
+    "fileName": "Governadorat de Matruh.png",
+    "local": "/governorates/matruh.png",
+    "source": "File:Governadorat de Matruh.png",
+    "reused": true
+  },
+  {
+    "slug": "port-said",
+    "fileName": "Flag of Port Said Governorate.PNG",
+    "local": "/governorates/port-said.png",
+    "source": "ملف:Flag of Port Said Governorate.PNG",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Flag_of_Port_Said_Governorate.PNG/330px-Flag_of_Port_Said_Governorate.PNG"
+  },
+  {
+    "slug": "dakahlia",
+    "fileName": "Governadorat de Daqahliya.png",
+    "local": "/governorates/dakahlia.png",
+    "source": "ملف:Governadorat de Daqahliya.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Governadorat_de_Daqahliya.png"
+  },
+  {
+    "slug": "damietta",
+    "fileName": "Flag of Damietta Governorate.svg",
+    "local": "/governorates/damietta.png",
+    "source": "ملف:Flag of Damietta Governorate.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Flag_of_Damietta_Governorate.svg/330px-Flag_of_Damietta_Governorate.svg.png"
+  },
+  {
+    "slug": "sharqia",
+    "fileName": "Flag of Ash Sharqiyah.svg",
+    "local": "/governorates/sharqia.png",
+    "source": "ملف:Flag of Ash Sharqiyah.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Flag_of_Ash_Sharqiyah.svg/330px-Flag_of_Ash_Sharqiyah.svg.png"
+  },
+  {
+    "slug": "ismailia",
+    "fileName": "Governadorat d'Ismailiya.png",
+    "local": "/governorates/ismailia.png",
+    "source": "ملف:Governadorat d'Ismailiya.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Governadorat_d%27Ismailiya.png/330px-Governadorat_d%27Ismailiya.png"
+  },
+  {
+    "slug": "suez",
+    "fileName": "Flag of Suez Governorate.svg",
+    "local": "/governorates/suez.png",
+    "source": "ملف:Flag of Suez Governorate.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Flag_of_Suez_Governorate.svg/330px-Flag_of_Suez_Governorate.svg.png"
+  },
+  {
+    "slug": "minya",
+    "fileName": "Flag of Minya Governorate.jpg",
+    "local": "/governorates/minya.jpg",
+    "source": "ملف:Flag of Minya Governorate.jpg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Flag_of_Minya_Governorate.jpg/330px-Flag_of_Minya_Governorate.jpg"
+  },
+  {
+    "slug": "asyut",
+    "fileName": "Flag of Asyut Governorate.png",
+    "local": "/governorates/asyut.png",
+    "source": "ملف:Flag of Asyut Governorate.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/ar/thumb/2/25/Flag_of_Asyut_Governorate.png/330px-Flag_of_Asyut_Governorate.png"
+  },
+  {
+    "slug": "sohag",
+    "fileName": "Flag of Sohag Governorate.png",
+    "local": "/governorates/sohag.png",
+    "source": "ملف:Flag of Sohag Governorate.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/ar/thumb/9/9d/Flag_of_Sohag_Governorate.png/330px-Flag_of_Sohag_Governorate.png"
+  },
+  {
+    "slug": "qena",
+    "fileName": "Flag of Qena Governorate.png",
+    "local": "/governorates/qena.png",
+    "source": "ملف:Flag of Qena Governorate.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/ar/thumb/0/01/Flag_of_Qena_Governorate.png/330px-Flag_of_Qena_Governorate.png"
+  },
+  {
+    "slug": "luxor",
+    "fileName": "Flag of Luxor Governorate.png",
+    "local": "/governorates/luxor.png",
+    "source": "ملف:Flag of Luxor Governorate.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/ar/thumb/6/6d/Flag_of_Luxor_Governorate.png/330px-Flag_of_Luxor_Governorate.png"
+  },
+  {
+    "slug": "aswan",
+    "fileName": "Governadorat dAswan.svg",
+    "local": "/governorates/aswan.png",
+    "source": "ملف:Governadorat dAswan.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/Governadorat_dAswan.svg/330px-Governadorat_dAswan.svg.png"
+  },
+  {
+    "slug": "red-sea",
+    "fileName": "Red sea governorate flag.png",
+    "local": "/governorates/red-sea.png",
+    "source": "ملف:Red sea governorate flag.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Red_sea_governorate_flag.png/330px-Red_sea_governorate_flag.png"
+  },
+  {
+    "slug": "south-sinai",
+    "fileName": "Governadorat de Sinai del sud.png",
+    "local": "/governorates/south-sinai.png",
+    "source": "ملف:Governadorat de Sinai del sud.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/4/41/Governadorat_de_Sinai_del_sud.png"
+  },
+  {
+    "slug": "fayoum",
+    "fileName": "Governadorat de Faium.png",
+    "local": "/governorates/fayoum.png",
+    "source": "ملف:Governadorat de Faium.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Governadorat_de_Faium.png"
+  },
+  {
+    "slug": "menoufia",
+    "fileName": "Flag of Menoufia Governorate.PNG",
+    "local": "/governorates/menoufia.png",
+    "source": "ملف:Flag of Menoufia Governorate.PNG",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Flag_of_Menoufia_Governorate.PNG/330px-Flag_of_Menoufia_Governorate.PNG"
+  },
+  {
+    "slug": "beheira",
+    "fileName": "Flag of Behira Govenorate.svg",
+    "local": "/governorates/beheira.png",
+    "source": "ملف:Flag of Behira Govenorate.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flag_of_Behira_Govenorate.svg/330px-Flag_of_Behira_Govenorate.svg.png"
+  },
+  {
+    "slug": "kafr-el-sheikh",
+    "fileName": "Flag_of_Kafr_El-Sheikh_Governorate.svg",
+    "local": "/governorates/kafr-el-sheikh.png",
+    "source": "ملف:Flag_of_Kafr_El-Sheikh_Governorate.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php"
+  },
+  {
+    "slug": "gharbia",
+    "fileName": "Governadorat_de_Gharbiya.png",
+    "local": "/governorates/gharbia.png",
+    "source": "ملف:Governadorat_de_Gharbiya.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php"
+  },
+  {
+    "slug": "beni-suef",
+    "fileName": "Beni_Suef_Governorate_New_Flag.svg",
+    "local": "/governorates/beni-suef.png",
+    "source": "ملف:Beni_Suef_Governorate_New_Flag.svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php"
+  },
+  {
+    "slug": "new-valley",
+    "fileName": "Flag_of_New_Valley_Governorate.png",
+    "local": "/governorates/new-valley.png",
+    "source": "ملف:Flag_of_New_Valley_Governorate.png",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php"
+  },
+  {
+    "slug": "north-sinai",
+    "fileName": "North_Sinai_(New_Flag).svg",
+    "local": "/governorates/north-sinai.png",
+    "source": "ملف:North_Sinai_(New_Flag).svg",
+    "sourceApi": "https://ar.wikipedia.org/w/api.php"
+  }
+]

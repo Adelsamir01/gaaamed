@@ -1,0 +1,20 @@
+{
+  "name": "bank-el7az",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @bank-el7az/shared && npm run build -w @bank-el7az/server && npm run build -w @bank-el7az/client",
+    "dev": "npm run build -w @bank-el7az/shared && concurrently -n shared,server,client -c cyan,green,magenta \"npm run dev -w @bank-el7az/shared\" \"npm run dev -w @bank-el7az/server\" \"npm run dev -w @bank-el7az/client\"",
+    "test": "npm run build -w @bank-el7az/shared && npm run test -w @bank-el7az/server",
+    "lint": "npm run check -w @bank-el7az/shared && npm run check -w @bank-el7az/server && npm run check -w @bank-el7az/client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}

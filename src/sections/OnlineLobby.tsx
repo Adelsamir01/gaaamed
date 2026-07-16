@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, Copy, Crown, Loader2, LogIn, Play, Plus, RefreshCw, Wifi, WifiOff } from 'lucide-react'
+import { ChevronRight, Copy, Crown, Loader2, LogIn, Play, Plus, RefreshCw, Wifi, WifiOff, X, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
@@ -76,7 +76,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
           }}
           replayLabel={online.rematchTheirs && !online.rematchMine ? 'وافق على إعادة اللعب 🔄' : 'طلب إعادة اللعب 🔄'}
           exitLabel="خروج من الغرفة"
-          hideReplay={result.gameId === 'shakhbata'}
+          hideReplay={result.gameId === 'shakhbata' || result.gameId === 'bank-el7az'}
         />
       </div>
     )
@@ -84,7 +84,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
 
   // ===== شاشة اللعب =====
   if (online.phase === 'playing' && game) {
-    const GameComp = game.component
+    const GameComp = game.onlineComponent ?? game.component
     return (
       <div className="min-h-dvh flex flex-col">
         <div className="px-4 pt-4 flex items-center gap-2">
@@ -109,6 +109,23 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
             }}
           />
         </motion.div>
+      </div>
+    )
+  }
+
+  // ===== بنك الحظ: مكوّن اللعبة يدير اللوبي واللعب بنفسه عبر نفق bank =====
+  // الغلاف fixed ليملأ شاشة الهاتف كلها (اللوحة تتقيد بأقرب سلف مُحوَّل — الحاوية max-w-420 كانت تحبسها)
+  if (game?.id === 'bank-el7az' && (online.phase === 'waiting' || online.phase === 'ready' || online.phase === 'playing')) {
+    const BankComp = game.onlineComponent ?? game.component
+    return (
+      <div className="fixed inset-0 z-40">
+        <BankComp
+          config={{ mode: 'bot', difficulty: 'medium' }}
+          onFinish={(r) => {
+            finishGame(r)
+            setResult(r)
+          }}
+        />
       </div>
     )
   }
@@ -381,6 +398,54 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
                   <p className="text-xs text-muted-foreground mt-0.5">أدخل رمز الغرفة المكوّن من ٤ أرقام</p>
                 </div>
               </motion.button>
+
+              {/* المباراة السريعة */}
+              <div className="glass rounded-3xl p-4 mt-1">
+                <p className="font-extrabold flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  مباراة سريعة ⚡
+                </p>
+                <p className="text-[11px] text-muted-foreground mb-3">نوصلك بلاعب متاح فورًا في نفس اللعبة</p>
+                {online.quickMatchGame ? (
+                  <div className="rounded-2xl bg-amber-400/10 border border-amber-400/40 p-4 flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-amber-300 animate-spin shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-extrabold text-amber-200">
+                        يبحث عن خصم في {getGame(online.quickMatchGame)?.name}…
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">هنبدأ فورًا أول ما نلاقي لاعب</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        sounds.click()
+                        online.quickMatchCancel()
+                      }}
+                      className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center hover:bg-white/15 transition-colors shrink-0"
+                      aria-label="إلغاء البحث"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {ONLINE_GAMES.map((g) => (
+                      <motion.button
+                        key={g.id}
+                        whileTap={{ scale: 0.94 }}
+                        onClick={() => {
+                          sounds.pop()
+                          online.quickMatch(g.id)
+                        }}
+                        disabled={online.status !== 'online'}
+                        className="rounded-2xl bg-white/5 border border-white/10 py-3 flex flex-col items-center gap-1 hover:bg-white/10 transition-colors disabled:opacity-50"
+                      >
+                        <span className="text-2xl">{g.emoji}</span>
+                        <span className="text-[10px] font-extrabold">{g.name}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 

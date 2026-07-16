@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, ChevronRight, Play, Users, Info } from 'lucide-react'
+import { Bot, ChevronRight, Globe, Play, Users, Info } from 'lucide-react'
 import type { GameDef } from '@/games'
 import type { Difficulty, GameConfig } from '@/types'
 import { useApp } from '@/store/AppContext'
@@ -13,17 +13,27 @@ const DIFFICULTIES: { id: Difficulty; label: string; hint: string }[] = [
   { id: 'hard', label: 'صعب', hint: 'للمحترفين' },
 ]
 
+type Mode = 'bot' | 'twoPlayer' | 'online'
+
 interface Props {
   game: GameDef
   onStart: (config: GameConfig) => void
+  onOnline: () => void
   onBack: () => void
 }
 
-export default function GameLobby({ game, onStart, onBack }: Props) {
+export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
   const { stats } = useApp()
-  const [mode, setMode] = useState<'bot' | 'twoPlayer'>(game.supportsBot ? 'bot' : 'twoPlayer')
+  const onlineOnly = !!game.online && !game.supportsBot && !game.supportsTwoPlayer
+  const [mode, setMode] = useState<Mode>(onlineOnly ? 'online' : game.supportsBot ? 'bot' : 'twoPlayer')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
   const s = stats[game.id]
+
+  const start = () => {
+    sounds.pop()
+    if (mode === 'online') onOnline()
+    else onStart({ mode, difficulty })
+  }
 
   return (
     <div className="px-4 pt-4 pb-28">
@@ -80,51 +90,68 @@ export default function GameLobby({ game, onStart, onBack }: Props) {
       </div>
 
       {/* نمط اللعب */}
-      {(game.supportsBot || game.supportsTwoPlayer) && (
-        <div className="glass rounded-3xl p-4 mb-4">
-          <h2 className="font-extrabold mb-3">نمط اللعب</h2>
-          <div className="flex flex-col gap-2">
-            {game.supportsBot && (
-              <button
-                onClick={() => {
-                  sounds.click()
-                  setMode('bot')
-                }}
-                className={cn(
-                  'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
-                  mode === 'bot' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
-                )}
-              >
-                <Bot className={cn('w-6 h-6', mode === 'bot' ? 'text-emerald-400' : 'text-muted-foreground')} />
-                <div className="flex-1">
-                  <p className="font-extrabold text-sm">ضد الكمبيوتر</p>
-                  <p className="text-[11px] text-muted-foreground">تحدَّ الذكاء الاصطناعي</p>
-                </div>
-                {mode === 'bot' && <span className="text-emerald-400 text-lg">✓</span>}
-              </button>
-            )}
-            {game.supportsTwoPlayer && (
-              <button
-                onClick={() => {
-                  sounds.click()
-                  setMode('twoPlayer')
-                }}
-                className={cn(
-                  'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
-                  mode === 'twoPlayer' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
-                )}
-              >
-                <Users className={cn('w-6 h-6', mode === 'twoPlayer' ? 'text-emerald-400' : 'text-muted-foreground')} />
-                <div className="flex-1">
-                  <p className="font-extrabold text-sm">لاعبان على نفس الجهاز</p>
-                  <p className="text-[11px] text-muted-foreground">العب مع صديق بجانبك</p>
-                </div>
-                {mode === 'twoPlayer' && <span className="text-emerald-400 text-lg">✓</span>}
-              </button>
-            )}
-          </div>
+      <div className="glass rounded-3xl p-4 mb-4">
+        <h2 className="font-extrabold mb-3">نمط اللعب</h2>
+        <div className="flex flex-col gap-2">
+          {game.supportsBot && (
+            <button
+              onClick={() => {
+                sounds.click()
+                setMode('bot')
+              }}
+              className={cn(
+                'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
+                mode === 'bot' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
+              )}
+            >
+              <Bot className={cn('w-6 h-6', mode === 'bot' ? 'text-emerald-400' : 'text-muted-foreground')} />
+              <div className="flex-1">
+                <p className="font-extrabold text-sm">ضد الكمبيوتر</p>
+                <p className="text-[11px] text-muted-foreground">تحدَّ الذكاء الاصطناعي</p>
+              </div>
+              {mode === 'bot' && <span className="text-emerald-400 text-lg">✓</span>}
+            </button>
+          )}
+          {game.supportsTwoPlayer && (
+            <button
+              onClick={() => {
+                sounds.click()
+                setMode('twoPlayer')
+              }}
+              className={cn(
+                'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
+                mode === 'twoPlayer' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
+              )}
+            >
+              <Users className={cn('w-6 h-6', mode === 'twoPlayer' ? 'text-emerald-400' : 'text-muted-foreground')} />
+              <div className="flex-1">
+                <p className="font-extrabold text-sm">لاعبان على نفس الجهاز</p>
+                <p className="text-[11px] text-muted-foreground">العب مع صديق بجانبك</p>
+              </div>
+              {mode === 'twoPlayer' && <span className="text-emerald-400 text-lg">✓</span>}
+            </button>
+          )}
+          {game.online && (
+            <button
+              onClick={() => {
+                sounds.click()
+                setMode('online')
+              }}
+              className={cn(
+                'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
+                mode === 'online' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
+              )}
+            >
+              <Globe className={cn('w-6 h-6', mode === 'online' ? 'text-emerald-400' : 'text-muted-foreground')} />
+              <div className="flex-1">
+                <p className="font-extrabold text-sm">أونلاين 🌐</p>
+                <p className="text-[11px] text-muted-foreground">غرفة برمز أو مباراة سريعة ضد لاعب حقيقي</p>
+              </div>
+              {mode === 'online' && <span className="text-emerald-400 text-lg">✓</span>}
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* الصعوبة */}
       {game.difficulties && mode === 'bot' && (
@@ -154,14 +181,11 @@ export default function GameLobby({ game, onStart, onBack }: Props) {
       {/* زر البدء */}
       <motion.button
         whileTap={{ scale: 0.96 }}
-        onClick={() => {
-          sounds.pop()
-          onStart({ mode, difficulty })
-        }}
+        onClick={start}
         className="w-full py-4 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-black text-lg flex items-center justify-center gap-2 glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
       >
-        <Play className="w-5 h-5 fill-current" />
-        ابدأ اللعب
+        {mode === 'online' ? <Globe className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
+        {mode === 'online' ? 'العب أونلاين' : 'ابدأ اللعب'}
       </motion.button>
     </div>
   )

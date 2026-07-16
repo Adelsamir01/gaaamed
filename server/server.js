@@ -1,17 +1,81 @@
 /**
- * خادم قييمد للعب الأونلاين — WebSocket relay بسيط
+ * خادم جااامد للعب الأونلاين — WebSocket relay بسيط
  * الغرف: إنشاء/انضمام برمز من 4 أرقام، تمرير الحركات بين لاعبَين
  * + لعبة شخبطة (حتى 8 لاعبين) عبر محرك server/shakhbata.js
+ * + لعبة بنك الحظ (حتى 6 لاعبين) عبر محرك server/bankel7az.js بنفق {type:'bank', msg}
+ *   ونقاط HTTP: ‎/health و ‎/api/stats (إحصائيات بنك الحظ)
+ * + الهوية/الأصدقاء/الدردشات/المباراة السريعة عبر server/users.js (بيانات دائمة في server/data)
  */
+import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 import {
   initShakhbata, shakHandleMessage, shakHandleLeave, shakPlayers,
   broadcastPlayers, destroyShakhbata,
 } from './shakhbata.js'
+import { RoomManager, StatsStore, parseClientMessage, resolveStatsFilePath } from './bankel7az.js'
+import { UserStore, resolveDataDir, publicCard } from './users.js'
 
-const PORT = 8787
-const wss = new WebSocketServer({ port: PORT })
+const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
+const BANK_MAX = 6
+const INVITE_ROOM_TTL_MS = 10 * 60 * 1000
+
+// بنك الحظ: مخزن الإحصائيات + مدير الغرف (بروتوكول اللعبة الأصلي كما هو)
+const bankStats = new StatsStore(resolveStatsFilePath())
+const bankManager = new RoomManager(bankStats)
+
+// الهوية والأصدقاء والدردشات (ملفات JSON دائمة)
+const userStore = new UserStore(resolveDataDir())
+
+// معلومات الألعاب لدعوات الدردشة
+const INVITE_GAMES = {
+  tictactoe: { name: 'إكس أو', emoji: '⭕' },
+  connect4: { name: 'أربعة تربح', emoji: '🔴' },
+  rps: { name: 'حجر ورقة مقص', emoji: '✂️' },
+  reaction: { name: 'سرعة البرق', emoji: '⚡' },
+  shakhbata: { name: 'شخبطة', emoji: '🎨' },
+  'bank-el7az': { name: 'بنك الحظ', emoji: '🏦' },
+}
+
+// userId -> Set<ws> (حضور حقيقي عبر السوكيتات المتصلة)
+const onlineUsers = new Map()
+// gameId -> Array<{ws, userId, name, avatar, at}> (طوابير المباراة السريعة — مصممة لدعم N لاحقًا)
+const matchQueues = new Map()
+const MATCH_SIZE = 2
+
+// خادم HTTP صريح: نقاط صحة/إحصائيات + ترقية WebSocket
+const httpServer = createServer((req, res) => {
+  const url = (req.url || '/').split('?')[0]
+  if (url === '/health') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ ok: true, service: 'gaaamed-server', time: Date.now() }))
+    return
+  }
+  if (url === '/api/stats') {
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+    })
+    res.end(JSON.stringify(bankStats.getSnapshot(bankManager.getLiveStats())))
+    return
+  }
+  res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
+  res.end(JSON.stringify({ error: 'not_found' }))
+})
+
+const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: false })
+
+// سوكيت افتراضي يمرّر رسائل بروتوكول بنك الحظ عبر نفق {type:'bank', msg}
+function ensureBankVws(ws) {
+  if (!ws._bankVws) {
+    ws._bankVws = {
+      readyState: 1,
+      send: (raw) => send(ws, { type: 'bank', msg: JSON.parse(raw) }),
+    }
+    bankManager.register(ws._bankVws)
+  }
+  return ws._bankVws
+}
 
 /** code -> { code, gameId, players: Map<slot, ws>, names: Map<slot, {name, avatar}>, rpsChoices: Map, reactTaps: Map, shak? } */
 const rooms = new Map()
@@ -32,12 +96,128 @@ function broadcast(room, obj) {
   for (const ws of room.players.values()) send(ws, obj)
 }
 
+// ---------------- الهوية والحضور ----------------
+function pushToUser(userId, obj) {
+  const sockets = onlineUsers.get(userId)
+  if (!sockets) return
+  for (const ws of sockets) send(ws, obj)
+}
+
+function trackOnline(userId, ws) {
+  let set = onlineUsers.get(userId)
+  if (!set) {
+    set = new Set()
+    onlineUsers.set(userId, set)
+  }
+  set.add(ws)
+}
+
+function untrackOnline(userId, ws) {
+  const set = onlineUsers.get(userId)
+  if (!set) return
+  set.delete(ws)
+  if (set.size === 0) onlineUsers.delete(userId)
+}
+
+function presenceOf(userId) {
+  const sockets = onlineUsers.get(userId)
+  if (!sockets || sockets.size === 0) return 'offline'
+  for (const ws of sockets) {
+    if (ws._room) return 'playing'
+  }
+  return 'online'
+}
+
+function friendsListFor(userId) {
+  return userStore
+    .friendsOf(userId)
+    .map((id) => userStore.byId(id))
+    .filter(Boolean)
+    .map((u) => ({ ...publicCard(u), presence: presenceOf(u.userId) }))
+}
+
+// يُرسل قائمة محدثة للمستخدم ولكل أصدقائه (يُستدعى عند تغيّر الحضور أو العلاقات)
+function broadcastFriendsUpdate(userId) {
+  pushToUser(userId, { type: 'friends_update', friends: friendsListFor(userId) })
+  for (const friendId of userStore.friendsOf(userId)) {
+    pushToUser(friendId, { type: 'friends_update', friends: friendsListFor(friendId) })
+  }
+}
+
+// إنشاء سجل غرفة موحّد (إنشاء عادي / دعوة دردشة / مباراة سريعة)
+function createRoomRecord(gameId, drawTime) {
+  const code = genCode()
+  const room = {
+    code,
+    gameId: gameId || 'unknown',
+    players: new Map(),
+    names: new Map(),
+    rpsChoices: new Map(),
+    reactTaps: new Map(),
+    shak: null,
+    createdAt: Date.now(),
+  }
+  if (room.gameId === 'shakhbata') initShakhbata(room, drawTime)
+  rooms.set(code, room)
+  return room
+}
+
+// ---------------- المباراة السريعة ----------------
+function removeFromQueues(ws) {
+  for (const [gameId, queue] of matchQueues) {
+    const next = queue.filter((entry) => entry.ws !== ws)
+    if (next.length === 0) matchQueues.delete(gameId)
+    else if (next.length !== queue.length) matchQueues.set(gameId, next)
+  }
+}
+
+function tryMatch(gameId) {
+  const queue = matchQueues.get(gameId)
+  if (!queue) return
+  // نخلّي الطابور من المتصلين فقط
+  const alive = queue.filter((entry) => entry.ws.readyState === 1)
+  while (alive.length >= MATCH_SIZE) {
+    const pair = alive.splice(0, MATCH_SIZE)
+    const room = createRoomRecord(gameId)
+    pair.forEach((entry, index) => {
+      const slot = index + 1
+      room.players.set(slot, entry.ws)
+      room.names.set(slot, { name: entry.name, avatar: entry.avatar })
+      entry.ws._room = room.code
+      entry.ws._slot = slot
+    })
+    const [first, second] = pair
+    send(first.ws, { type: 'created', code: room.code, slot: 1 })
+    send(second.ws, {
+      type: 'joined',
+      code: room.code,
+      slot: 2,
+      gameId: room.gameId,
+      players: shakPlayers(room),
+    })
+    pair.forEach((entry, index) => {
+      const opponent = pair[1 - index]
+      send(entry.ws, {
+        type: 'matched',
+        code: room.code,
+        gameId: room.gameId,
+        slot: index + 1,
+        opponent: { name: opponent.name, avatar: opponent.avatar },
+      })
+    })
+    broadcastPlayers(room)
+    console.log(`QUICK_MATCH ${room.code} ${gameId} ${first.name} vs ${second.name}`)
+  }
+  if (alive.length === 0) matchQueues.delete(gameId)
+  else matchQueues.set(gameId, alive)
+}
+
 function otherSlot(slot) {
   return slot === 1 ? 2 : 1
 }
 
-function lowestFreeSlot(room) {
-  for (let i = 1; i <= SHAKHBATA_MAX; i++) {
+function lowestFreeSlot(room, max = SHAKHBATA_MAX) {
+  for (let i = 1; i <= max; i++) {
     if (!room.players.has(i)) return i
   }
   return null
@@ -67,6 +247,14 @@ function handleLeave(ws) {
     cleanupRoom(code)
     return
   }
+  if (room.gameId === 'bank-el7az') {
+    // بنك الحظ: فصل اللاعب داخل بروتوكول اللعبة (يبقى قابلًا لإعادة الاتصال بـ playerId)
+    if (ws._bankVws) bankManager.handleClose(ws._bankVws)
+    room.names.delete(slot)
+    broadcastPlayers(room)
+    cleanupRoom(code)
+    return
+  }
   room.names.delete(slot)
   const other = room.players.get(otherSlot(slot))
   if (other) send(other, { type: 'opponent_left' })
@@ -91,24 +279,15 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'create': {
-        const code = genCode()
-        const room = {
-          code,
-          gameId: msg.gameId || 'unknown',
-          players: new Map(),
-          names: new Map(),
-          rpsChoices: new Map(),
-          reactTaps: new Map(),
-          shak: null,
-        }
-        if (room.gameId === 'shakhbata') initShakhbata(room, msg.drawTime)
+        const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime)
         room.players.set(1, ws)
         room.names.set(1, { name: msg.name || 'لاعب', avatar: msg.avatar || '🎮' })
-        rooms.set(code, room)
-        ws._room = code
+        ws._room = room.code
         ws._slot = 1
-        send(ws, { type: 'created', code, slot: 1 })
-        console.log(`ROOM_CREATED ${code} ${room.gameId}`)
+        send(ws, { type: 'created', code: room.code, slot: 1 })
+        if (room.gameId === 'bank-el7az') ensureBankVws(ws)
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
+        console.log(`ROOM_CREATED ${room.code} ${room.gameId}`)
         break
       }
 
@@ -119,6 +298,25 @@ wss.on('connection', (ws) => {
           return
         }
         const me = { name: msg.name || 'لاعب', avatar: msg.avatar || '🎮' }
+
+        // ===== بنك الحظ: حتى 6 لاعبين؛ قبول/رفض الانضمام أثناء اللعب يتم عبر بروتوكول اللعبة نفسه =====
+        if (room.gameId === 'bank-el7az') {
+          if (room.players.size >= BANK_MAX) {
+            send(ws, { type: 'error', message: 'الغرفة ممتلئة' })
+            return
+          }
+          const slot = lowestFreeSlot(room, BANK_MAX)
+          room.players.set(slot, ws)
+          room.names.set(slot, me)
+          ws._room = room.code
+          ws._slot = slot
+          send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room) })
+          broadcastPlayers(room)
+          ensureBankVws(ws)
+          if (ws._userId) broadcastFriendsUpdate(ws._userId)
+          console.log(`PLAYER_JOINED ${room.code} ${me.name} slot=${slot}`)
+          return
+        }
 
         // ===== شخبطة: حتى 8 لاعبين =====
         if (room.gameId === 'shakhbata') {
@@ -137,22 +335,33 @@ wss.on('connection', (ws) => {
           ws._slot = slot
           send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room) })
           broadcastPlayers(room)
+          if (ws._userId) broadcastFriendsUpdate(ws._userId)
           console.log(`PLAYER_JOINED ${room.code} ${me.name} slot=${slot}`)
           return
         }
 
+        // ===== ألعاب الزوجي (XO/أربعة/حجر ورقة مقص/سرعة البرق): حتى لاعبَين، ويدعم غرف الدعوات الفارغة =====
         if (room.players.size >= 2) {
           send(ws, { type: 'error', message: 'الغرفة ممتلئة' })
           return
         }
-        room.players.set(2, ws)
-        room.names.set(2, me)
+        const slot = lowestFreeSlot(room, 2)
+        room.players.set(slot, ws)
+        room.names.set(slot, me)
         ws._room = room.code
-        ws._slot = 2
-        send(ws, { type: 'joined', code: room.code, slot: 2, gameId: room.gameId, opponent: room.names.get(1) })
-        const host = room.players.get(1)
-        send(host, { type: 'opponent_joined', opponent: me })
-        console.log(`PLAYER_JOINED ${room.code} ${me.name}`)
+        ws._slot = slot
+        const otherSlotNum = otherSlot(slot)
+        const other = room.players.get(otherSlotNum)
+        send(ws, {
+          type: 'joined',
+          code: room.code,
+          slot,
+          gameId: room.gameId,
+          opponent: room.names.get(otherSlotNum) ?? undefined,
+        })
+        if (other) send(other, { type: 'opponent_joined', opponent: me })
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
+        console.log(`PLAYER_JOINED ${room.code} ${me.name} slot=${slot}`)
         break
       }
 
@@ -210,8 +419,218 @@ wss.on('connection', (ws) => {
         break
       }
 
+      // نفق بنك الحظ: {type:'bank', msg:<رسالة البروتوكول الأصلية كما هي>}
+      case 'bank': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'bank-el7az') return
+        const parsed = parseClientMessage(JSON.stringify(msg.msg))
+        if (!parsed) return
+        const vws = ensureBankVws(ws)
+        if (parsed.type === 'CREATE_ROOM') {
+          // انحراف موثّق: كود غرفة البنك هو كود قييمد ذو الـ 4 أرقام (بدل كود الـ 5 حروف)
+          bankManager.createRoomDirect(vws, parsed.payload.name, room.code)
+          return
+        }
+        bankManager.handleMessage(vws, parsed)
+        break
+      }
+
       case 'leave': {
+        const room = rooms.get(ws._room)
+        if (room && room.gameId === 'bank-el7az' && ws._bankVws) {
+          // مغادرة صريحة: تمرير LEAVE_ROOM لبروتوكول البنك ثم الفصل
+          bankManager.handleMessage(ws._bankVws, { type: 'LEAVE_ROOM' })
+        }
         handleLeave(ws)
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
+        break
+      }
+
+      // ---------------- الهوية ----------------
+      case 'identify': {
+        try {
+          const { user, created } = userStore.identify({
+            deviceId: String(msg.deviceId || ''),
+            name: msg.name,
+            avatar: msg.avatar,
+            handle: msg.handle,
+          })
+          ws._userId = user.userId
+          trackOnline(user.userId, ws)
+          send(ws, { type: 'identified', user: { ...publicCard(user), createdAt: user.createdAt }, created })
+          broadcastFriendsUpdate(user.userId)
+          console.log(`IDENTIFY ${user.handle} (${created ? 'جديد' : 'عائد'})`)
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'set_handle': {
+        if (!ws._userId) return
+        try {
+          const user = userStore.setHandle(ws._userId, msg.handle)
+          send(ws, { type: 'handle_set', user: publicCard(user) })
+        } catch (error) {
+          send(ws, { type: 'handle_error', message: error.message })
+        }
+        break
+      }
+
+      case 'search_user': {
+        const handle = String(msg.handle || '').trim().toLowerCase().replace(/^@/, '')
+        const found = handle ? userStore.byHandle(handle) : null
+        send(ws, {
+          type: 'search_result',
+          handle,
+          user: found && found.userId !== ws._userId ? publicCard(found) : null,
+        })
+        break
+      }
+
+      // ---------------- الأصدقاء ----------------
+      case 'friend_add': {
+        if (!ws._userId) return
+        try {
+          const friend = userStore.addFriend(ws._userId, String(msg.userId || ''))
+          broadcastFriendsUpdate(ws._userId)
+          broadcastFriendsUpdate(friend.userId)
+          send(ws, { type: 'friend_added', user: publicCard(friend) })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'friend_remove': {
+        if (!ws._userId) return
+        const friendId = String(msg.userId || '')
+        userStore.removeFriend(ws._userId, friendId)
+        broadcastFriendsUpdate(ws._userId)
+        if (userStore.byId(friendId)) broadcastFriendsUpdate(friendId)
+        break
+      }
+
+      case 'friends_list': {
+        if (!ws._userId) return
+        send(ws, { type: 'friends_update', friends: friendsListFor(ws._userId) })
+        break
+      }
+
+      // ---------------- الدردشات ----------------
+      case 'chat_create_dm': {
+        if (!ws._userId) return
+        const otherId = String(msg.userId || '')
+        if (!userStore.byId(otherId)) {
+          send(ws, { type: 'error', message: 'المستخدم ده مش موجود.' })
+          return
+        }
+        const { thread, created } = userStore.getOrCreateDm(ws._userId, otherId)
+        send(ws, { type: 'chat_thread', thread: userStore.threadSummary(thread, ws._userId) })
+        if (created) {
+          pushToUser(otherId, { type: 'chat_update', thread: userStore.threadSummary(thread, otherId) })
+        }
+        break
+      }
+
+      case 'chat_create_group': {
+        if (!ws._userId) return
+        try {
+          const memberIds = Array.isArray(msg.memberIds) ? msg.memberIds.map(String) : []
+          const thread = userStore.createGroup(msg.name, memberIds, ws._userId)
+          for (const memberId of thread.memberIds) {
+            pushToUser(memberId, { type: 'chat_update', thread: userStore.threadSummary(thread, memberId) })
+          }
+          send(ws, { type: 'chat_thread', thread: userStore.threadSummary(thread, ws._userId) })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'chat_list': {
+        if (!ws._userId) return
+        send(ws, { type: 'chat_threads', threads: userStore.threadsOf(ws._userId) })
+        break
+      }
+
+      case 'chat_history': {
+        if (!ws._userId) return
+        try {
+          const thread = userStore.history(String(msg.threadId || ''), ws._userId)
+          send(ws, {
+            type: 'chat_history',
+            threadId: thread.id,
+            messages: thread.messages,
+            thread: userStore.threadSummary(thread, ws._userId),
+          })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'chat_send': {
+        if (!ws._userId) return
+        try {
+          const threadId = String(msg.threadId || '')
+          const kind = msg.kind === 'game_invite' ? 'game_invite' : 'text'
+          let invite = null
+          let text = String(msg.text ?? '')
+          if (kind === 'game_invite') {
+            const gameId = String(msg.invite?.gameId || '')
+            const game = INVITE_GAMES[gameId]
+            if (!game) {
+              send(ws, { type: 'error', message: 'اللعبة دي مش متاحة للدعوات.' })
+              return
+            }
+            // الخادم ينشئ غرفة الدعوة ويضمّن الكود في الرسالة
+            const room = createRoomRecord(gameId)
+            invite = { gameId, roomCode: room.code, gameName: game.name, gameEmoji: game.emoji }
+            text = `دعوة للعب ${game.name}`
+            console.log(`INVITE_ROOM ${room.code} ${gameId}`)
+          }
+          const { thread, message } = userStore.postMessage(threadId, ws._userId, { text, kind, invite })
+          for (const memberId of thread.memberIds) {
+            pushToUser(memberId, {
+              type: 'chat_message',
+              threadId: thread.id,
+              message,
+              thread: userStore.threadSummary(thread, memberId),
+            })
+          }
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      // ---------------- المباراة السريعة ----------------
+      case 'quick_match': {
+        if (ws._room) return
+        const gameId = String(msg.gameId || '')
+        if (!INVITE_GAMES[gameId]) {
+          send(ws, { type: 'error', message: 'اللعبة دي مش متاحة للمباراة السريعة.' })
+          return
+        }
+        removeFromQueues(ws)
+        const queue = matchQueues.get(gameId) ?? []
+        queue.push({
+          ws,
+          userId: ws._userId ?? null,
+          name: String(msg.name || 'لاعب'),
+          avatar: String(msg.avatar || '🎮'),
+          at: Date.now(),
+        })
+        matchQueues.set(gameId, queue)
+        send(ws, { type: 'quick_match_waiting', gameId })
+        tryMatch(gameId)
+        break
+      }
+
+      case 'quick_match_cancel': {
+        removeFromQueues(ws)
+        send(ws, { type: 'quick_match_cancelled' })
         break
       }
 
@@ -228,11 +647,18 @@ wss.on('connection', (ws) => {
     }
   })
 
-  ws.on('close', () => handleLeave(ws))
+  ws.on('close', () => {
+    handleLeave(ws)
+    removeFromQueues(ws)
+    if (ws._userId) {
+      untrackOnline(ws._userId, ws)
+      broadcastFriendsUpdate(ws._userId)
+    }
+  })
   ws.on('error', () => {})
 })
 
-// نبضات القلب: قطع الاتصالات الميتة
+// نبضات القلب: قطع الاتصالات الميتة + جمع غرف الدعوات الفارغة المنتهية
 setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) {
@@ -247,6 +673,20 @@ setInterval(() => {
       /* ignore */
     }
   }
+  const now = Date.now()
+  for (const [code, room] of rooms) {
+    if (room.players.size === 0 && now - (room.createdAt ?? 0) > INVITE_ROOM_TTL_MS) {
+      destroyShakhbata(room)
+      rooms.delete(code)
+      console.log(`INVITE_ROOM_EXPIRED ${code}`)
+    }
+  }
 }, 20000)
 
-console.log(`GAAMED_SERVER listening on ws://0.0.0.0:${PORT}`)
+// تنظيف غرف بنك الحظ المنتهية الصلاحية كل 10 دقائق
+const bankCleanupTimer = setInterval(() => bankManager.cleanup(), 10 * 60 * 1000)
+if (bankCleanupTimer.unref) bankCleanupTimer.unref()
+
+httpServer.listen(PORT, () => {
+  console.log(`GAAMED_SERVER listening on ws://0.0.0.0:${PORT} (+ http /health /api/stats)`)
+})

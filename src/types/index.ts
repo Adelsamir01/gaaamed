@@ -1,4 +1,6 @@
 export interface Profile {
+  userId?: string
+  handle?: string
   name: string
   avatar: string
   xp: number
@@ -11,33 +13,52 @@ export interface GameStats {
   bestScore?: number
 }
 
-export type FriendStatus = 'online' | 'playing' | 'offline'
+export type Presence = 'online' | 'playing' | 'offline'
 
-export interface Friend {
-  id: string
+/** صديق من خادم جااامد (بيانات حقيقية) */
+export interface ServerFriend {
+  userId: string
+  handle: string
   name: string
   avatar: string
-  xp: number
-  status: FriendStatus
-  playingGame?: string
+  presence: Presence
 }
 
-export interface ChatMessage {
+export interface PublicUserCard {
+  userId: string
+  handle: string
+  name: string
+  avatar: string
+}
+
+export interface GameInvite {
+  gameId: string
+  roomCode: string
+  gameName: string
+  gameEmoji: string
+}
+
+export interface ServerChatMessage {
   id: string
-  senderId: string // 'me' أو معرف صديق/بوت
+  senderId: string
   senderName: string
   senderAvatar: string
   text: string
+  kind: 'text' | 'game_invite'
+  invite?: GameInvite | null
   time: number
 }
 
-export interface ChatThread {
+export interface ServerThread {
   id: string
+  kind: 'dm' | 'group'
   name: string
   avatar: string
+  memberIds: string[]
   members: number
-  messages: ChatMessage[]
+  lastMessage: ServerChatMessage | null
   unread: number
+  updatedAt: number
 }
 
 export interface Settings {

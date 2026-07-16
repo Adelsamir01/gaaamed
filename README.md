@@ -1,4 +1,4 @@
-# قييمد — gaaamed 🎮
+# جااامد — gaaamed 🎮
 
 **منصة ألعاب اجتماعية عربية — العب ودردش مع أصدقائك، أونلاين أو على نفس الجهاز.**
 
@@ -21,10 +21,13 @@ A Plato-style social gaming platform, fully in Arabic (RTL), built as a web app 
 | Game | Players | Description |
 |---|---|---|
 | **شخبطة** 🎨 | 2–8 | Arabic draw-and-guess party game (Skribbl-style): one player draws, everyone guesses in chat. 420-word Arabic bank, letter hints, speed-based scoring. |
+| **بنك الحظ** 🏦 | 2–6 | Egyptian Monopoly-style board game: dice, properties, rent, jail, chance cards — fully ported and wired into gaaamed rooms. |
 | **إكس أو أونلاين** ⭕ | 2 | Tic-tac-toe over the network with turn sync and win-line highlight. |
 | **أربعة تربح** 🔴 | 2 | Connect 4 — drop discs, gravity animation, 4-in-a-row detection. |
 | **حجر ورقة مقص أونلاين** ✂️ | 2 | Best of 5, secret picks revealed simultaneously by the server. |
 | **سباق البرق** ⚡ | 2 | Reaction race — server decides who tapped first each round. |
+
+All online games support three ways to play from one unified game card: **غرفة برمز** (4-digit room code), **دعوة في الدردشة** (tap-to-join invite bubble), and **مباراة سريعة** ⚡ (server matchmaking pairs you with a random waiting player).
 
 ### 📱 Offline (vs bot or 2 players on one device)
 
@@ -38,10 +41,13 @@ A Plato-style social gaming platform, fully in Arabic (RTL), built as a web app 
 
 ### Platform features
 
-- Onboarding with username + avatar emoji picker (24 avatars)
-- Daily coin reward, coins economy, XP and levels
-- Chat rooms with simulated Arabic bot replies and typing indicator
-- Friends list with online status
+- Server-side identity with no signup: device-bound account, editable `@handle`, searchable by friends
+- Real friends system: search by handle, add/remove, online presence dots, persisted on the server
+- Real chat: DMs + group chats (3+ friends), unread badges, history persisted server-side
+- Game invites inside chat: tap 🎮 in any DM/group → friend taps **انضم الآن** → both land in the room (no codes)
+- Quick match (مباراة سريعة ⚡): one tap pairs two waiting players into a game
+- Unified game cards: 🤖 كمبيوتر / 👥 لاعبَين / 🌐 أونلاين modes on a single card
+- Onboarding with username + avatar emoji picker, daily coin reward, coins economy, XP and levels
 - Profile with per-game stats, settings (sound, server URL)
 - WebAudio sound effects, confetti celebrations, framer-motion animations
 - Full Arabic RTL UI — Cairo font, dark theme, glassmorphism
@@ -61,19 +67,26 @@ A Plato-style social gaming platform, fully in Arabic (RTL), built as a web app 
 
 ```text
 ├── src/                      # React client
-│   ├── sections/             # Screens: Home, Games, Chat, Friends, Profile, OnlineLobby…
+│   ├── sections/             # Screens: Home, Games, Chat, ChatRoom, Friends, Profile, OnlineLobby…
 │   ├── games/                # Offline games + games/index.ts registry
-│   │   └── online/           # Online games: XO, ConnectFour, Rps, Reaction, Shakhbata
-│   ├── online/               # WS client + OnlineContext (rooms, connection)
+│   │   └── online/           # Online games: XO, ConnectFour, Rps, Reaction, Shakhbata, bankel7az/
+│   ├── online/               # WS client + OnlineContext (rooms, identity, social, matchmaking)
 │   ├── store/                # AppContext — profile, coins/XP, stats (localStorage)
-│   └── data/                 # Trivia bank, friends/rooms seed, bot replies
+│   └── data/                 # Trivia bank, friends/rooms seed
 ├── server/
-│   ├── server.js             # WS relay + room management (port 8787)
+│   ├── server.js             # WS relay + rooms + social protocol (port 8787)
+│   ├── users.js              # Persistent identity, handles, friends, chats (server/data/*.json)
 │   ├── shakhbata.js          # شخبطة authoritative game engine (420-word bank)
-│   ├── smoke-test.js         # 2-player games protocol tests (16 checks)
-│   └── smoke-shakhbata.js    # شخبطة end-to-end tests (51 checks)
+│   ├── bankel7az.js          # بنك الحظ authoritative engine (ported)
+│   ├── smoke-test.js         # 2-player games protocol tests
+│   ├── smoke-shakhbata.js    # شخبطة end-to-end tests
+│   ├── smoke-bankel7az.js    # بنك الحظ end-to-end tests
+│   └── smoke-social.js       # identity/friends/chats/invites/quick-match tests (42 checks)
+├── autostart/                # Hidden VBS launchers + HKCU Run registration (server+tunnel at logon)
 ├── android/                  # Capacitor Android project (builds the APK)
-├── shakhbata-original/       # Original شخبطة game (reference, ported into the app)
+├── runtime/                  # Local standalone node.exe for autostart (gitignored)
+├── shakhbata-original/       # Original شخبطة game (reference)
+├── bank-el7az-original/      # Original بنك الحظ game (reference)
 └── docs/                     # Architecture, protocol, development guides
 ```
 
@@ -101,9 +114,23 @@ npm run server       # ws://0.0.0.0:8787
 ### Protocol tests
 
 ```bash
-node server/smoke-test.js        # 2-player games — 16 checks
-node server/smoke-shakhbata.js   # شخبطة full match — 51 checks
+node server/smoke-test.js        # 2-player games protocol
+node server/smoke-shakhbata.js   # شخبطة full match
+node server/smoke-bankel7az.js   # بنك الحظ full match
+node server/smoke-social.js      # identity, friends, chats, invites, quick match — 42 checks
 ```
+
+### Auto-start on Windows logon (production)
+
+The server and tunnel register in `HKCU\...\Run` (no admin needed) and start hidden via VBS launchers:
+
+```bat
+autostart\install-autostart.bat
+```
+
+- `gaaamed-server` → `runtime\node.exe server\server.js` (standalone node copy, immune to tool updates)
+- `gaaamed-tunnel` → `cloudflared … --token` read from `sdk-installer\tunnel-token.txt` (gitignored)
+- To remove: `reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v gaaamed-server /f` (same for `gaaamed-tunnel`)
 
 ### Build the Android APK
 
@@ -163,6 +190,9 @@ Arabic answer checking normalizes alef/hamza forms, taa marbuta, yaa/alef maqsur
 ## Roadmap
 
 - [x] Public server deployment (Cloudflare Tunnel — `wss://gaaamed.adelsamir.com`)
+- [x] Server-side identity + handles, real friends, DMs & group chats
+- [x] In-chat game invites (tap to join) + quick match matchmaking
+- [x] Windows auto-start for server + tunnel
 - [ ] Voice chat in rooms
 - [ ] More party games (مافيا، تحدي الرسم السريع)
 - [ ] Release-signed APK + Play Store listing

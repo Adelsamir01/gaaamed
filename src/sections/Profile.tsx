@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Coins, Pencil, RotateCcw, Server, Target, Trophy, Volume2, VolumeX } from 'lucide-react'
+import { Coins, Copy, Pencil, RotateCcw, Server, Target, Trophy, Volume2, VolumeX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApp } from '@/store/AppContext'
 import { useOnline } from '@/online/OnlineContext'
@@ -99,6 +99,20 @@ export default function Profile() {
           </Dialog>
         </div>
         <h2 className="text-xl font-black mt-3">{profile.name}</h2>
+        {profile.handle && (
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(`@${profile.handle}`).catch(() => {})
+              sounds.pop()
+              toast.success('تم نسخ المعرّف! 📋', { description: 'شاركه مع أصحابك عشان يضيفوك' })
+            }}
+            className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-400/30 rounded-full px-3 py-1.5 hover:bg-emerald-500/20 transition-colors"
+            dir="ltr"
+          >
+            @{profile.handle}
+            <Copy className="w-3 h-3" />
+          </button>
+        )}
         <div className="w-full mt-4">
           <LevelBar xp={profile.xp} />
         </div>
@@ -230,7 +244,7 @@ export default function Profile() {
 
       <div className="text-center mt-6">
         <CoinChip coins={profile.coins} className="inline-flex" />
-        <p className="text-[10px] text-muted-foreground mt-3">قييمد | gaaamed — الإصدار ١٫٠ 💚</p>
+        <p className="text-[10px] text-muted-foreground mt-3">جااامد | gaaamed — الإصدار ١٫٠ 💚</p>
       </div>
     </div>
   )
