@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fff7ed" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>شخبطة</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css?v=47" />
+  </head>
+  <body>
+    <main id="app"></main>
+    <script>
+      (function () {
+        var build = "47";
+        var key = "shakhbata:build";
+        var stored = localStorage.getItem(key);
+        if (stored && stored !== build) {
+          localStorage.setItem(key, build);
+          location.reload(true);
+          return;
+        }
+        localStorage.setItem(key, build);
+      })();
+    </script>
+    <script src="/app.js?v=47"></script>
+  </body>
+</html>

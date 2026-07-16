@@ -1,0 +1,9 @@
+{
+  "name": "شخبطة",
+  "short_name": "شخبطة",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff7ed",
+  "theme_color": "#fff7ed",
+  "orientation": "portrait"
+}
