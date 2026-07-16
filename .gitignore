@@ -1,0 +1,29 @@
+# dependencies & build output
+node_modules/
+dist/
+*.apk
+
+# Android build
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# SDK installer cache (large)
+sdk-installer/
+
+# logs & local tooling
+*.log
+server.err
+server-start.bat
+
+# screenshots (curated copies live in docs/screenshots/)
+emulator-screen.png
+emu*.png
+online-match-*.png
+
+# misc
+template-info.md
+.idea/
+.vscode/
+.DS_Store
