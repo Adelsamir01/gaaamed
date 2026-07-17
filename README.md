@@ -78,6 +78,7 @@ All online games support three ways to play from one unified game card: **غرف
 │   ├── users.js              # Persistent identity, handles, friends, chats (server/data/*.json)
 │   ├── shakhbata.js          # شخبطة authoritative game engine (420-word bank)
 │   ├── bankel7az.js          # بنك الحظ authoritative engine (ported)
+│   ├── public/               # Public website: landing page, privacy.html, brand assets
 │   ├── smoke-test.js         # 2-player games protocol tests
 │   ├── smoke-shakhbata.js    # شخبطة end-to-end tests
 │   ├── smoke-bankel7az.js    # بنك الحظ end-to-end tests
@@ -107,7 +108,7 @@ npm run dev          # http://localhost:3000
 npm run server       # ws://0.0.0.0:8787
 ```
 
-- **Production (default)**: the Android app connects to the public server at `wss://gaaamed.adelsamir.com` — a Cloudflare Tunnel in front of this machine's local server (`HTTP → localhost:8787`). Any phone with the APK can play from anywhere.
+- **Production (default)**: the Android app connects to the public server at `wss://dedos.adelsamir.com` — a Cloudflare Tunnel in front of this machine's local server (`HTTP → localhost:8787`). Any phone with the APK can play from anywhere.
 - Web preview connects to `ws://localhost:8787` automatically.
 - Override anytime in **Profile → إعدادات الخادم** (e.g. `ws://192.168.1.20:8787` for LAN play, or `ws://10.0.2.2:8787` for emulator-to-localhost dev).
 
@@ -156,16 +157,30 @@ adb -s emulator-5556 install -r app-debug.apk
 
 ### Public tunnel (production server)
 
-The public endpoint `wss://gaaamed.adelsamir.com` is a Cloudflare Tunnel to this machine:
+The public endpoint `wss://dedos.adelsamir.com` is a Cloudflare Tunnel to this machine:
 
 ```bash
 # cloudflared (Windows binary) — runs detached, keeps the tunnel alive
 cloudflared.exe tunnel --no-autoupdate --protocol http2 run --token <TUNNEL_TOKEN>
 ```
 
-- Dashboard route: Zero Trust → Networks → Tunnels → gaaamed → Public Hostname → `gaaamed.adelsamir.com` → service `HTTP → localhost:8787` (Cloudflare handles the WS Upgrade automatically).
+- Dashboard route: Zero Trust → Networks → Tunnels → gaaamed → Public Hostname → `dedos.adelsamir.com` → service `HTTP → localhost:8787` (Cloudflare handles the WS Upgrade automatically).
 - `--protocol http2` is required on networks that block QUIC/UDP.
 - The tunnel token is a secret — keep it in the dashboard / your password manager, never in this repo.
+
+### Public web pages (landing, privacy, APK)
+
+The same Node server also serves a small public website from `server/public/` (static files only — no game logic involved):
+
+| Route | What it serves |
+|---|---|
+| `/` | Arabic RTL landing page (`server/public/index.html`) — hero, game cards, download buttons |
+| `/privacy` | Privacy policy page (`server/public/privacy.html`, Arabic + English) — the public URL Play Console requires |
+| `/dedos.apk` | Direct APK download — serves `dedos-debug.apk` from the workspace root when it exists, otherwise a friendly JSON 404 |
+| `/health` | JSON health check |
+| `/api/stats` | بنك الحظ stats snapshot (JSON, CORS `*`) |
+
+Static serving is guarded against path traversal (paths resolve strictly inside `server/public/`) and sets proper content types (html/png/jpg/css/js/ico/apk). On the public domain these are `https://dedos.adelsamir.com/`, `https://dedos.adelsamir.com/privacy`, and `https://dedos.adelsamir.com/dedos.apk`.
 
 ---
 
@@ -189,7 +204,7 @@ Arabic answer checking normalizes alef/hamza forms, taa marbuta, yaa/alef maqsur
 
 ## Roadmap
 
-- [x] Public server deployment (Cloudflare Tunnel — `wss://gaaamed.adelsamir.com`)
+- [x] Public server deployment (Cloudflare Tunnel — `wss://dedos.adelsamir.com`)
 - [x] Server-side identity + handles, real friends, DMs & group chats
 - [x] In-chat game invites (tap to join) + quick match matchmaking
 - [x] Windows auto-start for server + tunnel

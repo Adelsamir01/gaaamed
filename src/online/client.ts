@@ -34,7 +34,7 @@ export function getServerUrl(): string {
   } catch {
     /* ignore */
   }
-  return Capacitor.isNativePlatform() ? 'wss://gaaamed.adelsamir.com' : 'ws://localhost:8787'
+  return Capacitor.isNativePlatform() ? 'wss://dedos.adelsamir.com' : 'ws://localhost:8787'
 }
 
 export function saveServerUrl(url: string) {

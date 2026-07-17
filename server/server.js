@@ -7,6 +7,9 @@
  * + الهوية/الأصدقاء/الدردشات/المباراة السريعة عبر server/users.js (بيانات دائمة في server/data)
  */
 import { createServer } from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
   initShakhbata, shakHandleMessage, shakHandleLeave, shakPlayers,
@@ -46,7 +49,40 @@ const onlineUsers = new Map()
 const matchQueues = new Map()
 const MATCH_SIZE = 2
 
-// خادم HTTP صريح: نقاط صحة/إحصائيات + ترقية WebSocket
+// ===== صفحات الويب العامة (صفحة الهبوط + سياسة الخصوصية + تحميل APK) =====
+// ملاحظة: هذا القسم خدمة ملفات ثابتة فقط — لا علاقة له بمنطق WebSocket/الألعاب
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
+const PUBLIC_DIR = path.resolve(SERVER_DIR, 'public')
+// ملف الـ APK يعيش في جذر مساحة العمل (الأب المباشر لمجلد server/)
+const APK_PATH = path.resolve(SERVER_DIR, '..', 'dedos-debug.apk')
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.apk': 'application/vnd.android.package-archive',
+}
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+  res.end(JSON.stringify(obj))
+}
+
+function sendFile(res, filePath, contentType) {
+  res.writeHead(200, { 'content-type': contentType })
+  const stream = fs.createReadStream(filePath)
+  stream.on('error', () => {
+    if (!res.headersSent) sendJson(res, 404, { error: 'not_found' })
+    else res.destroy()
+  })
+  stream.pipe(res)
+}
+
+// خادم HTTP صريح: نقاط صحة/إحصائيات + ملفات ثابتة + ترقية WebSocket
 const httpServer = createServer((req, res) => {
   const url = (req.url || '/').split('?')[0]
   if (url === '/health') {
@@ -62,8 +98,46 @@ const httpServer = createServer((req, res) => {
     res.end(JSON.stringify(bankStats.getSnapshot(bankManager.getLiveStats())))
     return
   }
-  res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
-  res.end(JSON.stringify({ error: 'not_found' }))
+
+  // ‎/dedos.apk ← يقدّم dedos-debug.apk من جذر مساحة العمل إن وُجد
+  if (url === '/dedos.apk') {
+    if (fs.existsSync(APK_PATH)) {
+      sendFile(res, APK_PATH, MIME_TYPES['.apk'])
+    } else {
+      sendJson(res, 404, { error: 'apk_not_available', message: 'ملف APK غير متوفر حاليًا — حمّل التطبيق من Google Play.' })
+    }
+    return
+  }
+
+  // ملفات ثابتة من server/public مع حماية صارمة من path traversal
+  let pathname
+  try {
+    pathname = decodeURIComponent(url)
+  } catch {
+    sendJson(res, 400, { error: 'bad_request' })
+    return
+  }
+  // ارفض البايتات الصفرية والمسارات غير النظيفة مبكرًا
+  if (pathname.includes('\0') || pathname.includes('..')) {
+    sendJson(res, 404, { error: 'not_found' })
+    return
+  }
+  if (pathname === '/') pathname = '/index.html'
+  else if (pathname === '/privacy') pathname = '/privacy.html'
+
+  const resolved = path.resolve(PUBLIC_DIR, '.' + pathname)
+  // يجب أن يبقى المسار المحلول داخل مجلد public حصرًا
+  if (resolved !== PUBLIC_DIR && !resolved.startsWith(PUBLIC_DIR + path.sep)) {
+    sendJson(res, 404, { error: 'not_found' })
+    return
+  }
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    const contentType = MIME_TYPES[path.extname(resolved).toLowerCase()] || 'application/octet-stream'
+    sendFile(res, resolved, contentType)
+    return
+  }
+
+  sendJson(res, 404, { error: 'not_found' })
 })
 
 const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: false })

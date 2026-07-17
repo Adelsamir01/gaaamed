@@ -20,7 +20,7 @@
 The client is a single-page React app. The same build runs three ways:
 
 1. **Web dev/preview** — Vite dev server; WS connects to `ws://localhost:8787`.
-2. **Android APK (default)** — Capacitor wraps `dist/` in a WebView; WS connects to the public production endpoint **`wss://gaaamed.adelsamir.com`** — a Cloudflare Tunnel (`--protocol http2`) forwarding `HTTP → localhost:8787` on the host machine.
+2. **Android APK (default)** — Capacitor wraps `dist/` in a WebView; WS connects to the public production endpoint **`wss://dedos.adelsamir.com`** — a Cloudflare Tunnel (`--protocol http2`) forwarding `HTTP → localhost:8787` on the host machine.
 3. **Override** — server URL is overridable in Profile → إعدادات الخادم (persisted in `localStorage` key `gaaamed_server_url`), e.g. `ws://10.0.2.2:8787` for emulator dev or a LAN IP.
 
 URL resolution lives in `src/online/client.ts` (`Capacitor.isNativePlatform()` check).
@@ -69,6 +69,8 @@ Single Node process, `ws` library, port **8787**, no database (rooms in memory).
   - 420-word Arabic bank + banned-word filter.
   - Arabic normalization for answer checking (alef/hamza, taa marbuta, yaa/maqsura, tashkeel).
   - Hints at 35%/65% of the timer (guessers only); scoring formula `30 + remaining/total × 70`, drawer +20 per guesser; timers server-side; leaderboard broadcast at the end.
+
+HTTP endpoints on the same port (static files only, no game logic): `/health` (JSON health), `/api/stats` (بنك الحظ stats), `/` (Arabic landing page from `server/public/`), `/privacy` (privacy policy page), `/dedos.apk` (serves `dedos-debug.apk` from the workspace root when present). Static serving is path-traversal-guarded (strictly inside `server/public/`).
 
 ### Why two models?
 

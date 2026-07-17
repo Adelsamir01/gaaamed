@@ -53,9 +53,13 @@ keytool -genkeypair -v \
   -dname "CN=<YOUR_NAME>, OU=<UNIT>, O=<ORG>, L=<CITY>, S=<STATE>, C=<2-LETTER-COUNTRY>"
 ```
 
-- [ ] Keystore created, stored **outside** the repo (never commit it;
-      it is already covered by `.gitignore` hygiene — double-check).
-- [ ] Passwords stored in a password manager.
+- [x] Keystore created at **`android/app/dedos-upload.keystore`** (alias
+      `dedos`, RSA 2048, ~27-year validity). It is covered by `.gitignore`
+      (`*.keystore`) — never commit it; keep an offline copy too.
+- [x] Passwords stored: `android/keystore.properties` (gitignored, read by
+      Gradle) and full backup incl. certificate fingerprints in
+      **`sdk-installer/dedos-keystore-BACKUP.txt`** (gitignored dir). Copy
+      both into a password manager / encrypted offline drive as well.
 
 ## 3. Build the signed release AAB
 
@@ -69,21 +73,21 @@ versionName "1.0"    // user-facing string
 - [ ] Bump `versionCode` (and `versionName` when user-facing changes ship).
 - [ ] Web bundle built and synced: `npm run android:sync`
       (`tsc -b && vite build`, then `npx cap sync android`).
-- [ ] Build the App Bundle:
+- [x] Build the App Bundle (done 2026-07-17):
 
 ```bash
 cd android
 ./gradlew bundleRelease          # on Windows CMD: gradlew.bat bundleRelease
 ```
 
-- [ ] Output exists: `android/app/build/outputs/bundle/release/app-release.aab`.
-- [ ] Sign it with the upload key — either via **Android Studio → Build →
-      Generate Signed App Bundle** (pick the keystore from step 2), or by
-      adding a `signingConfigs.release` block to `android/app/build.gradle`
-      that reads credentials from `gradle.properties`/environment variables
-      (never hard-code passwords in the repo). (Code change owned outside
-      this doc; current `release` buildType has no signing config and
-      `minifyEnabled false`.)
+- [x] Output exists: `android/app/build/outputs/bundle/release/app-release.aab`
+      (built 2026-07-17, ~4.9 MB).
+- [x] Signed with the upload key: `android/app/build.gradle` now has a
+      `signingConfigs.release` block that reads credentials from the
+      gitignored `android/keystore.properties` (only when the file exists),
+      and `buildTypes.release` uses it. Verified with
+      `jarsigner -verify` → `jar verified`, signed by the `dedos`
+      certificate. (`minifyEnabled` intentionally left `false` for this pass.)
 
 ## 4. Enroll in Play App Signing
 
@@ -164,6 +168,6 @@ Produced separately under **`store-assets/`** — confirm these specs:
 | minSdk / targetSdk | 24 / 36 (`android/variables.gradle`) |
 | Version fields | `android/app/build.gradle` → `defaultConfig` |
 | AAB output | `android/app/build/outputs/bundle/release/app-release.aab` |
-| Upload keystore | `dedos-upload-key.jks` (offline backup, never committed) |
+| Upload keystore | `android/app/dedos-upload.keystore`, alias `dedos` (gitignored; credentials backup in `sdk-installer/dedos-keystore-BACKUP.txt` — also keep offline copies) |
 | Privacy policy source | `PRIVACY.md` → host publicly (GitHub Pages) |
 | Server | `server/server.js` behind Cloudflare Tunnel (wss, TLS) |

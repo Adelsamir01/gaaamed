@@ -3,6 +3,10 @@ node_modules/
 dist/
 *.apk
 
+# signing secrets — NEVER commit
+*.keystore
+keystore.properties
+
 # Android build
 android/.gradle/
 android/build/
