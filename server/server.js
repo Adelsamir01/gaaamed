@@ -1,5 +1,5 @@
 /**
- * خادم جااامد للعب الأونلاين — WebSocket relay بسيط
+ * خادم ديدوس للعب الأونلاين — WebSocket relay بسيط
  * الغرف: إنشاء/انضمام برمز من 4 أرقام، تمرير الحركات بين لاعبَين
  * + لعبة شخبطة (حتى 8 لاعبين) عبر محرك server/shakhbata.js
  * + لعبة بنك الحظ (حتى 6 لاعبين) عبر محرك server/bankel7az.js بنفق {type:'bank', msg}
@@ -51,7 +51,7 @@ const httpServer = createServer((req, res) => {
   const url = (req.url || '/').split('?')[0]
   if (url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({ ok: true, service: 'gaaamed-server', time: Date.now() }))
+    res.end(JSON.stringify({ ok: true, service: 'dedos-server', time: Date.now() }))
     return
   }
   if (url === '/api/stats') {
@@ -748,5 +748,5 @@ const bankCleanupTimer = setInterval(() => bankManager.cleanup(), 10 * 60 * 1000
 if (bankCleanupTimer.unref) bankCleanupTimer.unref()
 
 httpServer.listen(PORT, () => {
-  console.log(`GAAMED_SERVER listening on ws://0.0.0.0:${PORT} (+ http /health /api/stats)`)
+  console.log(`DEDOS_SERVER listening on ws://0.0.0.0:${PORT} (+ http /health /api/stats)`)
 })

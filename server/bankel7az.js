@@ -1649,7 +1649,7 @@ class StatsStore {
   }
 }
 
-// انحراف موثّق: المسار الافتراضي داخل gaaamed (server/data/bank-stats.json) بدل data/stats.json
+// انحراف موثّق: المسار الافتراضي داخل ديدوس (server/data/bank-stats.json) بدل data/stats.json
 function resolveStatsFilePath() {
   const fromEnv = process.env.STATS_FILE_PATH ?? process.env.STATS_FILE;
   if (fromEnv && fromEnv.trim()) {

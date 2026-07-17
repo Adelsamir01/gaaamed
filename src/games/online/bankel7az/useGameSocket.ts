@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useOnline } from "@/online/OnlineContext";
 
 // نقل كامل من apps/client/src/net/useGameSocket.ts مع تكييف النقل فقط:
-// بدل سوكيت مستقل، تُرسل رسائل البروتوكول الأصلية عبر نفق جااامد {type:'bank', msg}
+// بدل سوكيت مستقل، تُرسل رسائل البروتوكول الأصلية عبر نفق ديدوس {type:'bank', msg}
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 interface StoredSession {
@@ -16,7 +16,7 @@ const SESSION_KEY = "bank-el7az-session";
 
 export function useGameSocket(options: { name?: string } = {}) {
   const online = useOnline();
-  const { sendRaw, subscribe, leaveRoom: leaveGaaamedRoom } = online;
+  const { sendRaw, subscribe, leaveRoom: leaveDedosRoom } = online;
   const playerName = options.name?.trim() || localStorage.getItem("bank-el7az-name") || "لاعب";
   const [state, setState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export function useGameSocket(options: { name?: string } = {}) {
   const pingSentAtRef = useRef<number | null>(null);
   const sendRawRef = useRef(sendRaw);
   const onlineStatusRef = useRef(online.status);
-  const gaaamedCodeRef = useRef<string | null>(null);
+  const dedosCodeRef = useRef<string | null>(null);
   const slotRef = useRef<number | null>(null);
   const nameRef = useRef(playerName);
   // حارس ضد ازدواج طلبات الدخول التلقائي (مفتاحه code:slot)
@@ -40,7 +40,7 @@ export function useGameSocket(options: { name?: string } = {}) {
   stateRef.current = state;
   sendRawRef.current = sendRaw;
   onlineStatusRef.current = online.status;
-  gaaamedCodeRef.current = online.code;
+  dedosCodeRef.current = online.code;
   slotRef.current = online.slot;
   nameRef.current = playerName;
 
@@ -154,20 +154,20 @@ export function useGameSocket(options: { name?: string } = {}) {
     };
   }, [subscribe, updateClockOffset]);
 
-  // الدخول التلقائي لغرفة البنك بمجرد توفر الاتصال + غرفة جااامد —
+  // الدخول التلقائي لغرفة البنك بمجرد توفر الاتصال + غرفة ديدوس —
   // لا يعتمد على رسالة CONNECTED (كانت تصل أحيانًا قبل اشتراك الـ hook فيضيع الطلب)
-  const gaaamedCode = online.code;
-  const gaaamedSlot = online.slot;
+  const dedosCode = online.code;
+  const dedosSlot = online.slot;
   useEffect(() => {
     if (status !== "connected") return;
     if (stateRef.current) return;
-    if (!gaaamedCode && gaaamedSlot !== 1) return; // لا غرفة جااامد بعد
-    const key = `${gaaamedCode ?? "host"}:${gaaamedSlot ?? "?"}`;
+    if (!dedosCode && dedosSlot !== 1) return; // لا غرفة ديدوس بعد
+    const key = `${dedosCode ?? "host"}:${dedosSlot ?? "?"}`;
     if (joinRequestRef.current === key) return;
     joinRequestRef.current = key;
 
     const session = sessionRef.current;
-    if (session && gaaamedCode && session.roomCode === gaaamedCode) {
+    if (session && dedosCode && session.roomCode === dedosCode) {
       pendingNameRef.current = session.name;
       sendRawRef.current({
         type: "bank",
@@ -180,13 +180,13 @@ export function useGameSocket(options: { name?: string } = {}) {
     }
     const name = nameRef.current;
     pendingNameRef.current = name;
-    if (gaaamedSlot === 1) {
+    if (dedosSlot === 1) {
       sendRawRef.current({ type: "bank", msg: { type: "CREATE_ROOM", payload: { name } } });
-    } else if (gaaamedCode) {
-      sendRawRef.current({ type: "bank", msg: { type: "JOIN_ROOM", payload: { roomCode: gaaamedCode, name } } });
+    } else if (dedosCode) {
+      sendRawRef.current({ type: "bank", msg: { type: "JOIN_ROOM", payload: { roomCode: dedosCode, name } } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, gaaamedCode, gaaamedSlot]);
+  }, [status, dedosCode, dedosSlot]);
 
   const createRoom = useCallback(
     (name: string) => {
@@ -224,9 +224,9 @@ export function useGameSocket(options: { name?: string } = {}) {
     setPlayerId(null);
     setState(null);
     setError(null);
-    // انحراف موثّق: مغادرة اللعبة تغلق غرفة جااامد نفسها أيضًا
-    leaveGaaamedRoom();
-  }, [send, leaveGaaamedRoom]);
+    // انحراف موثّق: مغادرة اللعبة تغلق غرفة ديدوس نفسها أيضًا
+    leaveDedosRoom();
+  }, [send, leaveDedosRoom]);
 
   return {
     status,

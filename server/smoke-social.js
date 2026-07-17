@@ -1,6 +1,6 @@
 /**
  * server/smoke-social.js — اختبار شامل للطبقة الاجتماعية (الهوية/الأصدقاء/الدردشات/الدعوات/المباراة السريعة)
- * يشغّل الخادم كعملية فرعية على PORT=8899 مع GAAAMED_DATA_DIR مؤقت، ويتحقق من:
+ * يشغّل الخادم كعملية فرعية على PORT=8899 مع DEDOS_DATA_DIR مؤقت، ويتحقق من:
  *  1) identify جديد + عائد (ثبات الهوية بالجهاز)
  *  2) تعارض المعرّفات وصيغتها
  *  3) search_user (مع استبعاد الذات)
@@ -23,7 +23,7 @@ import WebSocket from 'ws'
 const PORT = 8899
 const WS_URL = `ws://127.0.0.1:${PORT}`
 const SERVER_PATH = fileURLToPath(new URL('./server.js', import.meta.url))
-const DATA_DIR = mkdtempSync(join(tmpdir(), 'gaaamed-social-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'dedos-social-'))
 
 let passed = 0
 let failed = 0
@@ -78,7 +78,7 @@ function client(tag) {
 let serverProc = null
 async function startServer() {
   serverProc = spawn(process.execPath, [SERVER_PATH], {
-    env: { ...process.env, PORT: String(PORT), GAAAMED_DATA_DIR: DATA_DIR },
+    env: { ...process.env, PORT: String(PORT), DEDOS_DATA_DIR: DATA_DIR },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   serverProc.stderr.on('data', (d) => console.error(`[server:err] ${d}`.trim()))

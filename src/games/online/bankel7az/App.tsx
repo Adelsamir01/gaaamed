@@ -110,7 +110,7 @@ const governorateFlagByName: Record<string, string> = {
   "البحر الأحمر": "/governorates/red-sea.png"
 };
 
-// نقطة دخول جااامد: المكوّن الافتراضي المسجَّل في src/games/index.ts
+// نقطة دخول ديدوس: المكوّن الافتراضي المسجَّل في src/games/index.ts
 export default function BankEl7azGame({ onFinish }: { onFinish?: (result: GameResult) => void }) {
   const { profile } = useApp();
   return (
@@ -121,7 +121,7 @@ export default function BankEl7azGame({ onFinish }: { onFinish?: (result: GameRe
 }
 
 export function App() {
-  // انحراف موثّق: صفحة الإحصائيات عبر الهاش بدل مسار /stats (جااامد تملك التوجيه)
+  // انحراف موثّق: صفحة الإحصائيات عبر الهاش بدل مسار /stats (ديدوس تملك التوجيه)
   if (window.location.hash === "#bank-stats") {
     return <StatsPage />;
   }
@@ -148,7 +148,7 @@ function GameApp({
   const autoStartFiredRef = useRef(false);
   startGameRef.current = game.startGame;
 
-  // انحراف موثّق: إبلاغ جااامد بنتيجة المباراة بعد لحظة من إعلان الفائز (عملات/XP)
+  // انحراف موثّق: إبلاغ ديدوس بنتيجة المباراة بعد لحظة من إعلان الفائز (عملات/XP)
   useEffect(() => {
     if (!onFinishGame || !state || state.status !== "finished" || finishReportedRef.current) {
       return;
@@ -195,7 +195,7 @@ function GameApp({
   }
 
   if (!state) {
-    // داخل جااامد الدخول تلقائي من غرفة جااامد — شاشة انتظار بنفس هوية التطبيق
+    // داخل ديدوس الدخول تلقائي من غرفة ديدوس — شاشة انتظار بنفس هوية التطبيق
     return (
       <main className="gaa-lobby">
         <div className="gaa-lobby-card">
@@ -715,7 +715,7 @@ function StatsPlayerTable({ players }: { players: PlayerStats[] }) {
 }
 
 /**
- * غرفة انتظار بنك الحظ بهوية جااامد — نفس لغة بقية ألعاب الأونلاين:
+ * غرفة انتظار بنك الحظ بهوية ديدوس — نفس لغة بقية ألعاب الأونلاين:
  * رمز الغرفة للنسخ فقط، بطاقات اللاعبين، وبدء يدوي من المضيف (أو تلقائي في المباراة السريعة).
  */
 function LobbyScreen({
@@ -2034,7 +2034,7 @@ function isStandaloneMode(): boolean {
   );
 }
 
-// انحراف موثّق: رابط الإحصائيات يُشتق من عنوان خادم جااامد (ws → http)
+// انحراف موثّق: رابط الإحصائيات يُشتق من عنوان خادم ديدوس (ws → http)
 function getStatsHttpUrl(): string {
   return `${getServerUrl().replace(/^ws/, "http")}/api/stats`;
 }

@@ -18,7 +18,7 @@ const FLUSH_DEBOUNCE_MS = 500
 const HANDLE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
 export function resolveDataDir() {
-  const fromEnv = process.env.GAAAMED_DATA_DIR
+  const fromEnv = process.env.DEDOS_DATA_DIR
   if (fromEnv && fromEnv.trim()) return resolve(fromEnv.trim())
   return fileURLToPath(new URL('./data/', import.meta.url))
 }

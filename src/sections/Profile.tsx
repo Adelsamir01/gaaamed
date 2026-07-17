@@ -244,7 +244,7 @@ export default function Profile() {
 
       <div className="text-center mt-6">
         <CoinChip coins={profile.coins} className="inline-flex" />
-        <p className="text-[10px] text-muted-foreground mt-3">جااامد | gaaamed — الإصدار ١٫٠ 💚</p>
+        <p className="text-[10px] text-muted-foreground mt-3">ديدوس | Dedos — الإصدار ١٫٠ 💚</p>
       </div>
     </div>
   )

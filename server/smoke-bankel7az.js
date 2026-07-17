@@ -218,7 +218,7 @@ async function wsTests() {
   // 2) CREATE_ROOM → ROOM_CREATED بنفس كود قييمد ذي الـ 4 أرقام
   host.sendBank({ type: 'CREATE_ROOM', payload: { name: 'آدم' } })
   const roomCreated = await waitFor(() => host.lastBank('ROOM_CREATED'))
-  assert(roomCreated && roomCreated.payload.roomCode === code, `ws#2 ROOM_CREATED with gaaamed code: ${roomCreated?.payload?.roomCode}`)
+  assert(roomCreated && roomCreated.payload.roomCode === code, `ws#2 ROOM_CREATED with dedos code: ${roomCreated?.payload?.roomCode}`)
   const hostPlayerId = roomCreated?.payload?.playerId
   assert(typeof hostPlayerId === 'string' && hostPlayerId.length > 0, 'ws#2 host playerId received')
   assert(roomCreated?.payload?.state?.status === 'lobby', 'ws#2 state status lobby')

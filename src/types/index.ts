@@ -15,7 +15,7 @@ export interface GameStats {
 
 export type Presence = 'online' | 'playing' | 'offline'
 
-/** صديق من خادم جااامد (بيانات حقيقية) */
+/** صديق من خادم ديدوس (بيانات حقيقية) */
 export interface ServerFriend {
   userId: string
   handle: string

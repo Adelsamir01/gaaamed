@@ -1,4 +1,4 @@
-# WebSocket Protocol — gaaamed server (port 8787)
+# WebSocket Protocol — dedos server (port 8787)
 
 All messages are JSON over a single WebSocket connection. Rooms are identified by a 4-digit numeric `code`. Two-player games use slots 1–2; شخبطة rooms allow slots 1–8.
 
@@ -59,7 +59,7 @@ All messages are JSON over a single WebSocket connection. Rooms are identified b
 ## Server logs (useful for debugging)
 
 ```text
-GAAMED_SERVER listening on ws://0.0.0.0:8787
+DEDOS_SERVER listening on ws://0.0.0.0:8787
 ROOM_CREATED 7604 shakhbata
 PLAYER_JOINED 7604 Sara slot=2
 PLAYER_LEFT 7604 slot=1

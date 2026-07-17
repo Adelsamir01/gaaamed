@@ -1,4 +1,4 @@
-# جااامد — gaaamed 🎮
+# ديدوس — Dedos 🎮
 
 **منصة ألعاب اجتماعية عربية — العب ودردش مع أصدقائك، أونلاين أو على نفس الجهاز.**
 
@@ -21,7 +21,7 @@ A Plato-style social gaming platform, fully in Arabic (RTL), built as a web app 
 | Game | Players | Description |
 |---|---|---|
 | **شخبطة** 🎨 | 2–8 | Arabic draw-and-guess party game (Skribbl-style): one player draws, everyone guesses in chat. 420-word Arabic bank, letter hints, speed-based scoring. |
-| **بنك الحظ** 🏦 | 2–6 | Egyptian Monopoly-style board game: dice, properties, rent, jail, chance cards — fully ported and wired into gaaamed rooms. |
+| **بنك الحظ** 🏦 | 2–6 | Egyptian Monopoly-style board game: dice, properties, rent, jail, chance cards — fully ported and wired into Dedos rooms. |
 | **إكس أو أونلاين** ⭕ | 2 | Tic-tac-toe over the network with turn sync and win-line highlight. |
 | **أربعة تربح** 🔴 | 2 | Connect 4 — drop discs, gravity animation, 4-in-a-row detection. |
 | **حجر ورقة مقص أونلاين** ✂️ | 2 | Best of 5, secret picks revealed simultaneously by the server. |
@@ -177,7 +177,7 @@ cloudflared.exe tunnel --no-autoupdate --protocol http2 run --token <TUNNEL_TOKE
 4. Close guesses get a private "قريب جداً" warning.
 5. Letter hints reveal at 35% and 65% of the timer (guessers only).
 6. Scoring: `30 + (timeRemaining / drawTime) × 70` per correct guess; the drawer earns **+20** per correct guesser.
-7. Final leaderboard → gaaamed coins/XP by rank.
+7. Final leaderboard → Dedos coins/XP by rank.
 
 Arabic answer checking normalizes alef/hamza forms, taa marbuta, yaa/alef maqsura and diacritics.
 

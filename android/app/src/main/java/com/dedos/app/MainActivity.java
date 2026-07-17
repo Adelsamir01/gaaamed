@@ -1,4 +1,4 @@
-package com.gaaamed.app;
+package com.dedos.app;
 
 import com.getcapacitor.BridgeActivity;
 

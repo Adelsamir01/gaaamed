@@ -10,7 +10,7 @@ export const MAX_BUILDINGS_PER_PROPERTY = 3;
 export const BUILDING_PRICE_RATE = 0.42;
 export const PROPERTY_SELL_RATE = 0.58;
 export const BUILDING_SELL_RATE = 0.5;
-// تسريع إيقاع اللعب (جااامد): ~55% من قيم النسخة المستقلة —
+// تسريع إيقاع اللعب (ديدوس): ~55% من قيم النسخة المستقلة —
 // يجب أن تطابقها النسخ المكررة في server/bankel7az.js حتى يتزامن قفل الحركة مع وصول العربية
 export const SYNC_PLAYBACK_DELAY_MS = 300;
 export const CAR_MOVEMENT_OFFSET_MS = 140;

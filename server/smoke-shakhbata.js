@@ -1,6 +1,6 @@
 /* اختبار سريع للعبة شخبطة: إنشاء → لاعبين → بدء → ٥ جولات افتراضية (تناوب round-robin) →
    انحدار تسليم word_options (إعادة الإرسال بعد ~750ms + اختيار الكلمة المطلوبة) → رسم → تخمين → تلميح → نهاية
-   يشغّل خادمًا فرعيًا معزولًا على PORT=8897 مع GAAAMED_DATA_DIR مؤقت (لا يلمس خادم الإنتاج :8787).
+   يشغّل خادمًا فرعيًا معزولًا على PORT=8897 مع DEDOS_DATA_DIR مؤقت (لا يلمس خادم الإنتاج :8787).
    للتشغيل ضد خادم خارجي قائم: SHAK_SMOKE_URL=ws://127.0.0.1:8791 node server/smoke-shakhbata.js */
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -13,7 +13,7 @@ const EXTERNAL_URL = process.env.SHAK_SMOKE_URL || ''
 const PORT = Number(process.env.SHAK_SMOKE_PORT) || 8897
 const WS_URL = EXTERNAL_URL || `ws://127.0.0.1:${PORT}`
 const SERVER_PATH = fileURLToPath(new URL('./server.js', import.meta.url))
-const DATA_DIR = EXTERNAL_URL ? null : mkdtempSync(join(tmpdir(), 'gaaamed-shak-'))
+const DATA_DIR = EXTERNAL_URL ? null : mkdtempSync(join(tmpdir(), 'dedos-shak-'))
 
 const log = (...a) => console.log(...a)
 let failed = false
@@ -55,7 +55,7 @@ async function startServer() {
   if (EXTERNAL_URL) return log(`خادم خارجي: ${EXTERNAL_URL}`)
   log(`خادم اختبار فرعي على :${PORT} (بيانات: ${DATA_DIR})`)
   serverProc = spawn(process.execPath, [SERVER_PATH], {
-    env: { ...process.env, PORT: String(PORT), GAAAMED_DATA_DIR: DATA_DIR },
+    env: { ...process.env, PORT: String(PORT), DEDOS_DATA_DIR: DATA_DIR },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   serverProc.stderr.on('data', (d) => console.error(`[server:err] ${d}`.trim()))
@@ -76,7 +76,7 @@ async function stopServer() {
 }
 
 async function main() {
-  log('== gaaamed shakhbata smoke test ==')
+  log('== dedos shakhbata smoke test ==')
   await startServer()
 
   // 0) غرفة بلاعب واحد: start لا يعمل قبل لاعبَين

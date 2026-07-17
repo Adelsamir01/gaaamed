@@ -27,7 +27,7 @@ function client(name) {
 }
 
 async function main() {
-  log('== gaaamed server smoke test ==')
+  log('== dedos server smoke test ==')
 
   // 1) إنشاء غرفة
   const host = client('host')

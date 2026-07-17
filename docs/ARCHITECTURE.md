@@ -1,4 +1,4 @@
-# Architecture — قييمد (gaaamed)
+# Architecture — ديدوس (dedos)
 
 ## Overview
 
@@ -13,7 +13,7 @@
               ▼
 ┌────────────────────────────┐
 │  Android WebView shell     │  androidScheme: http + allowMixedContent + usesCleartextTraffic
-│  com.gaaamed.app (قييمد)   │  (required so ws:// works from the WebView)
+│  com.dedos.app (ديدوس)   │  (required so ws:// works from the WebView)
 └────────────────────────────┘
 ```
 
@@ -77,7 +77,7 @@ Single Node process, `ws` library, port **8787**, no database (rooms in memory).
 
 ## Android shell
 
-- Capacitor 8, app id `com.gaaamed.app`, display name **قييمد**.
+- Capacitor 8, app id `com.dedos.app`, display name **ديدوس**.
 - `capacitor.config.ts`: `server: { androidScheme: 'http', allowMixedContent: true }`.
 - `android/app/src/main/AndroidManifest.xml`: `android:usesCleartextTraffic="true"` — without both of these, Android 9+ blocks cleartext `ws://` from the WebView (the app shows "غير متصل").
 - Build: `gradlew.bat assembleDebug` with JDK 21, SDK platform 34. `android/local.properties` (git-ignored) points at the SDK.

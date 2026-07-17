@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { AtSign, Check, Sparkles, X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AtSign, Check, ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react'
 import { useApp } from '@/store/AppContext'
 import { useOnline } from '@/online/OnlineContext'
 import { AVATAR_OPTIONS } from '@/data/friends'
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 
 const HANDLE_RE = /^[a-z0-9_]{3,15}$/
 type HandleState = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
+const COLLAPSED_AVATAR_COUNT = 7
 
 export default function Onboarding() {
   const { completeOnboarding } = useApp()
@@ -17,6 +18,7 @@ export default function Onboarding() {
   const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0])
   const [handle, setHandle] = useState('')
   const [handleState, setHandleState] = useState<HandleState>('idle')
+  const [avatarsExpanded, setAvatarsExpanded] = useState(false)
   const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // فحص توفّر المعرف على الخادم (مؤجل 400ms)
@@ -50,8 +52,13 @@ export default function Onboarding() {
     completeOnboarding(name.trim(), avatar, handle.trim().toLowerCase() || undefined)
   }
 
+  const toggleAvatars = () => {
+    sounds.pop()
+    setAvatarsExpanded((v) => !v)
+  }
+
   return (
-    <div className="min-h-dvh flex items-center justify-center px-5">
+    <div className="min-h-dvh flex items-center justify-center px-5 py-6">
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -63,22 +70,22 @@ export default function Onboarding() {
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.1 }}
-          className="relative mb-4"
+          className="relative mb-3"
         >
-          <div className="w-28 h-28 rounded-[2rem] bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center glow-emerald rotate-3">
-            <span className="text-6xl -rotate-3">🎮</span>
+          <div className="w-20 h-20 rounded-[1.5rem] bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center glow-emerald rotate-3">
+            <span className="text-4xl -rotate-3">🎮</span>
           </div>
           <motion.span
             animate={{ rotate: [0, 15, -10, 0] }}
             transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-            className="absolute -top-2 -end-2 text-2xl"
+            className="absolute -top-2 -end-2 text-xl"
           >
             ✨
           </motion.span>
         </motion.div>
 
-        <h1 className="text-5xl font-black text-gradient mb-1">جااامد</h1>
-        <p className="text-muted-foreground font-bold mb-7 flex items-center gap-1.5">
+        <h1 className="text-4xl font-black text-gradient mb-1">ديدوس</h1>
+        <p className="text-muted-foreground font-bold mb-5 flex items-center gap-1.5">
           <Sparkles className="w-4 h-4 text-amber-400" />
           العب ودردش مع أصدقائك
         </p>
@@ -135,25 +142,83 @@ export default function Onboarding() {
 
           <div>
             <label className="block text-sm font-bold mb-2">اختر شخصيتك</label>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
-              {AVATAR_OPTIONS.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => {
-                    sounds.pop()
-                    setAvatar(a)
-                  }}
-                  className={cn(
-                    'w-12 h-12 shrink-0 rounded-2xl text-2xl flex items-center justify-center transition-all border',
-                    avatar === a
-                      ? 'bg-emerald-500/25 border-emerald-400/70 glow-emerald scale-110'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10',
-                  )}
+            <AnimatePresence mode="wait" initial={false}>
+              {avatarsExpanded ? (
+                <motion.div
+                  key="avatars-expanded"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  className="overflow-hidden"
                 >
-                  {a}
-                </button>
-              ))}
-            </div>
+                  <div className="grid grid-cols-6 gap-2 max-h-44 overflow-y-auto no-scrollbar pb-1">
+                    {AVATAR_OPTIONS.map((a) => (
+                      <button
+                        key={a}
+                        onClick={() => {
+                          sounds.pop()
+                          setAvatar(a)
+                        }}
+                        className={cn(
+                          'aspect-square w-full rounded-2xl text-2xl flex items-center justify-center transition-all border',
+                          avatar === a
+                            ? 'bg-emerald-500/25 border-emerald-400/70 glow-emerald scale-110'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10',
+                        )}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                    <button
+                      onClick={toggleAvatars}
+                      aria-label="عرض أقل"
+                      className="aspect-square w-full rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all border bg-white/5 border-white/10 hover:bg-white/10 text-muted-foreground"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                      <span className="text-[9px] font-bold">أقل</span>
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="avatars-collapsed"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
+                    {AVATAR_OPTIONS.slice(0, COLLAPSED_AVATAR_COUNT).map((a) => (
+                      <button
+                        key={a}
+                        onClick={() => {
+                          sounds.pop()
+                          setAvatar(a)
+                        }}
+                        className={cn(
+                          'w-12 h-12 shrink-0 rounded-2xl text-2xl flex items-center justify-center transition-all border',
+                          avatar === a
+                            ? 'bg-emerald-500/25 border-emerald-400/70 glow-emerald scale-110'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10',
+                        )}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                    <button
+                      onClick={toggleAvatars}
+                      aria-label="المزيد من الشخصيات"
+                      className="w-12 h-12 shrink-0 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all border bg-white/5 border-white/10 hover:bg-white/10 text-muted-foreground"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                      <span className="text-[9px] font-bold">المزيد</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <motion.button
@@ -171,7 +236,7 @@ export default function Onboarding() {
           </motion.button>
         </div>
 
-        <p className="text-[11px] text-muted-foreground mt-5">gaaamed — جااامد 💚</p>
+        <p className="text-[11px] text-muted-foreground mt-4">Dedos — ديدوس 💚</p>
       </motion.div>
     </div>
   )
