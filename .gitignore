@@ -39,3 +39,4 @@ test-shots/
 third-user.log
 third-user.err
 sdk-installer/tunnel-token.txt
+.webbridge/
