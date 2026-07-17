@@ -11,6 +11,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const HANDLE_RE = /^[a-z0-9_]{3,15}$/
+// معرّفات الرسائل المتفائلة: يولّدها العميل ويصدّها الخادم كما هي ليتعرف العميل على الصدى ويزيل التكرار
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{6,64}$/
 const MAX_MESSAGES_PER_THREAD = 200
 const FLUSH_DEBOUNCE_MS = 500
 const HANDLE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -287,12 +289,21 @@ export class UserStore {
     return thread
   }
 
-  postMessage(threadId, senderId, { text, kind = 'text', invite = null }) {
+  postMessage(threadId, senderId, { text, kind = 'text', invite = null, clientId = null }) {
     const thread = this.threadById(threadId)
     if (!this.isMember(thread, senderId)) throw new Error('المحادثة دي مش موجودة.')
     const sender = this.byId(senderId)
+    // صدّ معرّف العميل إن كان صالحًا وغير مكرر داخل المحادثة (إلغاء تكرار الرسائل المتفائلة)
+    let id = `m_${Date.now().toString(36)}_${randomBytes(3).toString('hex')}`
+    if (
+      typeof clientId === 'string' &&
+      CLIENT_ID_RE.test(clientId) &&
+      !thread.messages.some((m) => m.id === clientId)
+    ) {
+      id = clientId
+    }
     const message = {
-      id: `m_${Date.now().toString(36)}_${randomBytes(3).toString('hex')}`,
+      id,
       senderId,
       senderName: sender?.name ?? 'لاعب',
       senderAvatar: sender?.avatar ?? '🎮',

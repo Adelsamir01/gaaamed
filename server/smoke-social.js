@@ -9,6 +9,8 @@
  *  6) جروب من ٣ أعضاء
  *  7) دعوة لعبة تنشئ غرفة وينضم لها الطرفان (الأول slot=1)
  *  8) quick_match يزاوج عميلين (matched للطرفين)
+ *  9) settings.rounds: نقلها عبر created/joined/opponent_joined/matched ورسالة الدعوة،
+ *     الافتراضي 5 والتحقق من {3,5,7}، وسلسلة RPS "أفضل من ٣" تنتهي بعد فوزين (rps_series_end)
  * التشغيل: node server/smoke-social.js
  */
 import { spawn } from 'node:child_process'
@@ -255,11 +257,14 @@ async function main() {
   A2.send({ type: 'join', code: invite.roomCode, name: 'آدم', avatar: '😎' })
   const joinA = await A2.waitFor((m) => m.type === 'joined' && m.code === invite.roomCode)
   assert(joinA.slot === 1, 'A2: أول منضم لغرفة الدعوة يأخذ slot=1')
+  assert(joinA.autoStart === true, 'A2: غرفة دعوة DM موسومة autoStart=true')
   B3.send({ type: 'join', code: invite.roomCode, name: 'بدر', avatar: '🦊' })
   const joinB = await B3.waitFor((m) => m.type === 'joined' && m.code === invite.roomCode)
   assert(joinB.slot === 2 && joinB.opponent?.name === 'آدم', 'B3: ثاني منضم slot=2 ويرى الخصم')
+  assert(joinB.autoStart === true, 'B3: المنضم الثاني يرى autoStart=true أيضًا')
   const oppJoin = await A2.waitFor((m) => m.type === 'opponent_joined')
   assert(oppJoin.opponent?.name === 'بدر', 'A2: وصله opponent_joined')
+  assert(oppJoin.autoStart === true, 'A2: opponent_joined يحمل autoStart=true (زناد البدء التلقائي)')
   A2.send({ type: 'leave' })
   B3.send({ type: 'leave' })
   await wait(200)
@@ -282,6 +287,116 @@ async function main() {
   C2.send({ type: 'quick_match_cancel' })
   await C2.waitFor((m) => m.type === 'quick_match_cancelled')
   assert(true, 'C2: إلغاء البحث يعمل')
+
+  // ===== 10) دعوة الجروب تبقى يدوية البدء (autoStart=false) =====
+  console.log('== دعوة الجروب: بدون بدء تلقائي ==')
+  C2.send({ type: 'chat_send', threadId: grp.thread.id, kind: 'game_invite', invite: { gameId: 'shakhbata' } })
+  const grpInviteAtA = await A2.waitFor((m) => m.type === 'chat_message' && m.threadId === grp.thread.id && m.message.kind === 'game_invite')
+  const grpCode = grpInviteAtA.message.invite.roomCode
+  assert(/^\d{4}$/.test(grpCode), `C2: دعوة جروب بكود غرفة ${grpCode}`)
+  C2.send({ type: 'join', code: grpCode, name: 'كريم', avatar: '🐼' })
+  const grpJoin = await C2.waitFor((m) => m.type === 'joined' && m.code === grpCode)
+  assert(grpJoin.autoStart === false, 'C2: غرفة دعوة الجروب autoStart=false (تنتظر المضيف)')
+  C2.send({ type: 'leave' })
+  await wait(200)
+
+  // ===== 11) المعرّف المتفائل: الخادم يصدّ clientId كما هو =====
+  console.log('== الرسائل المتفائلة (clientId) ==')
+  A2.send({ type: 'chat_send', threadId: threadIdPersist, text: 'رسالة بمعرّف متفائل ⚡', clientId: 'c_test_opt_1' })
+  const echoOptA = await A2.waitFor((m) => m.type === 'chat_message' && m.threadId === threadIdPersist && m.message.text === 'رسالة بمعرّف متفائل ⚡')
+  assert(echoOptA.message.id === 'c_test_opt_1', 'A2: صدى الرسالة يحمل clientId نفسه (يزيل التكرار المتفائل)')
+  const echoOptB = await B3.waitFor((m) => m.type === 'chat_message' && m.threadId === threadIdPersist && m.message.text === 'رسالة بمعرّف متفائل ⚡')
+  assert(echoOptB.message.id === 'c_test_opt_1', 'B3: الطرف الآخر يستلم نفس المعرّف')
+  // clientId غير صالح → الخادم يولّد معرّفًا عاديًا
+  A2.send({ type: 'chat_send', threadId: threadIdPersist, text: 'رسالة بمعرّف معطوب', clientId: '!!!' })
+  const echoBad = await A2.waitFor((m) => m.type === 'chat_message' && m.threadId === threadIdPersist && m.message.text === 'رسالة بمعرّف معطوب')
+  assert(/^m_/.test(echoBad.message.id), 'A2: clientId غير الصالح يُستبدل بمعرّف خادم')
+
+  // ===== 12) إعدادات الغرفة (settings.rounds): النقل + سلسلة RPS =====
+  console.log('== إعدادات الغرفة (settings.rounds) ==')
+  // A2/B3 ما زالا داخل غرفة المباراة السريعة من القسم 9 — أخرجهما ونظّف صناديق الرسائل المتراكمة
+  A2.send({ type: 'leave' })
+  B3.send({ type: 'leave' })
+  await wait(250)
+  const drain = (...cs) => cs.forEach((c) => { c.inbox.length = 0 })
+  drain(A2, B3)
+
+  // إنشاء مع rounds=7 → created + joined + opponent_joined تحملها
+  A2.send({ type: 'create', gameId: 'rps', name: 'آدم', avatar: '😎', settings: { rounds: 7 } })
+  const createdS = await A2.waitFor((m) => m.type === 'created' && m.settings)
+  assert(createdS.settings?.rounds === 7, 'A2: created يحمل settings.rounds=7')
+  B3.send({ type: 'join', code: createdS.code, name: 'بدر', avatar: '🦊' })
+  const joinedS = await B3.waitFor((m) => m.type === 'joined' && m.code === createdS.code)
+  assert(joinedS.settings?.rounds === 7, 'B3: joined يحمل settings.rounds=7')
+  const oppS = await A2.waitFor((m) => m.type === 'opponent_joined' && m.settings)
+  assert(oppS.settings?.rounds === 7, 'A2: opponent_joined يحمل settings.rounds=7')
+  A2.send({ type: 'leave' })
+  B3.send({ type: 'leave' })
+  await wait(200)
+  drain(A2, B3)
+
+  // الافتراضي: بدون settings → rounds=5
+  A2.send({ type: 'create', gameId: 'reaction', name: 'آدم', avatar: '😎' })
+  const createdD = await A2.waitFor((m) => m.type === 'created' && m.settings)
+  assert(createdD.settings?.rounds === 5, 'A2: غرفة بلا إعدادات → rounds=5 افتراضيًا')
+  A2.send({ type: 'leave' })
+  await wait(200)
+  drain(A2, B3)
+
+  // قيمة غير صالحة → تُطوَّع للافتراضي
+  A2.send({ type: 'create', gameId: 'rps', name: 'آدم', avatar: '😎', settings: { rounds: 99 } })
+  const createdBad = await A2.waitFor((m) => m.type === 'created' && m.settings)
+  assert(createdBad.settings?.rounds === 5, 'A2: rounds=99 غير صالحة → 5')
+  A2.send({ type: 'leave' })
+  await wait(200)
+  drain(A2, B3)
+
+  // سلسلة حجر ورقة مقص "أفضل من ٣": تنتهي بعد فوزين لنفس اللاعب
+  A2.send({ type: 'create', gameId: 'rps', name: 'آدم', avatar: '😎', settings: { rounds: 3 } })
+  const createdBo3 = await A2.waitFor((m) => m.type === 'created' && m.settings)
+  assert(createdBo3.settings?.rounds === 3, 'A2: غرفة bo3 أُنشئت بـ rounds=3')
+  B3.send({ type: 'join', code: createdBo3.code, name: 'بدر', avatar: '🦊' })
+  await B3.waitFor((m) => m.type === 'joined' && m.code === createdBo3.code)
+  // الجولة ١: A يفوز (حجر يكسر مقص) — لا نهاية للسلسلة بعد
+  A2.send({ type: 'rps_choice', choice: 'rock' })
+  B3.send({ type: 'rps_choice', choice: 'scissors' })
+  await A2.waitFor((m) => m.type === 'rps_reveal')
+  await wait(150)
+  assert(!A2.find('rps_series_end'), 'bo3: لا rps_series_end بعد فوز واحد')
+  // الجولة ٢: A يفوز مجددًا (ورقة تغلف حجر) → نهاية السلسلة
+  A2.send({ type: 'rps_choice', choice: 'paper' })
+  B3.send({ type: 'rps_choice', choice: 'rock' })
+  const seriesEnd = await A2.waitFor((m) => m.type === 'rps_series_end')
+  assert(seriesEnd.winnerSlot === 1 && seriesEnd.wins?.[1] === 2, `bo3: السلسلة انتهت بعد فوزين (winnerSlot=1, wins=${JSON.stringify(seriesEnd.wins)})`)
+  assert(seriesEnd.rounds === 3, 'bo3: rps_series_end يحمل rounds=3')
+  const seriesEndB = await B3.waitFor((m) => m.type === 'rps_series_end')
+  assert(!!seriesEndB, 'B3: rps_series_end وصل للطرفين')
+  A2.send({ type: 'leave' })
+  B3.send({ type: 'leave' })
+  await wait(200)
+  drain(A2, B3)
+
+  // دعوة دردشة مع settings → الرسالة + joined يحملانها
+  A2.send({ type: 'chat_send', threadId: threadIdPersist, kind: 'game_invite', invite: { gameId: 'rps' }, settings: { rounds: 3 } })
+  const invS = await B3.waitFor((m) => m.type === 'chat_message' && m.message.kind === 'game_invite' && m.message.invite?.gameId === 'rps')
+  assert(invS.message.invite.settings?.rounds === 3, 'B3: رسالة الدعوة تحمل invite.settings.rounds=3')
+  B3.send({ type: 'join', code: invS.message.invite.roomCode, name: 'بدر', avatar: '🦊' })
+  const joinInvS = await B3.waitFor((m) => m.type === 'joined' && m.code === invS.message.invite.roomCode)
+  assert(joinInvS.settings?.rounds === 3, 'B3: joined لغرفة الدعوة يحمل settings.rounds=3')
+  B3.send({ type: 'leave' })
+  await wait(200)
+  drain(A2, B3)
+
+  // المباراة السريعة: matched يحمل الإعدادات (مرجعها إعدادات أول لاعب في الطابور)
+  A2.send({ type: 'quick_match', gameId: 'reaction', name: 'آدم', avatar: '😎', settings: { rounds: 7 } })
+  await A2.waitFor((m) => m.type === 'quick_match_waiting')
+  B3.send({ type: 'quick_match', gameId: 'reaction', name: 'بدر', avatar: '🦊' })
+  const matchSA = await A2.waitFor((m) => m.type === 'matched' && m.gameId === 'reaction')
+  const matchSB = await B3.waitFor((m) => m.type === 'matched' && m.gameId === 'reaction')
+  assert(matchSA.settings?.rounds === 7 && matchSB.settings?.rounds === 7, 'quick_match: matched يحمل settings.rounds=7 للطرفين')
+  A2.send({ type: 'leave' })
+  B3.send({ type: 'leave' })
+  await wait(200)
 
   // ===== الختام =====
   A2.close()

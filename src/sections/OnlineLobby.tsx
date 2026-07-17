@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
 import { getGame, ONLINE_GAMES } from '@/games'
-import type { GameResult } from '@/types'
+import { DEFAULT_ROUNDS, ROUND_OPTIONS, gameUsesRounds, type GameResult } from '@/types'
 import { AvatarCircle } from './components'
 import GameResults from './GameResults'
 import { sounds } from '@/lib/sounds'
@@ -21,6 +21,9 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu')
   const [joinCode, setJoinCode] = useState('')
   const [result, setResult] = useState<GameResult | null>(null)
+  // منتقي إنشاء الغرفة: اللعبة المختارة ذات الجولات + عدد الجولات
+  const [pickedGame, setPickedGame] = useState<string | null>(null)
+  const [rounds, setRounds] = useState<number>(DEFAULT_ROUNDS)
 
   // إعادة اللعب: عند العودة لمرحلة اللعب امسح النتيجة
   useEffect(() => {
@@ -152,6 +155,11 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
           <div className="text-6xl mb-2">{game.emoji}</div>
           <h1 className="text-xl font-black mb-1">{game.name}</h1>
           <p className="text-sm text-muted-foreground mb-5">شارك الرمز مع أصدقائك — حتى ٨ لاعبين</p>
+          {online.roomSettings?.rounds != null && (
+            <p className="text-xs font-bold text-emerald-300 -mt-3 mb-5">
+              {ROUND_AR[online.roomSettings.rounds] ?? online.roomSettings.rounds} جولات رسم وتخمين 🏆
+            </p>
+          )}
 
           {/* الرمز */}
           <button onClick={copyCode} className="glass rounded-3xl px-8 py-4 mb-5 text-center hover:bg-white/10 transition-colors">
@@ -208,6 +216,12 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
           </div>
 
           {isHost ? (
+            online.autoStartRoom ? (
+              <div className="w-full glass rounded-2xl py-4 text-center font-bold text-emerald-300 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {canStart ? 'جارٍ البدء تلقائيًا… ⚡' : 'تبدأ تلقائيًا أول ما ينضم صاحبك ⚡'}
+              </div>
+            ) : (
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={() => {
@@ -225,10 +239,11 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
               <Play className="w-5 h-5 fill-current" />
               {canStart ? `ابدأ اللعب (${list.length} لاعبين)` : 'تحتاج لاعبَين على الأقل…'}
             </motion.button>
+            )
           ) : (
             <div className="w-full glass rounded-2xl py-4 text-center font-bold text-muted-foreground flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              بانتظار المضيف لبدء اللعبة…
+              {online.autoStartRoom ? 'جارٍ البدء تلقائيًا… ⚡' : 'بانتظار المضيف لبدء اللعبة…'}
             </div>
           )}
         </motion.div>
@@ -252,6 +267,11 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
           <div className="text-6xl mb-2">{game.emoji}</div>
           <h1 className="text-xl font-black mb-1">{game.name}</h1>
           <p className="text-sm text-muted-foreground mb-6">الغرفة جاهزة — شارك الرمز مع صديقك</p>
+          {gameUsesRounds(game.id) && online.roomSettings?.rounds != null && (
+            <p className="text-xs font-bold text-emerald-300 -mt-4 mb-6">
+              أفضل من {ROUND_AR[online.roomSettings.rounds] ?? online.roomSettings.rounds} جولات 🏆
+            </p>
+          )}
 
           {/* الرمز */}
           <button onClick={copyCode} className="glass rounded-3xl px-8 py-5 mb-6 text-center hover:bg-white/10 transition-colors">
@@ -304,7 +324,12 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {online.slot === 1 ? (
+          {online.autoStartRoom ? (
+            <div className="w-full glass rounded-2xl py-4 text-center font-bold text-emerald-300 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {online.opponent ? 'جارٍ البدء تلقائيًا… ⚡' : 'تبدأ المباراة تلقائيًا أول ما ينضم خصمك ⚡'}
+            </div>
+          ) : online.slot === 1 ? (
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={() => {
@@ -451,27 +476,77 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
 
           {mode === 'create' && (
             <motion.div key="create" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
-              <button onClick={() => setMode('menu')} className="text-xs font-bold text-emerald-300 mb-3">‹ عودة</button>
+              <button onClick={() => { setMode('menu'); setPickedGame(null) }} className="text-xs font-bold text-emerald-300 mb-3">‹ عودة</button>
               <h2 className="font-extrabold mb-3">اختر اللعبة 🎮</h2>
               <div className="flex flex-col gap-2.5">
-                {ONLINE_GAMES.map((g) => (
-                  <motion.button
-                    key={g.id}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      sounds.pop()
-                      online.createRoom(g.id, profile.name, profile.avatar)
-                    }}
-                    className="glass rounded-2xl p-4 flex items-center gap-3 text-start hover:bg-white/10 transition-colors"
-                  >
-                    <span className="text-3xl">{g.emoji}</span>
-                    <div className="flex-1">
-                      <p className="font-extrabold text-sm">{g.name}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{g.description}</p>
-                    </div>
-                  </motion.button>
-                ))}
+                {ONLINE_GAMES.map((g) => {
+                  const usesRounds = gameUsesRounds(g.id)
+                  const selected = pickedGame === g.id
+                  return (
+                    <motion.button
+                      key={g.id}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        if (usesRounds) {
+                          // الألعاب ذات الجولات: اختر اللعبة أولًا ثم عدد الجولات قبل الإنشاء
+                          sounds.click()
+                          setPickedGame(selected ? null : g.id)
+                        } else {
+                          sounds.pop()
+                          online.createRoom(g.id, profile.name, profile.avatar)
+                        }
+                      }}
+                      className={cn(
+                        'glass rounded-2xl p-4 flex items-center gap-3 text-start transition-colors',
+                        selected ? 'border-emerald-400/60 bg-emerald-500/10 glow-emerald' : 'hover:bg-white/10',
+                      )}
+                    >
+                      <span className="text-3xl">{g.emoji}</span>
+                      <div className="flex-1">
+                        <p className="font-extrabold text-sm">{g.name}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{g.description}</p>
+                      </div>
+                      {usesRounds && (
+                        <span className={cn('text-[10px] font-extrabold shrink-0', selected ? 'text-emerald-300' : 'text-muted-foreground')}>
+                          {selected ? '▼ اختر الجولات' : '٣/٥/٧ جولات'}
+                        </span>
+                      )}
+                    </motion.button>
+                  )
+                })}
               </div>
+
+              {/* منتقي عدد الجولات — يظهر فقط للألعاب ذات الجولات (حجر ورقة مقص / سرعة البرق / شخبطة) */}
+              <AnimatePresence>
+                {pickedGame && (
+                  <motion.div
+                    key="rounds"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="glass rounded-3xl p-4 mt-3"
+                  >
+                    <p className="font-extrabold text-sm mb-1">عدد الجولات 🏆</p>
+                    <p className="text-[11px] text-muted-foreground mb-3">
+                      {pickedGame === 'shakhbata'
+                        ? 'كم جولة رسم وتخمين ستلعبونها'
+                        : 'أفضل من سلسلة — الأول يجمع أغلب الجولات يفوز بالمباراة'}
+                    </p>
+                    <RoundsStepper value={rounds} onChange={setRounds} />
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => {
+                        sounds.pop()
+                        online.createRoom(pickedGame, profile.name, profile.avatar, { rounds })
+                      }}
+                      disabled={online.status !== 'online'}
+                      className="w-full mt-3 py-3.5 rounded-2xl font-extrabold bg-gradient-to-l from-emerald-500 to-teal-500 text-white glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all disabled:opacity-50"
+                    >
+                      إنشاء الغرفة 🚀
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 
@@ -534,5 +609,41 @@ function OpponentLeftDialog({ open, onClose }: { open: boolean; onClose: () => v
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/** أرقام الجولات بالأرقام العربية المشرقية */
+export const ROUND_AR: Record<number, string> = { 3: '٣', 5: '٥', 7: '٧' }
+
+/** منتقي عدد الجولات (٣/٥/٧) — مقطّع RTL بتصميم الزمرد الداكن، مشترك بين إنشاء الغرفة ودعوة المحادثة */
+export function RoundsStepper({ value, onChange }: { value: number; onChange: (rounds: number) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="عدد الجولات">
+      {ROUND_OPTIONS.map((r) => {
+        const active = value === r
+        return (
+          <motion.button
+            key={r}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            whileTap={{ scale: 0.94 }}
+            onClick={() => {
+              sounds.click()
+              onChange(r)
+            }}
+            className={cn(
+              'rounded-2xl py-3 flex flex-col items-center gap-0.5 border transition-all',
+              active
+                ? 'bg-gradient-to-l from-emerald-500 to-teal-500 text-white border-emerald-300/60 glow-emerald'
+                : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10 hover:border-emerald-400/30',
+            )}
+          >
+            <span className="text-xl font-black tabular-nums">{ROUND_AR[r]}</span>
+            <span className="text-[10px] font-bold">{r === DEFAULT_ROUNDS ? 'جولات (افتراضي)' : 'جولات'}</span>
+          </motion.button>
+        )
+      })}
+    </div>
   )
 }

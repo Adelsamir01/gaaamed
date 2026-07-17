@@ -165,7 +165,7 @@ function GameApp({
         summary: iWon ? "فزت بلعبة بنك الحظ! 🏦" : `${winner?.name ?? "خصمك"} كسب بنك الحظ`,
         detail: winner ? `الفائز: ${winner.name} برصيد ${money(winner.cash)}` : undefined
       });
-    }, 1800);
+    }, 1200);
     return () => window.clearTimeout(timer);
   }, [onFinishGame, state, game.playerId]);
 
@@ -178,7 +178,7 @@ function GameApp({
       autoStartFiredRef.current = true;
       void enterImmersiveMode();
       startGameRef.current();
-    }, 900);
+    }, 600);
     return () => window.clearTimeout(timer);
   });
 
@@ -1203,7 +1203,7 @@ function useServerNow(clockOffsetMs: number, actionAvailableAt: number): number 
         stop();
       }
     };
-    interval = window.setInterval(tick, 80);
+    interval = window.setInterval(tick, 50);
     timeout = window.setTimeout(tick, Math.max(actionAvailableAt - serverNow + 20, 20));
     return () => {
       stop();
@@ -1293,7 +1293,7 @@ function useGameAudio(state: GameState | null, clockOffsetMs: number): void {
       if (movement) {
         const steps = clockwiseDistance(movement.from, movement.to);
         if (steps > 0) {
-          const durationMs = Math.min(steps * CAR_STEP_MS + 360, 3200);
+          const durationMs = Math.min(steps * CAR_STEP_MS + 200, 1800);
           scheduleGameSound(
             timersRef,
             clockOffsetMs,

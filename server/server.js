@@ -19,6 +19,9 @@ const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
 const BANK_MAX = 6
 const INVITE_ROOM_TTL_MS = 10 * 60 * 1000
+// إعدادات الغرف: عدد الجولات المسموح به (أفضل من ٣/٥/٧) والقيمة الافتراضية
+const VALID_ROUNDS = new Set([3, 5, 7])
+const DEFAULT_ROUNDS = 5
 
 // بنك الحظ: مخزن الإحصائيات + مدير الغرف (بروتوكول اللعبة الأصلي كما هو)
 const bankStats = new StatsStore(resolveStatsFilePath())
@@ -77,7 +80,7 @@ function ensureBankVws(ws) {
   return ws._bankVws
 }
 
-/** code -> { code, gameId, players: Map<slot, ws>, names: Map<slot, {name, avatar}>, rpsChoices: Map, reactTaps: Map, shak? } */
+/** code -> { code, gameId, players: Map<slot, ws>, names: Map<slot, {name, avatar}>, rpsChoices: Map, reactTaps: Map, rpsWins: Map, reactWins: Map, settings: {rounds}, shak? } */
 const rooms = new Map()
 
 function genCode() {
@@ -94,6 +97,40 @@ function send(ws, obj) {
 
 function broadcast(room, obj) {
   for (const ws of room.players.values()) send(ws, obj)
+}
+
+// تطبيع إعدادات الغرفة: rounds خارج {3,5,7} أو غير موجودة → الافتراضي 5
+function normalizeSettings(raw) {
+  const rounds = Number(raw && raw.rounds)
+  return { rounds: VALID_ROUNDS.has(rounds) ? rounds : DEFAULT_ROUNDS }
+}
+
+// عدد الانتصارات المطلوب لحسم سلسلة "أفضل من N" (أغلبية الجولات)
+function seriesWinTarget(room) {
+  return Math.floor((room.settings?.rounds ?? DEFAULT_ROUNDS) / 2) + 1
+}
+
+const RPS_BEATS = { rock: 'scissors', paper: 'rock', scissors: 'paper' }
+function rpsRoundWinner(c1, c2) {
+  if (c1 === c2) return 0
+  if (RPS_BEATS[c1] === c2) return 1
+  if (RPS_BEATS[c2] === c1) return 2
+  return 0
+}
+
+// تتبّع سلسلة الألعاب الزوجية (حجر ورقة مقص / سرعة البرق): عند بلوغ الهدف يُبث إنهاء السلسلة وتُصفّر النقاط
+function bumpSeriesWin(room, table, winnerSlot, endType) {
+  const wins = (table.get(winnerSlot) || 0) + 1
+  table.set(winnerSlot, wins)
+  if (wins >= seriesWinTarget(room)) {
+    broadcast(room, {
+      type: endType,
+      winnerSlot,
+      wins: { 1: table.get(1) || 0, 2: table.get(2) || 0 },
+      rounds: room.settings.rounds,
+    })
+    table.clear()
+  }
 }
 
 // ---------------- الهوية والحضور ----------------
@@ -145,7 +182,8 @@ function broadcastFriendsUpdate(userId) {
 }
 
 // إنشاء سجل غرفة موحّد (إنشاء عادي / دعوة دردشة / مباراة سريعة)
-function createRoomRecord(gameId, drawTime) {
+// settings تُطبيع وتُخزن على السجل قبل تهيئة شخبطة حتى يقرأ المحرك room.settings?.rounds
+function createRoomRecord(gameId, drawTime, settings) {
   const code = genCode()
   const room = {
     code,
@@ -154,7 +192,12 @@ function createRoomRecord(gameId, drawTime) {
     names: new Map(),
     rpsChoices: new Map(),
     reactTaps: new Map(),
+    rpsWins: new Map(),
+    reactWins: new Map(),
     shak: null,
+    settings: normalizeSettings(settings),
+    // غرف دعوات المحادثات الفردية تبدأ تلقائيًا عند اكتمال لاعبَين (الجروبات تنتظر المضيف)
+    autoStart: false,
     createdAt: Date.now(),
   }
   if (room.gameId === 'shakhbata') initShakhbata(room, drawTime)
@@ -178,7 +221,8 @@ function tryMatch(gameId) {
   const alive = queue.filter((entry) => entry.ws.readyState === 1)
   while (alive.length >= MATCH_SIZE) {
     const pair = alive.splice(0, MATCH_SIZE)
-    const room = createRoomRecord(gameId)
+    // إعدادات أول لاعب في الطابور هي المرجع (المباراة السريعة لا تعرض منتقي جولات → الافتراضي غالبًا)
+    const room = createRoomRecord(gameId, undefined, pair[0].settings)
     pair.forEach((entry, index) => {
       const slot = index + 1
       room.players.set(slot, entry.ws)
@@ -187,13 +231,14 @@ function tryMatch(gameId) {
       entry.ws._slot = slot
     })
     const [first, second] = pair
-    send(first.ws, { type: 'created', code: room.code, slot: 1 })
+    send(first.ws, { type: 'created', code: room.code, slot: 1, settings: room.settings })
     send(second.ws, {
       type: 'joined',
       code: room.code,
       slot: 2,
       gameId: room.gameId,
       players: shakPlayers(room),
+      settings: room.settings,
     })
     pair.forEach((entry, index) => {
       const opponent = pair[1 - index]
@@ -203,6 +248,7 @@ function tryMatch(gameId) {
         gameId: room.gameId,
         slot: index + 1,
         opponent: { name: opponent.name, avatar: opponent.avatar },
+        settings: room.settings,
       })
     })
     broadcastPlayers(room)
@@ -279,15 +325,15 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'create': {
-        const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime)
+        const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime, msg.settings)
         room.players.set(1, ws)
         room.names.set(1, { name: msg.name || 'لاعب', avatar: msg.avatar || '🎮' })
         ws._room = room.code
         ws._slot = 1
-        send(ws, { type: 'created', code: room.code, slot: 1 })
+        send(ws, { type: 'created', code: room.code, slot: 1, settings: room.settings })
         if (room.gameId === 'bank-el7az') ensureBankVws(ws)
         if (ws._userId) broadcastFriendsUpdate(ws._userId)
-        console.log(`ROOM_CREATED ${room.code} ${room.gameId}`)
+        console.log(`ROOM_CREATED ${room.code} ${room.gameId} rounds=${room.settings.rounds}`)
         break
       }
 
@@ -310,7 +356,7 @@ wss.on('connection', (ws) => {
           room.names.set(slot, me)
           ws._room = room.code
           ws._slot = slot
-          send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room) })
+          send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room), autoStart: room.autoStart === true, settings: room.settings })
           broadcastPlayers(room)
           ensureBankVws(ws)
           if (ws._userId) broadcastFriendsUpdate(ws._userId)
@@ -333,7 +379,7 @@ wss.on('connection', (ws) => {
           room.names.set(slot, me)
           ws._room = room.code
           ws._slot = slot
-          send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room) })
+          send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room), autoStart: room.autoStart === true, settings: room.settings })
           broadcastPlayers(room)
           if (ws._userId) broadcastFriendsUpdate(ws._userId)
           console.log(`PLAYER_JOINED ${room.code} ${me.name} slot=${slot}`)
@@ -358,8 +404,10 @@ wss.on('connection', (ws) => {
           slot,
           gameId: room.gameId,
           opponent: room.names.get(otherSlotNum) ?? undefined,
+          autoStart: room.autoStart === true,
+          settings: room.settings,
         })
-        if (other) send(other, { type: 'opponent_joined', opponent: me })
+        if (other) send(other, { type: 'opponent_joined', opponent: me, autoStart: room.autoStart === true, settings: room.settings })
         if (ws._userId) broadcastFriendsUpdate(ws._userId)
         console.log(`PLAYER_JOINED ${room.code} ${me.name} slot=${slot}`)
         break
@@ -378,11 +426,16 @@ wss.on('connection', (ws) => {
         if (!room || room.players.size < 2) return
         room.rpsChoices.set(ws._slot, msg.choice)
         if (room.rpsChoices.size === 2) {
+          const c1 = room.rpsChoices.get(1)
+          const c2 = room.rpsChoices.get(2)
           broadcast(room, {
             type: 'rps_reveal',
-            choices: { 1: room.rpsChoices.get(1), 2: room.rpsChoices.get(2) },
+            choices: { 1: c1, 2: c2 },
           })
           room.rpsChoices.clear()
+          // سلسلة "أفضل من N" بقيادة الخادم: settings.rounds ∈ {3,5,7} (الافتراضي 5)
+          const winnerSlot = rpsRoundWinner(c1, c2)
+          if (winnerSlot) bumpSeriesWin(room, room.rpsWins, winnerSlot, 'rps_series_end')
         }
         break
       }
@@ -407,6 +460,8 @@ wss.on('connection', (ws) => {
             fouls: { 1: t1.foul, 2: t2.foul },
           })
           room.reactTaps.clear()
+          // سلسلة "أفضل من N" بقيادة الخادم (التعادل المزدوج winnerSlot=0 لا يحتسب)
+          if (winnerSlot) bumpSeriesWin(room, room.reactWins, winnerSlot, 'react_series_end')
         }
         break
       }
@@ -584,13 +639,17 @@ wss.on('connection', (ws) => {
               send(ws, { type: 'error', message: 'اللعبة دي مش متاحة للدعوات.' })
               return
             }
-            // الخادم ينشئ غرفة الدعوة ويضمّن الكود في الرسالة
-            const room = createRoomRecord(gameId)
-            invite = { gameId, roomCode: room.code, gameName: game.name, gameEmoji: game.emoji }
+            // الخادم ينشئ غرفة الدعوة ويضمّن الكود في الرسالة (مع إعدادات الجولات إن وُجدت)
+            const room = createRoomRecord(gameId, undefined, msg.settings)
+            // دعوات المحادثة الفردية (DM) تدخل الطرفين في اللعب مباشرة: تبدأ تلقائيًا عند اكتمال لاعبَين
+            const inviteThread = userStore.threadById(threadId)
+            room.autoStart = inviteThread?.kind === 'dm'
+            invite = { gameId, roomCode: room.code, gameName: game.name, gameEmoji: game.emoji, settings: room.settings }
             text = `دعوة للعب ${game.name}`
-            console.log(`INVITE_ROOM ${room.code} ${gameId}`)
+            console.log(`INVITE_ROOM ${room.code} ${gameId} rounds=${room.settings.rounds}${room.autoStart ? ' autoStart' : ''}`)
           }
-          const { thread, message } = userStore.postMessage(threadId, ws._userId, { text, kind, invite })
+          const clientId = typeof msg.clientId === 'string' ? msg.clientId : null
+          const { thread, message } = userStore.postMessage(threadId, ws._userId, { text, kind, invite, clientId })
           for (const memberId of thread.memberIds) {
             pushToUser(memberId, {
               type: 'chat_message',
@@ -620,6 +679,7 @@ wss.on('connection', (ws) => {
           userId: ws._userId ?? null,
           name: String(msg.name || 'لاعب'),
           avatar: String(msg.avatar || '🎮'),
+          settings: msg.settings,
           at: Date.now(),
         })
         matchQueues.set(gameId, queue)

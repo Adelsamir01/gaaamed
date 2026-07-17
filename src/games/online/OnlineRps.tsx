@@ -15,13 +15,13 @@ const HANDS: { id: Hand; emoji: string; label: string }[] = [
 ]
 const BEATS: Record<Hand, Hand> = { rock: 'scissors', paper: 'rock', scissors: 'paper' }
 const COUNTDOWN = ['حجر…', 'ورقة…', 'مقص…', 'اضرب! 💥']
-const WIN_TARGET = 3
 
 export default function OnlineRps({ onFinish }: GameProps) {
-  const { slot, opponent, sendRpsChoice, subscribe } = useOnline()
+  const { slot, opponent, sendRpsChoice, subscribe, roomSettings } = useOnline()
   const { profile } = useApp()
   const mySlot = slot ?? 1
   const theirSlot = mySlot === 1 ? 2 : 1
+  const winTarget = Math.floor((roomSettings?.rounds ?? 5) / 2) + 1
 
   const [phase, setPhase] = useState<'pick' | 'waiting' | 'countdown' | 'reveal'>('pick')
   const [countIdx, setCountIdx] = useState(0)
@@ -40,6 +40,31 @@ export default function OnlineRps({ onFinish }: GameProps) {
   // استقبال الكشف من الخادم
   useEffect(() => {
     return subscribe((ev) => {
+      // الخادم أنهى السلسلة — احتياط في حال فاتتنا رسالة كشف
+      if (ev.kind === 'rps_series_end') {
+        const meW = ev.wins[mySlot] ?? 0
+        const themW = ev.wins[theirSlot] ?? 0
+        timersRef.current.push(
+          setTimeout(() => {
+            if (finishedRef.current) return
+            finishedRef.current = true
+            const won = ev.winnerSlot === mySlot
+            setScores({ me: meW, them: themW })
+            if (won) sounds.win()
+            else sounds.lose()
+            onFinish({
+              gameId: 'rps',
+              outcome: won ? 'win' : 'loss',
+              coinsEarned: won ? 30 : 5,
+              xpEarned: won ? 40 : 8,
+              summary: won
+                ? `فزت على ${opponent?.name ?? 'الخصم'} ${meW} - ${themW} 🏆`
+                : `خسرت أمام ${opponent?.name ?? 'الخصم'} ${meW} - ${themW}`,
+            })
+          }, 4500),
+        )
+        return
+      }
       if (ev.kind !== 'rps_reveal') return
       const mine = ev.choices[mySlot] as Hand
       const theirs = ev.choices[theirSlot] as Hand
@@ -73,7 +98,7 @@ export default function OnlineRps({ onFinish }: GameProps) {
           }
           setScores(next)
 
-          if (next.me >= WIN_TARGET || next.them >= WIN_TARGET) {
+          if (next.me >= winTarget || next.them >= winTarget) {
             if (finishedRef.current) return
             finishedRef.current = true
             const won = next.me > next.them
@@ -106,7 +131,7 @@ export default function OnlineRps({ onFinish }: GameProps) {
       )
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscribe, mySlot, theirSlot, scores, opponent, onFinish])
+  }, [subscribe, mySlot, theirSlot, scores, opponent, onFinish, winTarget])
 
   const pick = (hand: Hand) => {
     if (phase !== 'pick') return
@@ -124,7 +149,7 @@ export default function OnlineRps({ onFinish }: GameProps) {
           <AvatarCircle emoji={profile.avatar} size="sm" />
           <div className="text-xs font-bold truncate max-w-full px-2">أنت</div>
           <div className="flex items-center gap-1">
-            {Array.from({ length: WIN_TARGET }).map((_, i) => (
+            {Array.from({ length: winTarget }).map((_, i) => (
               <span key={i} className={cn('w-2.5 h-2.5 rounded-full', i < scores.me ? 'bg-emerald-400 glow-emerald' : 'bg-white/15')} />
             ))}
           </div>
@@ -133,7 +158,7 @@ export default function OnlineRps({ onFinish }: GameProps) {
           <AvatarCircle emoji={opponent?.avatar ?? '🎮'} size="sm" />
           <div className="text-xs font-bold truncate max-w-full px-2">{opponent?.name ?? 'الخصم'}</div>
           <div className="flex items-center gap-1">
-            {Array.from({ length: WIN_TARGET }).map((_, i) => (
+            {Array.from({ length: winTarget }).map((_, i) => (
               <span key={i} className={cn('w-2.5 h-2.5 rounded-full', i < scores.them ? 'bg-amber-400 glow-amber' : 'bg-white/15')} />
             ))}
           </div>

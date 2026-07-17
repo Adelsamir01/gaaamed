@@ -8,7 +8,6 @@ import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
 import { AvatarCircle } from '@/sections/components'
 
-const WIN_TARGET = 3
 type Phase = 'idle' | 'waiting' | 'go' | 'tapped' | 'foul' | 'result'
 
 interface RoundResult {
@@ -18,11 +17,12 @@ interface RoundResult {
 }
 
 export default function OnlineReaction({ onFinish }: GameProps) {
-  const { slot, opponent, sendAction, sendReactTap, subscribe } = useOnline()
+  const { slot, opponent, sendAction, sendReactTap, subscribe, roomSettings } = useOnline()
   const { profile } = useApp()
   const mySlot = slot ?? 1
   const theirSlot = mySlot === 1 ? 2 : 1
   const isHost = mySlot === 1
+  const winTarget = Math.floor((roomSettings?.rounds ?? 5) / 2) + 1
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [scores, setScores] = useState({ me: 0, them: 0 })
@@ -70,6 +70,32 @@ export default function OnlineReaction({ onFinish }: GameProps) {
   // استقبال الأحداث
   useEffect(() => {
     return subscribe((ev) => {
+      // الخادم أنهى السلسلة — احتياط في حال فاتتنا نتيجة جولة
+      if (ev.kind === 'react_series_end') {
+        const meW = ev.wins[mySlot] ?? 0
+        const themW = ev.wins[theirSlot] ?? 0
+        timersRef.current.push(
+          setTimeout(() => {
+            if (finishedRef.current) return
+            finishedRef.current = true
+            clearTimers()
+            const won = ev.winnerSlot === mySlot
+            setScores({ me: meW, them: themW })
+            if (won) sounds.win()
+            else sounds.lose()
+            onFinish({
+              gameId: 'reaction',
+              outcome: won ? 'win' : 'loss',
+              coinsEarned: won ? 30 : 5,
+              xpEarned: won ? 40 : 8,
+              summary: won
+                ? `أسرع من ${opponent?.name ?? 'الخصم'}! فزت ${meW} - ${themW} ⚡🏆`
+                : `${opponent?.name ?? 'الخصم'} كان أسرع ${themW} - ${meW}`,
+            })
+          }, 4000),
+        )
+        return
+      }
       if (ev.kind === 'action' && ev.action.kind === 'react_start') {
         scheduleGo(ev.action.delay as number)
         return
@@ -90,7 +116,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
       else if (iWon) sounds.correct()
       else sounds.wrong()
 
-      if (next.me >= WIN_TARGET || next.them >= WIN_TARGET) {
+      if (next.me >= winTarget || next.them >= winTarget) {
         if (finishedRef.current) return
         finishedRef.current = true
         const won = next.me > next.them
@@ -114,7 +140,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscribe, mySlot, theirSlot, scores, opponent, onFinish, isHost])
+  }, [subscribe, mySlot, theirSlot, scores, opponent, onFinish, isHost, winTarget])
 
   const handleTap = () => {
     if (tappedRef.current) return
@@ -147,7 +173,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
           <AvatarCircle emoji={profile.avatar} size="sm" />
           <div className="text-xs font-bold truncate max-w-full px-2">أنت</div>
           <div className="flex items-center gap-1">
-            {Array.from({ length: WIN_TARGET }).map((_, i) => (
+            {Array.from({ length: winTarget }).map((_, i) => (
               <span key={i} className={cn('w-2.5 h-2.5 rounded-full', i < scores.me ? 'bg-emerald-400 glow-emerald' : 'bg-white/15')} />
             ))}
           </div>
@@ -156,7 +182,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
           <AvatarCircle emoji={opponent?.avatar ?? '🎮'} size="sm" />
           <div className="text-xs font-bold truncate max-w-full px-2">{opponent?.name ?? 'الخصم'}</div>
           <div className="flex items-center gap-1">
-            {Array.from({ length: WIN_TARGET }).map((_, i) => (
+            {Array.from({ length: winTarget }).map((_, i) => (
               <span key={i} className={cn('w-2.5 h-2.5 rounded-full', i < scores.them ? 'bg-amber-400 glow-amber' : 'bg-white/15')} />
             ))}
           </div>
@@ -181,7 +207,7 @@ export default function OnlineReaction({ onFinish }: GameProps) {
             <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center px-6">
               <Zap className="w-12 h-12 text-amber-400 mx-auto mb-3" />
               <p className="text-xl font-extrabold">استعد للسباق…</p>
-              <p className="text-sm text-muted-foreground mt-1">الأول إلى {WIN_TARGET} جولات يفوز</p>
+              <p className="text-sm text-muted-foreground mt-1">الأول إلى {winTarget} جولات يفوز</p>
             </motion.div>
           )}
           {phase === 'waiting' && (

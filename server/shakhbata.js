@@ -141,6 +141,14 @@ function firstName(name = "") {
   return String(name).trim().split(/\s+/)[0] || name;
 }
 
+// ===== ثوابت سير الجولات =====
+const WORD_CHOICE_SECONDS = 8; // مهلة اختيار الكلمة قبل الاختيار التلقائي
+// شاشة اللعبة عند العميل تُركَّب بعد وصول أول round_choosing، فيضيع أول إرسال (خاصة الجولة 1).
+// نعيد الإرسال مرة واحدة بعد هذه المهلة — الرسالتان idempotent عند العميل.
+const WORD_OPTIONS_RESEND_MS = 750;
+const DEFAULT_ROUNDS = 5; // الافتراضي: ٥ جولات يتناوب عليها الرسّامون round-robin
+const MAX_ROUNDS = 10;
+
 // ===== أدوات إرسال =====
 function send(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
@@ -155,12 +163,12 @@ function sendToSlot(room, slot, obj) {
 }
 
 // ===== حالة اللعبة =====
-export function initShakhbata(room, drawTime = 70) {
+export function initShakhbata(room, drawTime = 60) {
   room.shak = {
     status: 'lobby',
     round: 0,
     totalRounds: 0,
-    drawTime: Math.max(35, Math.min(120, Number(drawTime) || 70)),
+    drawTime: Math.max(35, Math.min(120, Number(drawTime) || 60)),
     drawerOrder: [],
     drawerIndex: 0,
     drawerSlot: null,
@@ -172,6 +180,7 @@ export function initShakhbata(room, drawTime = 70) {
     startedAt: 0,
     endsAt: null,
     roundTimer: null,
+    optionsResendTimer: null,
     hintTimers: [],
     revealTimer: null,
   };
@@ -194,7 +203,7 @@ function scoresList(room) {
 }
 
 function broadcastPlayers(room) {
-  broadcast(room, { type: 'player_joined', players: shakPlayers(room) });
+  broadcast(room, { type: 'player_joined', players: shakPlayers(room), settings: room.settings });
 }
 
 function systemChat(room, text) {
@@ -205,6 +214,7 @@ function clearShakTimers(room) {
   const sh = room.shak;
   if (!sh) return;
   clearTimeout(sh.roundTimer);
+  clearTimeout(sh.optionsResendTimer);
   clearTimeout(sh.revealTimer);
   for (const t of sh.hintTimers) clearTimeout(t);
   sh.hintTimers = [];
@@ -252,8 +262,9 @@ function sendHints(room, count) {
 
 function scheduleHints(room) {
   const sh = room.shak;
-  const first = Math.round(sh.drawTime * 1000 * 0.35);
-  const second = Math.round(sh.drawTime * 1000 * 0.65);
+  // إيقاع أسرع: التلميح الأول عند 30% والثاني عند 60% من زمن الرسم
+  const first = Math.round(sh.drawTime * 1000 * 0.3);
+  const second = Math.round(sh.drawTime * 1000 * 0.6);
   sh.hintTimers.push(setTimeout(() => { if (sh.status === 'playing') sendHints(room, 1); }, first));
   sh.hintTimers.push(setTimeout(() => { if (sh.status === 'playing') sendHints(room, 2); }, second));
 }
@@ -263,7 +274,7 @@ export function startMatch(room) {
   const sh = room.shak;
   sh.drawerOrder = [...room.players.keys()].sort((a, b) => a - b);
   sh.drawerIndex = 0;
-  sh.totalRounds = room.players.size; // كل لاعب يرسم مرة واحدة
+  sh.totalRounds = Math.max(1, Math.min(MAX_ROUNDS, Number(room.settings?.rounds) || DEFAULT_ROUNDS)); // الافتراضي ٥ جولات بالتناوب الدائري
   sh.round = 0;
   sh.scores = new Map([...room.players.keys()].map((s) => [s, 0]));
   nextRound(room);
@@ -283,20 +294,31 @@ function nextRound(room) {
   sh.guessed = new Set();
   sh.drawerSlot = nextDrawer(room);
   if (sh.drawerSlot === null) return endMatch(room);
-  sh.endsAt = Date.now() + 12000;
+  sh.endsAt = Date.now() + WORD_CHOICE_SECONDS * 1000;
 
   const drawerName = firstName(room.names.get(sh.drawerSlot)?.name || 'لاعب');
   systemChat(room, `الجولة ${sh.round} - اختيار الكلمة: ${drawerName}.`);
-  broadcast(room, {
+  const choosingMsg = {
     type: 'round_choosing',
     round: sh.round,
     totalRounds: sh.totalRounds,
     drawer: sh.drawerSlot,
     drawerName,
-    duration: 12,
-  });
+    duration: WORD_CHOICE_SECONDS,
+  };
+  broadcast(room, choosingMsg);
   sendToSlot(room, sh.drawerSlot, { type: 'word_options', options: sh.wordOptions });
-  sh.roundTimer = setTimeout(() => chooseWord(room, sh.wordOptions[0]), 12000);
+  // إعادة إرسال احتياطية: العميل يستلم round_choosing الأولى ثم يركّب شاشة اللعبة وتشترك بعدها،
+  // فيضيع word_options الأولى (وكذلك round_choosing الأولى في الجولة 1) — الإعادة تضمن وصولها.
+  // الرسالتان idempotent عند العميل، والحارس يلغي الإعادة لو اختار الرسام فورًا.
+  const roundAtSend = sh.round;
+  sh.optionsResendTimer = setTimeout(() => {
+    if (sh.status !== 'choosing' || sh.round !== roundAtSend) return;
+    if (sh.drawerSlot === null || !room.players.has(sh.drawerSlot)) return;
+    broadcast(room, choosingMsg);
+    sendToSlot(room, sh.drawerSlot, { type: 'word_options', options: sh.wordOptions });
+  }, WORD_OPTIONS_RESEND_MS);
+  sh.roundTimer = setTimeout(() => chooseWord(room, sh.wordOptions[0]), WORD_CHOICE_SECONDS * 1000);
 }
 
 function chooseWord(room, word) {
@@ -313,6 +335,7 @@ function chooseWord(room, word) {
   sh.startedAt = Date.now();
   sh.endsAt = Date.now() + sh.drawTime * 1000;
   clearTimeout(sh.roundTimer);
+  clearTimeout(sh.optionsResendTimer);
   sh.roundTimer = setTimeout(() => revealRound(room, 'انتهى الوقت!'), sh.drawTime * 1000);
   scheduleHints(room);
 
@@ -336,7 +359,7 @@ function revealRound(room, reason) {
   clearShakTimers(room);
   systemChat(room, `${reason} الكلمة كانت: ${sh.word}`);
   broadcast(room, { type: 'round_end', word: sh.word, reason, players: scoresList(room) });
-  sh.revealTimer = setTimeout(() => nextRound(room), 5000);
+  sh.revealTimer = setTimeout(() => nextRound(room), 2500);
 }
 
 function endMatch(room) {
@@ -377,6 +400,7 @@ export function shakHandleMessage(room, ws, msg) {
       size: Math.max(2, Math.min(34, Number(msg.size) || 6)),
       tool: msg.tool === 'eraser' ? 'eraser' : 'pen',
       strokeId: String(msg.strokeId || '').slice(0, 80),
+      done: msg.done === true, // آخر دفعة من الخط — يكمل بها المستقبِل ذيل المنحنى
     };
     if (event.op === 'stroke' && event.points.length < 2) return;
     // التمرير للجميع عدا الرسام

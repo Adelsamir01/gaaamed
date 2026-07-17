@@ -11,6 +11,8 @@ import { AvatarCircle } from '@/sections/components'
 
 const COLORS = ['#111827', '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e', '#78350f', '#b45309', '#52525b', '#6b7280']
 const SIZES = [4, 8, 14, 22]
+// تجميع نقاط الرسم في دفعات ~40ms قبل الإرسال (بدل رسالة لكل pointermove)
+const STROKE_BATCH_MS = 40
 
 // لون ثابت لكل اسم في الدردشة (هاش بسيط)
 const NAME_COLORS = ['#5eead4', '#fcd34d', '#93c5fd', '#f9a8d4', '#fca5a5', '#c4b5fd', '#6ee7b7', '#fdba74']
@@ -21,7 +23,7 @@ function nameColor(name = '') {
 }
 
 interface Pt { x: number; y: number }
-interface StrokeEvent { op: 'stroke' | 'clear' | 'undo'; points: Pt[]; color: string; size: number; tool: 'pen' | 'eraser'; strokeId: string }
+interface StrokeEvent { op: 'stroke' | 'clear' | 'undo'; points: Pt[]; color: string; size: number; tool: 'pen' | 'eraser'; strokeId: string; done?: boolean }
 interface ScorePlayer { slot: number; name: string; avatar: string; score: number; guessed: boolean }
 interface ChatMsg { id: number; kind: 'message' | 'system' | 'correct' | 'hint'; name?: string; text: string }
 type Status = 'choosing' | 'playing' | 'reveal' | 'ended'
@@ -164,7 +166,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
   const [wordPattern, setWordPattern] = useState('')
   const [hints, setHints] = useState<{ index: number; letter: string }[]>([])
   const [endsAt, setEndsAt] = useState<number | null>(null)
-  const [duration, setDuration] = useState(70)
+  const [duration, setDuration] = useState(60)
   const [timeLeft, setTimeLeft] = useState(0)
   const [scores, setScores] = useState<ScorePlayer[]>([])
   const [chat, setChat] = useState<ChatMsg[]>([])
@@ -185,9 +187,13 @@ export default function Shakhbata({ onFinish }: GameProps) {
   const strokeIdRef = useRef('')
   const pendingRef = useRef<Pt[]>([])
   const liveTailRef = useRef<Pt | null>(null)
+  // ذيل آخر قطعة مرسومة لكل strokeId وارد — لربط الدفعات ببعضها بمنحنى متصل
+  const remoteTailsRef = useRef(new Map<string, Pt>())
   const lastSentRef = useRef(0)
   const chatIdRef = useRef(0)
   const finishedRef = useRef(false)
+  // بصمة آخر word_options — الخادم يعيد الإرسال احتياطيًا بعد ~750ms، فلا نكرر الصوت/الحالة
+  const wordOptionsSigRef = useRef('')
 
   const isDrawer = drawerSlot === mySlot
   const iGuessed = scores.find((p) => p.slot === mySlot)?.guessed ?? false
@@ -240,6 +246,52 @@ export default function Shakhbata({ onFinish }: GameProps) {
     [getCtx, setupCtx],
   )
 
+  // رسم دفعة نقاط واردة بسلاسة: تبدأ من ذيل الدفعة السابقة لنفس الخط (strokeId)
+  // فيظهر الخط متصلًا رغم وصوله على دفعات ~40ms، وتُكمل العلامة done الذيل حتى آخر نقطة
+  const drawBatch = useCallback(
+    (e: StrokeEvent) => {
+      const canvas = canvasRef.current
+      const ctx = getCtx()
+      if (!canvas || !ctx || !e.points.length) return
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      const pts = e.points
+      const tails = remoteTailsRef.current
+      ctx.save()
+      setupCtx(ctx, e)
+      let from = tails.get(e.strokeId) ?? pts[0]
+      if (pts.length === 1) {
+        ctx.beginPath()
+        ctx.moveTo(from.x * w, from.y * h)
+        ctx.lineTo(pts[0].x * w + 0.01, pts[0].y * h)
+        ctx.stroke()
+      }
+      for (let i = 1; i < pts.length; i++) {
+        const prev = pts[i - 1]
+        const point = pts[i]
+        const mid = { x: (prev.x + point.x) / 2, y: (prev.y + point.y) / 2 }
+        ctx.beginPath()
+        ctx.moveTo(from.x * w, from.y * h)
+        ctx.quadraticCurveTo(prev.x * w, prev.y * h, mid.x * w, mid.y * h)
+        ctx.stroke()
+        from = mid
+      }
+      if (e.done && pts.length >= 2) {
+        const last = pts[pts.length - 1]
+        const prev = pts[pts.length - 2]
+        ctx.beginPath()
+        ctx.moveTo(from.x * w, from.y * h)
+        ctx.quadraticCurveTo(prev.x * w, prev.y * h, last.x * w, last.y * h)
+        ctx.stroke()
+        tails.delete(e.strokeId)
+      } else {
+        tails.set(e.strokeId, from)
+      }
+      ctx.restore()
+    },
+    [getCtx, setupCtx],
+  )
+
   // قطعة حية أثناء سحب الإصبع: منحنى تربيعي من آخر نقطة وسطية
   const drawLiveSegment = useCallback(
     (from: Pt, ctrl: Pt, to: Pt, s: { color: string; size: number; tool: 'pen' | 'eraser' }) => {
@@ -264,12 +316,14 @@ export default function Shakhbata({ onFinish }: GameProps) {
     const ctx = getCtx()
     if (!canvas || !ctx) return
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
-    for (const s of replayStrokes(eventsRef.current)) drawStroke(s)
-  }, [drawStroke, getCtx])
+    remoteTailsRef.current.clear()
+    for (const s of replayStrokes(eventsRef.current)) drawBatch(s)
+  }, [drawBatch, getCtx])
 
   const clearBoard = useCallback(() => {
     eventsRef.current = []
     myStrokeIdsRef.current = []
+    remoteTailsRef.current.clear()
     const canvas = canvasRef.current
     const ctx = getCtx()
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
@@ -295,15 +349,14 @@ export default function Shakhbata({ onFinish }: GameProps) {
 
   const applyDrawEvent = useCallback(
     (e: StrokeEvent) => {
+      eventsRef.current.push(e)
       if (e.op === 'stroke') {
-        eventsRef.current.push(e)
-        drawStroke(e)
+        drawBatch(e)
       } else {
-        eventsRef.current.push(e)
         fullRedraw()
       }
     },
-    [drawStroke, fullRedraw],
+    [drawBatch, fullRedraw],
   )
 
   const pushChat = useCallback((kind: ChatMsg['kind'], text: string, name?: string) => {
@@ -328,12 +381,17 @@ export default function Shakhbata({ onFinish }: GameProps) {
           setRevealWord(null)
           setRevealReason('')
           setEndsAt(null)
+          wordOptionsSigRef.current = ''
           clearBoard()
           break
-        case 'word_options':
-          setWordOptions(msg.options as string[])
-          sounds.pop()
+        case 'word_options': {
+          const opts = (msg.options as string[]) ?? []
+          const sig = opts.join('')
+          if (sig !== wordOptionsSigRef.current) sounds.pop()
+          wordOptionsSigRef.current = sig
+          setWordOptions(opts)
           break
+        }
         case 'your_word':
           setMyWord(msg.word as string)
           break
@@ -468,7 +526,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
     const mid = { x: (prev.x + point.x) / 2, y: (prev.y + point.y) / 2 }
     drawLiveSegment(liveTailRef.current ?? prev, prev, mid, style)
     liveTailRef.current = mid
-    if (Date.now() - lastSentRef.current > 55 && pts.length > 1) flushStroke(false)
+    if (Date.now() - lastSentRef.current > STROKE_BATCH_MS && pts.length > 1) flushStroke(false)
   }
 
   const endStroke = () => {
@@ -487,7 +545,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
     const alreadySent = eventsRef.current.some((e) => e.strokeId === strokeIdRef.current)
     if (!alreadySent && pts.length === 1) {
       const p = pts[0]
-      const ev: StrokeEvent = { op: 'stroke', strokeId: strokeIdRef.current, points: [p, { x: p.x + 0.0001, y: p.y + 0.0001 }], color: tool === 'eraser' ? '#ffffff' : color, size, tool }
+      const ev: StrokeEvent = { op: 'stroke', strokeId: strokeIdRef.current, points: [p, { x: p.x + 0.0001, y: p.y + 0.0001 }], color: tool === 'eraser' ? '#ffffff' : color, size, tool, done: true }
       eventsRef.current.push(ev)
       drawStroke(ev)
       sendRaw({ type: 'draw', ...ev })
@@ -505,6 +563,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
         color: tool === 'eraser' ? '#ffffff' : color,
         size,
         tool,
+        done: force, // الدفعة الأخيرة من الخط — المستقبِل يكمل بها ذيل المنحنى
       }
       // أضف للوحة المحلية (النقاط الجديدة فقط تُرسم؛ الخط الكامل يُحفظ للتراجع)
       eventsRef.current.push(ev)
@@ -818,7 +877,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-30 rounded-3xl bg-[#0b1220]/92 backdrop-blur-xl flex flex-col items-center justify-center gap-2.5 p-6 overflow-hidden"
+            className="absolute inset-0 z-30 rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center gap-2.5 p-6 overflow-hidden"
           >
             <motion.span
               initial={{ scale: 0.4, opacity: 0 }}
@@ -879,7 +938,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
                 key={`cd-${round}`}
                 initial={{ width: '100%' }}
                 animate={{ width: '0%' }}
-                transition={{ duration: 12, ease: 'linear' }}
+                transition={{ duration: 8, ease: 'linear' }}
                 className="h-full rounded-full bg-gradient-to-l from-amber-400 to-emerald-400"
               />
             </div>
@@ -895,7 +954,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-30 rounded-3xl bg-[#0b1220]/92 backdrop-blur-xl flex flex-col items-center justify-center gap-2 p-6"
+            className="absolute inset-0 z-30 rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center gap-2 p-6"
           >
             {revealReason && (
               <motion.span initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-full px-3 py-0.5 text-[11px] font-bold text-muted-foreground">

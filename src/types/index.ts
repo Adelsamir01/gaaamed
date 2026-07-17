@@ -36,6 +36,23 @@ export interface GameInvite {
   roomCode: string
   gameName: string
   gameEmoji: string
+  /** إعدادات غرفة الدعوة (عدد الجولات) — تُملأ من الخادم */
+  settings?: RoomSettings | null
+}
+
+/** إعدادات غرفة أونلاين — عدد جولات السلسلة/المباراة */
+export interface RoomSettings {
+  rounds?: number
+}
+
+/** خيارات الجولات المتاحة في منتقي الإعدادات */
+export const ROUND_OPTIONS = [3, 5, 7] as const
+export const DEFAULT_ROUNDS = 5
+
+/** الألعاب التي لها مفهوم جولات قابل للاختيار (حجر ورقة مقص / سرعة البرق / شخبطة) */
+const ROUNDS_GAMES: ReadonlySet<string> = new Set(['rps', 'reaction', 'shakhbata'])
+export function gameUsesRounds(gameId: string | null | undefined): boolean {
+  return !!gameId && ROUNDS_GAMES.has(gameId)
 }
 
 export interface ServerChatMessage {

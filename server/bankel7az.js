@@ -35,11 +35,11 @@ export const MAX_BUILDINGS_PER_PROPERTY = 3
 export const BUILDING_PRICE_RATE = 0.42
 export const PROPERTY_SELL_RATE = 0.58
 export const BUILDING_SELL_RATE = 0.5
-export const SYNC_PLAYBACK_DELAY_MS = 520
-export const CAR_MOVEMENT_OFFSET_MS = 240
-export const CAR_STEP_MS = 190
-export const DICE_THROW_MS = 980
-export const ACTION_UNLOCK_BUFFER_MS = 180
+export const SYNC_PLAYBACK_DELAY_MS = 300
+export const CAR_MOVEMENT_OFFSET_MS = 140
+export const CAR_STEP_MS = 110
+export const DICE_THROW_MS = 560
+export const ACTION_UNLOCK_BUFFER_MS = 100
 
 export const GROUP_NAMES = {
   oldCairo: 'القاهرة الكبرى',

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, type ConnectionStatus, type ServerMessage } from './client'
 import { useApp } from '@/store/AppContext'
-import type { PublicUserCard, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
+import type { PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 
 export interface Opponent {
   name: string
@@ -22,7 +22,9 @@ export type OnlinePhase = 'idle' | 'waiting' | 'ready' | 'playing' | 'opponent_l
 export type GameEvent =
   | { kind: 'action'; action: Record<string, unknown>; from: number }
   | { kind: 'rps_reveal'; choices: Record<number, string> }
+  | { kind: 'rps_series_end'; winnerSlot: number; wins: Record<number, number>; rounds: number }
   | { kind: 'react_result'; winnerSlot: number; times: Record<number, number | null>; fouls: Record<number, boolean> }
+  | { kind: 'react_series_end'; winnerSlot: number; wins: Record<number, number>; rounds: number }
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
 
@@ -34,6 +36,9 @@ export interface MeIdentity {
   userId: string
   handle: string
 }
+
+/** رسالة دردشة كما يخزنها العميل — تمتد برسالة الخادم + علم "قيد الإرسال" للرسائل المتفائلة */
+export type ChatMessage = ServerChatMessage & { pending?: boolean }
 
 interface OnlineContextValue {
   status: ConnectionStatus
@@ -47,7 +52,9 @@ interface OnlineContextValue {
   rematchMine: boolean
   rematchTheirs: boolean
   serverUrl: string
-  createRoom: (gameId: string, name: string, avatar: string) => void
+  /** إعدادات الغرفة الحالية (عدد الجولات) — تأتي من created/joined/matched/opponent_joined */
+  roomSettings: RoomSettings | null
+  createRoom: (gameId: string, name: string, avatar: string, settings?: RoomSettings) => void
   joinRoom: (code: string, name: string, avatar: string) => void
   leaveRoom: () => void
   startGame: () => void
@@ -64,7 +71,7 @@ interface OnlineContextValue {
   me: MeIdentity | null
   friends: ServerFriend[]
   threads: ServerThread[]
-  messages: Record<string, ServerChatMessage[]>
+  messages: Record<string, ChatMessage[]>
   openThreadId: string | null
   setOpenThreadId: (id: string | null) => void
   searchUser: (handle: string) => Promise<PublicUserCard | null>
@@ -75,7 +82,7 @@ interface OnlineContextValue {
   createGroup: (name: string, memberIds: string[]) => Promise<ServerThread | null>
   loadThread: (threadId: string) => void
   chatSend: (threadId: string, text: string) => void
-  chatSendInvite: (threadId: string, gameId: string) => void
+  chatSendInvite: (threadId: string, gameId: string, settings?: RoomSettings) => void
   refreshSocial: () => void
   // المباراة السريعة
   quickMatchGame: string | null
@@ -83,6 +90,8 @@ interface OnlineContextValue {
   quickMatchCancel: () => void
   /** الغرفة الحالية جاءت من مباراة سريعة (تُستخدم للبدء التلقائي في بنك الحظ) */
   fromQuickMatch: boolean
+  /** غرفة دعوة محادثة فردية: تبدأ تلقائيًا فور اكتمال لاعبَين */
+  autoStartRoom: boolean
   // غرفة دعوة أرسلها المستخدم — ليدخلها تلقائيًا فور إرسالها
   ownInviteRoom: { code: string; gameId: string } | null
   clearOwnInviteRoom: () => void
@@ -107,10 +116,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeIdentity | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
   const [threads, setThreads] = useState<ServerThread[]>([])
-  const [messages, setMessages] = useState<Record<string, ServerChatMessage[]>>({})
+  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [quickMatchGame, setQuickMatchGame] = useState<string | null>(null)
   const [fromQuickMatch, setFromQuickMatch] = useState(false)
+  const [autoStartRoom, setAutoStartRoom] = useState(false)
+  const [roomSettings, setRoomSettings] = useState<RoomSettings | null>(null)
   const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string } | null>(null)
   const clearOwnInviteRoom = useCallback(() => setOwnInviteRoom(null), [])
 
@@ -118,6 +129,13 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const rematchRef = useRef({ mine: false, theirs: false })
   const phaseRef = useRef<OnlinePhase>('idle')
   phaseRef.current = phase
+  const slotRef = useRef<number | null>(null)
+  slotRef.current = slot
+  const autoStartRef = useRef(false)
+  autoStartRef.current = autoStartRoom
+  // مؤقّت البدء التلقائي لغرف الدعوات الفردية + ختم آخر إطلاق (منع الإطلاق المزدوج)
+  const autoStartTimerRef = useRef<number | null>(null)
+  const lastAutoStartRef = useRef(0)
   const meRef = useRef<MeIdentity | null>(null)
   meRef.current = me
   const openThreadRef = useRef<string | null>(null)
@@ -137,6 +155,19 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     onlineClient.connect()
+    // البدء التلقائي لغرف دعوات الـ DM: المضيف (slot=1) يرسل start بعد لحظة قصيرة من اكتمال لاعبَين
+    // (يعكس مسار المباراة السريعة). الخادم يتجاهل start المكرر بأمان، والختم الزمني يمنع الإطلاق المزدوج.
+    const scheduleAutoStart = () => {
+      if (autoStartTimerRef.current != null) return
+      if (phaseRef.current === 'playing') return
+      if (Date.now() - lastAutoStartRef.current < 3000) return
+      autoStartTimerRef.current = window.setTimeout(() => {
+        autoStartTimerRef.current = null
+        if (phaseRef.current === 'playing') return
+        lastAutoStartRef.current = Date.now()
+        startGameRef.current()
+      }, 700)
+    }
     const offStatus = onlineClient.onStatus(setStatus)
     const offMsg = onlineClient.onMessage((msg: ServerMessage) => {
       switch (msg.type) {
@@ -144,11 +175,19 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           setCode(msg.code as string)
           setSlot(1)
           setPhase('waiting')
+          setRoomSettings((msg.settings as RoomSettings) ?? null)
           break
-        case 'joined':
+        case 'joined': {
+          const auto = msg.autoStart === true
+          setAutoStartRoom(auto)
+          autoStartRef.current = auto
+          // بنك الحظ: مكوّن اللعبة يقرأ fromQuickMatch ليبدأ تلقائيًا — فعّله لغرف الدعوات الفردية أيضًا
+          if (auto && msg.gameId === 'bank-el7az') setFromQuickMatch(true)
           setCode(msg.code as string)
           setSlot(msg.slot as number)
+          slotRef.current = msg.slot as number
           if (msg.gameId) setGameId(msg.gameId as string)
+          if (msg.settings) setRoomSettings(msg.settings as RoomSettings)
           if (msg.players) setPlayers(msg.players as RoomPlayer[])
           if (msg.opponent) {
             setOpponent(msg.opponent as Opponent)
@@ -156,15 +195,26 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           } else {
             setPhase('waiting')
           }
+          // حالة نادرة: انضممنا كمضيف (slot=1) والخصم موجود بالفعل — ابدأ فورًا
+          if (auto && slotRef.current === 1) {
+            const count = msg.opponent ? 2 : ((msg.players as RoomPlayer[] | undefined)?.length ?? 1)
+            if (count >= 2) scheduleAutoStart()
+          }
           break
+        }
         case 'opponent_joined':
           setOpponent(msg.opponent as Opponent)
           setPhase('ready')
+          if (msg.settings) setRoomSettings(msg.settings as RoomSettings)
           toast.success(`انضم ${(msg.opponent as Opponent)?.name ?? 'الخصم'} إلى الغرفة! 🎮`)
+          if (msg.autoStart === true && slotRef.current === 1) scheduleAutoStart()
           break
-        case 'player_joined':
-          setPlayers(msg.players as RoomPlayer[])
+        case 'player_joined': {
+          const list = (msg.players as RoomPlayer[]) ?? []
+          setPlayers(list)
+          if (autoStartRef.current && slotRef.current === 1 && list.length >= 2) scheduleAutoStart()
           break
+        }
         case 'round_choosing':
           if (phaseRef.current !== 'playing') {
             setMatchId((id) => id + 1)
@@ -191,6 +241,16 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'rps_reveal':
           gameHandlersRef.current.forEach((h) => h({ kind: 'rps_reveal', choices: msg.choices as Record<number, string> }))
           break
+        case 'rps_series_end':
+          gameHandlersRef.current.forEach((h) =>
+            h({
+              kind: 'rps_series_end',
+              winnerSlot: msg.winnerSlot as number,
+              wins: msg.wins as Record<number, number>,
+              rounds: msg.rounds as number,
+            }),
+          )
+          break
         case 'react_result':
           gameHandlersRef.current.forEach((h) =>
             h({
@@ -198,6 +258,16 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               winnerSlot: msg.winnerSlot as number,
               times: msg.times as Record<number, number | null>,
               fouls: (msg.fouls as Record<number, boolean>) ?? { 1: false, 2: false },
+            }),
+          )
+          break
+        case 'react_series_end':
+          gameHandlersRef.current.forEach((h) =>
+            h({
+              kind: 'react_series_end',
+              winnerSlot: msg.winnerSlot as number,
+              wins: msg.wins as Record<number, number>,
+              rounds: msg.rounds as number,
             }),
           )
           break
@@ -284,7 +354,14 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           const message = msg.message as ServerChatMessage
           setMessages((m) => {
             const list = m[threadId] ?? []
-            if (list.some((x) => x.id === message.id)) return m
+            const idx = list.findIndex((x) => x.id === message.id)
+            if (idx >= 0) {
+              // صدى رسالتنا المتفائلة: استبدلها بالنسخة الرسمية (يزيل علم pending)
+              if (list[idx] === message) return m
+              const next = [...list]
+              next[idx] = message
+              return { ...m, [threadId]: next }
+            }
             return { ...m, [threadId]: [...list, message] }
           })
           if (msg.thread) upsertThread(msg.thread as ServerThread)
@@ -317,6 +394,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           setGameId(msg.gameId as string)
           setOpponent(msg.opponent as Opponent)
           setPhase('ready')
+          if (msg.settings) setRoomSettings(msg.settings as RoomSettings)
           toast.success('وجدنا لك خصمًا! ⚡', { description: (msg.opponent as Opponent)?.name })
           // الدخول المباشر: المضيف يبدأ تلقائيًا (إلا بنك الحظ — يبدأ من لوبي اللعبة)
           if ((msg.slot as number) === 1 && msg.gameId !== 'bank-el7az') {
@@ -351,16 +429,26 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     })
   }, [status, onboarded, profile.name, profile.avatar, profile.handle])
 
-  const createRoom = useCallback((gid: string, name: string, avatar: string) => {
+  const createRoom = useCallback((gid: string, name: string, avatar: string, settings?: RoomSettings) => {
     setGameId(gid)
     setOpponent(null)
     setFromQuickMatch(false)
-    onlineClient.send({ type: 'create', gameId: gid, name, avatar })
+    setAutoStartRoom(false)
+    setRoomSettings(settings ?? null)
+    lastAutoStartRef.current = 0
+    onlineClient.send({ type: 'create', gameId: gid, name, avatar, ...(settings ? { settings } : {}) })
   }, [])
 
   const joinRoom = useCallback((c: string, name: string, avatar: string) => {
     setOpponent(null)
     setFromQuickMatch(false)
+    setAutoStartRoom(false)
+    setRoomSettings(null)
+    lastAutoStartRef.current = 0
+    if (autoStartTimerRef.current != null) {
+      window.clearTimeout(autoStartTimerRef.current)
+      autoStartTimerRef.current = null
+    }
     onlineClient.send({ type: 'join', code: c.trim(), name, avatar })
   }, [])
 
@@ -376,6 +464,13 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     setOpponent(null)
     setPlayers([])
     setFromQuickMatch(false)
+    setAutoStartRoom(false)
+    setRoomSettings(null)
+    lastAutoStartRef.current = 0
+    if (autoStartTimerRef.current != null) {
+      window.clearTimeout(autoStartTimerRef.current)
+      autoStartTimerRef.current = null
+    }
   }, [])
 
   const startGame = useCallback(() => {
@@ -515,12 +610,40 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     setThreads((list) => list.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t)))
   }, [])
 
-  const chatSend = useCallback((threadId: string, text: string) => {
-    onlineClient.send({ type: 'chat_send', threadId, text })
-  }, [])
+  const chatSend = useCallback(
+    (threadId: string, text: string) => {
+      const clean = text.trim()
+      if (!clean) return
+      // إرسال متفائل: أظهر الرسالة فورًا بمعرّف محلي — الخادم يصدّ نفس المعرّف فيستبدل الصدى النسخة المعلّقة
+      const clientId = `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+      const meNow = meRef.current
+      if (meNow) {
+        const optimistic: ChatMessage = {
+          id: clientId,
+          senderId: meNow.userId,
+          senderName: app.profile.name || 'أنا',
+          senderAvatar: app.profile.avatar || '🎮',
+          text: clean.slice(0, 1000),
+          kind: 'text',
+          invite: null,
+          time: Date.now(),
+          pending: true,
+        }
+        setMessages((m) => ({ ...m, [threadId]: [...(m[threadId] ?? []), optimistic] }))
+      }
+      onlineClient.send({ type: 'chat_send', threadId, text: clean, clientId })
+    },
+    [app.profile.name, app.profile.avatar],
+  )
 
-  const chatSendInvite = useCallback((threadId: string, gameId: string) => {
-    onlineClient.send({ type: 'chat_send', threadId, kind: 'game_invite', invite: { gameId } })
+  const chatSendInvite = useCallback((threadId: string, gameId: string, settings?: RoomSettings) => {
+    onlineClient.send({
+      type: 'chat_send',
+      threadId,
+      kind: 'game_invite',
+      invite: { gameId },
+      ...(settings ? { settings } : {}),
+    })
   }, [])
 
   const refreshSocial = useCallback(() => {
@@ -545,23 +668,23 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OnlineContextValue>(
     () => ({
       status, phase, code, slot, gameId, opponent, players, matchId,
-      rematchMine, rematchTheirs, serverUrl,
+      rematchMine, rematchTheirs, serverUrl, roomSettings,
       createRoom, joinRoom, leaveRoom, startGame,
       sendAction, sendRpsChoice, sendReactTap, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, threads, messages, openThreadId, setOpenThreadId,
       searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
-      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch,
+      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
     }),
-    [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl,
+    [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
       createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, threads, messages, openThreadId,
       searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
-      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch,
+      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],
   )
 
