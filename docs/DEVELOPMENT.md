@@ -38,7 +38,7 @@ gradlew.bat assembleDebug
 
 # install / launch the app
 adb -s emulator-5554 install -r gaaamed-debug.apk
-adb -s emulator-5554 shell monkey -p com.dedos.app -c android.intent.category.LAUNCHER 1
+adb -s emulator-5554 shell monkey -p com.dedos.game -c android.intent.category.LAUNCHER 1
 
 # screenshots / UI automation
 adb -s emulator-5554 exec-out screencap -p > screen.png

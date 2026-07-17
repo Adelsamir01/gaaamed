@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">ديدوس</string>
     <string name="title_activity_main">ديدوس</string>
-    <string name="package_name">com.dedos.app</string>
-    <string name="custom_url_scheme">com.dedos.app</string>
+    <string name="package_name">com.dedos.game</string>
+    <string name="custom_url_scheme">com.dedos.game</string>
 </resources>

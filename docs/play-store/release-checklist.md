@@ -11,11 +11,11 @@ repo root unless noted.
 - [x] Rebrand fully applied: Arabic جااامد → **ديدوس**, Latin `gaaamed` →
       **Dedos** in user-facing strings, `capacitor.config.ts` `appName`, and
       `android/app/src/main/res/values/strings.xml` `app_name`.
-- [x] **Final `applicationId` / `namespace` decided**: `com.dedos.app`
-      (applied in `android/app/build.gradle`; `MainActivity` moved to `com.dedos.app`). The applicationId is
+- [x] **Final `applicationId` / `namespace` decided**: `com.dedos.game`
+      (applied in `android/app/build.gradle`; `MainActivity` moved to `com.dedos.game`). The applicationId is
       **immutable after the first AAB upload** — you cannot change it later
       without creating a new app listing. A matching choice would be
-      e.g. `com.dedos.app`. (Code change owned outside this doc.)
+      e.g. `com.dedos.game`. (Code change owned outside this doc.)
 - [ ] Privacy policy hosted at a **public URL** — required by Play Console
       for apps that collect personal data. Draft is `PRIVACY.md` at the repo
       root. Easiest hosting: **GitHub Pages** — push the repo, then

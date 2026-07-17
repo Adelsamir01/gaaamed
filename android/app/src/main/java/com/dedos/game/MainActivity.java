@@ -1,4 +1,4 @@
-package com.dedos.app;
+package com.dedos.game;
 
 import com.getcapacitor.BridgeActivity;
 

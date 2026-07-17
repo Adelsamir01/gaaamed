@@ -13,7 +13,7 @@
               ▼
 ┌────────────────────────────┐
 │  Android WebView shell     │  androidScheme: http + allowMixedContent + usesCleartextTraffic
-│  com.dedos.app (ديدوس)   │  (required so ws:// works from the WebView)
+│  com.dedos.game (ديدوس)   │  (required so ws:// works from the WebView)
 └────────────────────────────┘
 ```
 
@@ -79,7 +79,7 @@ HTTP endpoints on the same port (static files only, no game logic): `/health` (J
 
 ## Android shell
 
-- Capacitor 8, app id `com.dedos.app`, display name **ديدوس**.
+- Capacitor 8, app id `com.dedos.game`, display name **ديدوس**.
 - `capacitor.config.ts`: `server: { androidScheme: 'http', allowMixedContent: true }`.
 - `android/app/src/main/AndroidManifest.xml`: `android:usesCleartextTraffic="true"` — without both of these, Android 9+ blocks cleartext `ws://` from the WebView (the app shows "غير متصل").
 - Build: `gradlew.bat assembleDebug` with JDK 21, SDK platform 34. `android/local.properties` (git-ignored) points at the SDK.
