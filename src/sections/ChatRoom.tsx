@@ -184,7 +184,7 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-white/10 shrink-0">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+          className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronRight className="w-5 h-5" />
           رجوع
@@ -216,7 +216,7 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
       </div>
 
       {/* الإدخال */}
-      <div className="px-4 pb-4 pt-2 shrink-0">
+      <div className="px-4 pt-2 shrink-0 safe-bottom">
         <div className="flex items-center gap-2 glass rounded-3xl p-2">
           <motion.button
             whileTap={{ scale: 0.9 }}

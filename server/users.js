@@ -1,7 +1,7 @@
 /**
  * server/users.js — هوية المستخدمين والأصدقاء والدردشات (بيانات دائمة على الخادم)
  * - users.json:   { version, users: {userId: {userId, deviceId, handle, name, avatar, createdAt, lastSeen}}, handles: {handle: userId}, devices: {deviceId: userId} }
- * - friends.json: { version, friends: {userId: [userId…]} } (علاقة ثنائية متماثلة)
+ * - friends.json: { version, friends: {userId: [userId…]}, requests: {recipientId: [requesterId…]} }
  * - chats.json:   { version, threads: {threadId: {id, kind, name, memberIds, messages, reads, createdAt, updatedAt}}, dmByPair: {"a|b": threadId} }
  * الكتابة ذرّية (tmp + rename) مع تجميع التغييرات كل ~500ms.
  */
@@ -72,7 +72,13 @@ export class UserStore {
   constructor(dir = resolveDataDir()) {
     this.dir = dir
     this.usersFile = new JsonFile(join(dir, 'users.json'), { version: 1, users: {}, handles: {}, devices: {} })
-    this.friendsFile = new JsonFile(join(dir, 'friends.json'), { version: 1, friends: {} })
+    this.friendsFile = new JsonFile(join(dir, 'friends.json'), { version: 2, friends: {}, requests: {} })
+    this.friendsFile.data.friends ??= {}
+    this.friendsFile.data.requests ??= {}
+    if ((this.friendsFile.data.version ?? 1) < 2) {
+      this.friendsFile.data.version = 2
+      this.friendsFile.scheduleSave()
+    }
     this.chatsFile = new JsonFile(join(dir, 'chats.json'), { version: 1, threads: {}, dmByPair: {} })
   }
 
@@ -175,23 +181,73 @@ export class UserStore {
     return this.friendsOf(a).includes(b)
   }
 
-  addFriend(userId, friendId) {
+  incomingFriendRequests(userId) {
+    return this.friendsFile.data.requests[userId] ?? []
+  }
+
+  outgoingFriendRequests(userId) {
+    return Object.entries(this.friendsFile.data.requests)
+      .filter(([, requesterIds]) => requesterIds.includes(userId))
+      .map(([recipientId]) => recipientId)
+  }
+
+  requestFriend(userId, friendId) {
     if (userId === friendId) throw new Error('مينفعش تضيف نفسك صديق.')
     const friend = this.byId(friendId)
     if (!friend) throw new Error('المستخدم ده مش موجود.')
+    if (this.areFriends(userId, friendId)) throw new Error('المستخدم ده صديقك بالفعل.')
+
+    const db = this.friendsFile.data
+    db.requests[friendId] ??= []
+    if (!db.requests[friendId].includes(userId)) {
+      db.requests[friendId].push(userId)
+      this.friendsFile.scheduleSave()
+    }
+    return friend
+  }
+
+  acceptFriend(userId, requesterId) {
+    const requester = this.byId(requesterId)
+    if (!requester) throw new Error('صاحب الطلب مش موجود.')
+    const incoming = this.incomingFriendRequests(userId)
+    if (!incoming.includes(requesterId)) throw new Error('طلب الصداقة ده مش موجود.')
+
+    this.friendsFile.data.requests[userId] = incoming.filter((id) => id !== requesterId)
+    this.linkFriends(userId, requesterId)
+    return requester
+  }
+
+  rejectFriend(userId, requesterId) {
+    const incoming = this.incomingFriendRequests(userId)
+    if (!incoming.includes(requesterId)) throw new Error('طلب الصداقة ده مش موجود.')
+    this.friendsFile.data.requests[userId] = incoming.filter((id) => id !== requesterId)
+    this.friendsFile.scheduleSave()
+  }
+
+  cancelFriendRequest(userId, recipientId) {
+    const outgoing = this.outgoingFriendRequests(userId)
+    if (!outgoing.includes(recipientId)) throw new Error('طلب الصداقة ده مش موجود.')
+    this.friendsFile.data.requests[recipientId] = this.incomingFriendRequests(recipientId).filter((id) => id !== userId)
+    this.friendsFile.scheduleSave()
+  }
+
+  linkFriends(userId, friendId) {
     const db = this.friendsFile.data
     db.friends[userId] ??= []
     db.friends[friendId] ??= []
     if (!db.friends[userId].includes(friendId)) db.friends[userId].push(friendId)
     if (!db.friends[friendId].includes(userId)) db.friends[friendId].push(userId)
+    db.requests[userId] = (db.requests[userId] ?? []).filter((id) => id !== friendId)
+    db.requests[friendId] = (db.requests[friendId] ?? []).filter((id) => id !== userId)
     this.friendsFile.scheduleSave()
-    return friend
   }
 
   removeFriend(userId, friendId) {
     const db = this.friendsFile.data
     db.friends[userId] = (db.friends[userId] ?? []).filter((id) => id !== friendId)
     db.friends[friendId] = (db.friends[friendId] ?? []).filter((id) => id !== userId)
+    db.requests[userId] = (db.requests[userId] ?? []).filter((id) => id !== friendId)
+    db.requests[friendId] = (db.requests[friendId] ?? []).filter((id) => id !== userId)
     this.friendsFile.scheduleSave()
   }
 

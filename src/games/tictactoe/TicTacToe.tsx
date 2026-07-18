@@ -188,7 +188,7 @@ export default function TicTacToe({ config, onFinish }: GameProps) {
   }, [])
 
   return (
-    <div className="flex flex-col items-center gap-5 py-4">
+    <div className="game-stage flex flex-col items-center gap-4 py-3">
       {/* لوحة النقاط */}
       <div className="w-full grid grid-cols-3 gap-2 text-center">
         <div className={cn('glass rounded-2xl py-2.5 transition-all', turn === 'X' && !roundMsg && 'border-emerald-400/50 glow-emerald')}>
@@ -236,6 +236,8 @@ export default function TicTacToe({ config, onFinish }: GameProps) {
               key={i}
               whileTap={{ scale: 0.92 }}
               onClick={() => handleTap(i)}
+              aria-label={`الخانة ${i + 1}${cell ? `: ${cell}` : ': فارغة'}`}
+              aria-pressed={cell !== null}
               className={cn(
                 'aspect-square rounded-2xl glass text-4xl font-black flex items-center justify-center transition-colors',
                 inWinLine && 'bg-emerald-500/25 border-emerald-400/60 glow-emerald',

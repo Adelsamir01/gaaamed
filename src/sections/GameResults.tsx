@@ -61,12 +61,12 @@ export default function GameResults({ result, onReplay, onExit, replayLabel = '�
         <div className="grid grid-cols-2 gap-3 w-full my-6">
           <div className="rounded-2xl bg-amber-400/10 border border-amber-400/40 py-3.5 glow-amber">
             <Coins className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-            <div className="text-xl font-black text-amber-300 tabular-nums">+{result.coinsEarned}</div>
+            <div className="text-xl font-black text-amber-300 tabular-nums bidi-number">+{result.coinsEarned}</div>
             <div className="text-[11px] text-muted-foreground">عملة</div>
           </div>
           <div className="rounded-2xl bg-emerald-400/10 border border-emerald-400/40 py-3.5 glow-emerald">
             <Star className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-            <div className="text-xl font-black text-emerald-300 tabular-nums">+{result.xpEarned}</div>
+            <div className="text-xl font-black text-emerald-300 tabular-nums bidi-number">+{result.xpEarned}</div>
             <div className="text-[11px] text-muted-foreground">نقطة خبرة</div>
           </div>
         </div>

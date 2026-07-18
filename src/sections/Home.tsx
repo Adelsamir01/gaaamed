@@ -31,7 +31,7 @@ export default function Home({ goTab, openGame, openChat }: Props) {
   const featured = GAMES[0]
 
   return (
-    <div className="px-4 pt-6 pb-28">
+    <div className="px-4 pt-6 tab-page">
       {/* الترويسة */}
       <div className="flex items-center gap-3 mb-5">
         <AvatarCircle emoji={profile.avatar} glow />
@@ -74,7 +74,7 @@ export default function Home({ goTab, openGame, openChat }: Props) {
                 : 'px-4 py-2.5 rounded-2xl bg-white/10 text-muted-foreground text-sm font-bold'
             }
           >
-            {canClaimDaily ? '+٥٠ 🪙' : '✓ استلمتها'}
+            {canClaimDaily ? <bdi dir="ltr">+٥٠ 🪙</bdi> : '✓ استلمتها'}
           </motion.button>
         </div>
       </motion.div>

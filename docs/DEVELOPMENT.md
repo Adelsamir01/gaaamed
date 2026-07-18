@@ -6,7 +6,7 @@
 |---|---|---|
 | Node.js | 20+ (24 used) | PATH |
 | JDK (Temurin) | **21** (required by Capacitor 8 / AGP) | `C:\Users\Adel\AppData\Local\Android\jdk-21` |
-| Android SDK | platform 34, build-tools 34.0.0, platform-tools, emulator | `C:\Users\Adel\AppData\Local\Android\Sdk` |
+| Android SDK | platform/build-tools 36, platform-tools, emulator | `C:\Users\Adel\AppData\Local\Android\Sdk` |
 | Emulator AVDs | `gaaamed`, `gaaamed2` (Pixel 6, Android 14, x86_64) | created via `avdmanager` |
 
 ## Everyday commands
@@ -78,7 +78,7 @@ Follow `server/shakhbata.js` as the template: server-side state machine + timers
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| "غير متصل" on Android only | Cleartext `ws://` blocked | `androidScheme: 'http'` + `allowMixedContent: true` in `capacitor.config.ts` AND `android:usesCleartextTraffic="true"` in the manifest, then resync/rebuild. |
+| "غير متصل" on Android only | Production endpoint unavailable or URL is not secure | Verify `wss://dedos.adelsamir.com`; use a temporary `ws://10.0.2.2:8787` override only in a development build. |
 | Emulator can't reach server | Wrong host alias | Use `ws://10.0.2.2:8787`, never `localhost` (that points at the emulator itself). |
 | `invalid source release: 21` | Gradle running on JDK 17 | Set `JAVA_HOME` to the JDK 21 path. |
 | `sdk.dir` syntax error in Gradle | Backslashes in `local.properties` | Use forward slashes: `C:/Users/...`. |

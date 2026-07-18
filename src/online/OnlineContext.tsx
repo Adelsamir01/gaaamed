@@ -70,6 +70,8 @@ interface OnlineContextValue {
   // الهوية والاجتماعي (خادم حقيقي)
   me: MeIdentity | null
   friends: ServerFriend[]
+  incomingFriendRequests: PublicUserCard[]
+  outgoingFriendRequests: PublicUserCard[]
   threads: ServerThread[]
   messages: Record<string, ChatMessage[]>
   openThreadId: string | null
@@ -77,6 +79,9 @@ interface OnlineContextValue {
   searchUser: (handle: string) => Promise<PublicUserCard | null>
   setHandle: (handle: string) => Promise<{ ok: boolean; message?: string }>
   friendAdd: (userId: string) => void
+  friendAccept: (userId: string) => void
+  friendReject: (userId: string) => void
+  friendRequestCancel: (userId: string) => void
   friendRemove: (userId: string) => void
   createDm: (userId: string) => Promise<ServerThread | null>
   createGroup: (name: string, memberIds: string[]) => Promise<ServerThread | null>
@@ -115,6 +120,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   // الاجتماعي
   const [me, setMe] = useState<MeIdentity | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState<PublicUserCard[]>([])
+  const [outgoingFriendRequests, setOutgoingFriendRequests] = useState<PublicUserCard[]>([])
   const [threads, setThreads] = useState<ServerThread[]>([])
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
@@ -327,9 +334,23 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'friends_update':
           setFriends((msg.friends as ServerFriend[]) ?? [])
           break
-        case 'friend_added':
-          toast.success('تمت الإضافة لأصدقائك 🎉')
+        case 'friend_requests_update':
+          setIncomingFriendRequests((msg.incoming as PublicUserCard[]) ?? [])
+          setOutgoingFriendRequests((msg.outgoing as PublicUserCard[]) ?? [])
           break
+        case 'friend_request_sent':
+          toast.success('تم إرسال طلب الصداقة', { description: 'سيظهر الشخص في أصدقائك بعد موافقته.' })
+          break
+        case 'friend_request_received': {
+          const requester = msg.user as PublicUserCard | undefined
+          toast.info('طلب صداقة جديد 👋', { description: requester ? `${requester.name} يريد إضافتك` : undefined })
+          break
+        }
+        case 'friend_accepted': {
+          const friend = msg.user as PublicUserCard | undefined
+          toast.success('تم قبول طلب الصداقة 🎉', { description: friend ? `أنت و${friend.name} أصدقاء الآن` : undefined })
+          break
+        }
         case 'chat_threads':
           setThreads((msg.threads as ServerThread[]) ?? [])
           break
@@ -572,7 +593,19 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const friendAdd = useCallback((userId: string) => {
-    onlineClient.send({ type: 'friend_add', userId })
+    onlineClient.send({ type: 'friend_request', userId })
+  }, [])
+
+  const friendAccept = useCallback((userId: string) => {
+    onlineClient.send({ type: 'friend_accept', userId })
+  }, [])
+
+  const friendReject = useCallback((userId: string) => {
+    onlineClient.send({ type: 'friend_reject', userId })
+  }, [])
+
+  const friendRequestCancel = useCallback((userId: string) => {
+    onlineClient.send({ type: 'friend_request_cancel', userId })
   }, [])
 
   const friendRemove = useCallback((userId: string) => {
@@ -648,6 +681,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   const refreshSocial = useCallback(() => {
     onlineClient.send({ type: 'friends_list' })
+    onlineClient.send({ type: 'friend_requests_list' })
     onlineClient.send({ type: 'chat_list' })
   }, [])
 
@@ -672,8 +706,9 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       createRoom, joinRoom, leaveRoom, startGame,
       sendAction, sendRpsChoice, sendReactTap, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
-      me, friends, threads, messages, openThreadId, setOpenThreadId,
-      searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
+      me, friends, incomingFriendRequests, outgoingFriendRequests,
+      threads, messages, openThreadId, setOpenThreadId,
+      searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
       quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
@@ -681,8 +716,9 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
       createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
-      me, friends, threads, messages, openThreadId,
-      searchUser, setHandle, friendAdd, friendRemove, createDm, createGroup,
+      me, friends, incomingFriendRequests, outgoingFriendRequests,
+      threads, messages, openThreadId,
+      searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
       quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],

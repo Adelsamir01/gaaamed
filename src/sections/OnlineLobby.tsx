@@ -93,7 +93,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
         <div className="px-4 pt-4 flex items-center gap-2">
           <button
             onClick={online.leaveRoom}
-            className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+            className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
             انسحاب
@@ -144,7 +144,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
     return (
       <div className="px-4 pt-4 pb-10">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={online.leaveRoom} className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={online.leaveRoom} className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight className="w-4 h-4" />
             مغادرة الغرفة
           </button>
@@ -174,7 +174,9 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
 
           {/* قائمة اللاعبين */}
           <div className="w-full mb-5">
-            <p className="text-xs font-bold text-muted-foreground mb-2">اللاعبون ({list.length} / 8)</p>
+            <p className="text-xs font-bold text-muted-foreground mb-2">
+              اللاعبون (<bdi className="bidi-number">{list.length} / 8</bdi>)
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <AnimatePresence>
                 {list.map((p) => (
@@ -256,7 +258,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
     return (
       <div className="px-4 pt-4 pb-10">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={online.leaveRoom} className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={online.leaveRoom} className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight className="w-4 h-4" />
             مغادرة الغرفة
           </button>
@@ -362,7 +364,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
   return (
     <div className="px-4 pt-4 pb-10">
       <div className="flex items-center justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight className="w-4 h-4" />
           عودة للألعاب
         </button>

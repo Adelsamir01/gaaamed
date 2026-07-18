@@ -96,7 +96,7 @@ export default function TriviaGame({ onFinish }: GameProps) {
         <div className="glass rounded-3xl p-5 text-center">
           <div className="text-5xl mb-2">{correctCount >= 7 ? '🏆' : correctCount >= 4 ? '💪' : '📚'}</div>
           <div className="text-3xl font-black text-gradient tabular-nums">
-            {correctCount} / {questions.length}
+            <bdi className="bidi-number">{correctCount} / {questions.length}</bdi>
           </div>
           <p className="text-sm text-muted-foreground mt-1">إجابة صحيحة — جمعت {coins} عملة</p>
         </div>
@@ -140,7 +140,7 @@ export default function TriviaGame({ onFinish }: GameProps) {
       {/* شريط التقدم والوقت */}
       <div className="flex items-center justify-between text-sm">
         <span className="font-bold text-muted-foreground tabular-nums">
-          سؤال {index + 1} / {questions.length}
+          سؤال <bdi className="bidi-number">{index + 1} / {questions.length}</bdi>
         </span>
         <div className="flex items-center gap-3">
           {streak >= 2 && (

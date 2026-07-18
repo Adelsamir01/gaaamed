@@ -13,21 +13,34 @@ const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'profile', label: 'حسابي', icon: User },
 ]
 
-export function TabBar({ active, onChange, unreadChats }: { active: TabId; onChange: (t: TabId) => void; unreadChats: number }) {
+export function TabBar({
+  active,
+  onChange,
+  unreadChats,
+  pendingFriendRequests,
+}: {
+  active: TabId
+  onChange: (t: TabId) => void
+  unreadChats: number
+  pendingFriendRequests: number
+}) {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40">
-      <div className="mx-auto max-w-[420px] px-3 pb-2 safe-bottom">
-        <div className="glass-strong rounded-3xl px-2 py-2 flex items-center justify-between shadow-2xl shadow-black/50">
+    <nav className="fixed bottom-0 inset-x-0 z-40" aria-label="التنقل الرئيسي">
+      <div className="mx-auto max-w-[420px] px-3 safe-bottom">
+        <div className="glass-strong rounded-3xl px-2 py-2 flex min-h-[4.75rem] items-center justify-between shadow-2xl shadow-black/50">
           {TABS.map(({ id, label, icon: Icon }) => {
             const isActive = active === id
             return (
               <button
+                type="button"
                 key={id}
                 onClick={() => {
                   sounds.click()
                   onChange(id)
                 }}
-                className="relative flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-2xl"
+                className="relative min-h-12 flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl"
+                aria-label={`${label}${id === 'friends' && pendingFriendRequests > 0 ? `، ${pendingFriendRequests} طلبات جديدة` : ''}`}
+                aria-current={isActive ? 'page' : undefined}
               >
                 {isActive && (
                   <motion.span
@@ -40,7 +53,12 @@ export function TabBar({ active, onChange, unreadChats }: { active: TabId; onCha
                   <Icon className={cn('w-5 h-5 transition-colors', isActive ? 'text-emerald-400' : 'text-slate-400')} />
                   {id === 'chat' && unreadChats > 0 && (
                     <span className="absolute -top-1.5 -start-2 min-w-4 h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                      {unreadChats}
+                      <bdi dir="ltr">{unreadChats}</bdi>
+                    </span>
+                  )}
+                  {id === 'friends' && pendingFriendRequests > 0 && (
+                    <span className="absolute -top-1.5 -start-2 min-w-4 h-4 px-0.5 rounded-full bg-amber-400 text-amber-950 text-[9px] font-black flex items-center justify-center">
+                      <bdi dir="ltr">{pendingFriendRequests}</bdi>
                     </span>
                   )}
                 </span>

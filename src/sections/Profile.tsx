@@ -39,7 +39,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="px-4 pt-6 pb-28">
+    <div className="px-4 pt-6 tab-page">
       <h1 className="text-2xl font-black mb-5">حسابي 👤</h1>
 
       {/* البطاقة الشخصية */}
@@ -127,7 +127,7 @@ export default function Profile() {
           { label: 'العملات', value: profile.coins, icon: Coins, color: 'text-amber-300' },
         ].map((s) => (
           <div key={s.label} className="glass rounded-2xl py-3 text-center">
-            <div className={cn('text-lg font-black tabular-nums', s.color)}>{s.value}</div>
+            <div className={cn('text-lg font-black tabular-nums bidi-number', s.color)}>{s.value}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
           </div>
         ))}

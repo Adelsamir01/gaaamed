@@ -273,6 +273,18 @@ function friendsListFor(userId) {
     .map((u) => ({ ...publicCard(u), presence: presenceOf(u.userId) }))
 }
 
+function friendRequestsFor(userId) {
+  const cards = (ids) => ids.map((id) => userStore.byId(id)).filter(Boolean).map(publicCard)
+  return {
+    incoming: cards(userStore.incomingFriendRequests(userId)),
+    outgoing: cards(userStore.outgoingFriendRequests(userId)),
+  }
+}
+
+function pushFriendRequestsUpdate(userId) {
+  pushToUser(userId, { type: 'friend_requests_update', ...friendRequestsFor(userId) })
+}
+
 // يُرسل قائمة محدثة للمستخدم ولكل أصدقائه (يُستدعى عند تغيّر الحضور أو العلاقات)
 function broadcastFriendsUpdate(userId) {
   pushToUser(userId, { type: 'friends_update', friends: friendsListFor(userId) })
@@ -614,6 +626,7 @@ wss.on('connection', (ws) => {
           trackOnline(user.userId, ws)
           send(ws, { type: 'identified', user: { ...publicCard(user), createdAt: user.createdAt }, created })
           broadcastFriendsUpdate(user.userId)
+          pushFriendRequestsUpdate(user.userId)
           console.log(`IDENTIFY ${user.handle} (${created ? 'جديد' : 'عائد'})`)
         } catch (error) {
           send(ws, { type: 'error', message: error.message })
@@ -644,13 +657,62 @@ wss.on('connection', (ws) => {
       }
 
       // ---------------- الأصدقاء ----------------
-      case 'friend_add': {
+      case 'friend_add':
+      case 'friend_request': {
         if (!ws._userId) return
         try {
-          const friend = userStore.addFriend(ws._userId, String(msg.userId || ''))
+          const recipient = userStore.requestFriend(ws._userId, String(msg.userId || ''))
+          pushFriendRequestsUpdate(ws._userId)
+          pushFriendRequestsUpdate(recipient.userId)
+          send(ws, { type: 'friend_request_sent', user: publicCard(recipient) })
+          pushToUser(recipient.userId, {
+            type: 'friend_request_received',
+            user: publicCard(userStore.byId(ws._userId)),
+          })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'friend_accept': {
+        if (!ws._userId) return
+        try {
+          const requester = userStore.acceptFriend(ws._userId, String(msg.userId || ''))
+          const accepter = userStore.byId(ws._userId)
           broadcastFriendsUpdate(ws._userId)
-          broadcastFriendsUpdate(friend.userId)
-          send(ws, { type: 'friend_added', user: publicCard(friend) })
+          broadcastFriendsUpdate(requester.userId)
+          pushFriendRequestsUpdate(ws._userId)
+          pushFriendRequestsUpdate(requester.userId)
+          send(ws, { type: 'friend_accepted', user: publicCard(requester) })
+          pushToUser(requester.userId, { type: 'friend_accepted', user: publicCard(accepter) })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'friend_reject': {
+        if (!ws._userId) return
+        const requesterId = String(msg.userId || '')
+        try {
+          userStore.rejectFriend(ws._userId, requesterId)
+          pushFriendRequestsUpdate(ws._userId)
+          if (userStore.byId(requesterId)) pushFriendRequestsUpdate(requesterId)
+          send(ws, { type: 'friend_request_rejected', userId: requesterId })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'friend_request_cancel': {
+        if (!ws._userId) return
+        const recipientId = String(msg.userId || '')
+        try {
+          userStore.cancelFriendRequest(ws._userId, recipientId)
+          pushFriendRequestsUpdate(ws._userId)
+          if (userStore.byId(recipientId)) pushFriendRequestsUpdate(recipientId)
         } catch (error) {
           send(ws, { type: 'error', message: error.message })
         }
@@ -663,12 +725,21 @@ wss.on('connection', (ws) => {
         userStore.removeFriend(ws._userId, friendId)
         broadcastFriendsUpdate(ws._userId)
         if (userStore.byId(friendId)) broadcastFriendsUpdate(friendId)
+        pushFriendRequestsUpdate(ws._userId)
+        if (userStore.byId(friendId)) pushFriendRequestsUpdate(friendId)
         break
       }
 
       case 'friends_list': {
         if (!ws._userId) return
         send(ws, { type: 'friends_update', friends: friendsListFor(ws._userId) })
+        send(ws, { type: 'friend_requests_update', ...friendRequestsFor(ws._userId) })
+        break
+      }
+
+      case 'friend_requests_list': {
+        if (!ws._userId) return
+        send(ws, { type: 'friend_requests_update', ...friendRequestsFor(ws._userId) })
         break
       }
 

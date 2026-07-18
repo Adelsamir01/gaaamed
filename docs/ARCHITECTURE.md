@@ -12,8 +12,8 @@
               │ Capacitor 8                                     └─────────────────────────────┘
               ▼
 ┌────────────────────────────┐
-│  Android WebView shell     │  androidScheme: http + allowMixedContent + usesCleartextTraffic
-│  com.dedos.game (ديدوس)   │  (required so ws:// works from the WebView)
+│  Android WebView shell     │  HTTPS origin + secure WSS production transport
+│  com.dedos.game (ديدوس)   │  cleartext traffic disabled
 └────────────────────────────┘
 ```
 
@@ -29,12 +29,12 @@ URL resolution lives in `src/online/client.ts` (`Capacitor.isNativePlatform()` c
 
 | Module | Responsibility |
 |---|---|
-| `App.tsx` | Onboarding gate, bottom-tab routing, offline game session routing, wraps everything in `OnlineProvider`. |
+| `App.tsx` | Onboarding gate, history-aware bottom-tab routing, offline game session routing, Android Back dispatch, wraps everything in `OnlineProvider`. |
 | `store/AppContext.tsx` | Profile (name/avatar/level/XP/coins), per-game stats, friends, chat threads, settings. Persisted to `localStorage`. Level = 100 XP per level. |
 | `games/index.ts` | Game registry — every game (offline & online) is an entry: `id, name, description, emoji, category, howToPlay, supportsBot, supportsTwoPlayer, online, component`. Adding a game = one entry + one component. |
 | `games/*` (offline) | Self-contained game components; results reported via `finishGame` (coins/XP/stats). |
 | `online/client.ts` | WebSocket singleton: connect, 3-try reconnect with backoff, typed event emitter, server URL resolution. |
-| `online/OnlineContext.tsx` | Connection status, current room (code, slot, players, opponent), actions (`createRoom`, `joinRoom`, `leaveRoom`, `startGame`, `sendAction`, `sendRpsChoice`, `sendReactTap`, `sendRaw`), rematch handshake, game-event subscription. |
+| `online/OnlineContext.tsx` | Connection status, room actions, friend request/accept/reject/cancel actions, social updates, rematch handshake, and game-event subscription. |
 | `sections/OnlineLobby.tsx` | Online entry: create (game picker) / join (4-digit code), waiting room (2-player card or شخبطة group list up to 8), host start button, opponent-left alerts, results with rematch. |
 | `games/online/*` | Online game components driven by the shared action stream from the server. |
 
@@ -64,6 +64,7 @@ Single Node process, `ws` library, port **8787**, no database (rooms in memory).
   - `rps_choice` — held until both arrive, then one `rps_reveal` broadcast (no peeking).
   - `react_tap` — server receipt timestamps decide the winner per round (fair, client-clock independent).
   - 20s heartbeat, dead-socket cleanup, `opponent_left` on disconnect, empty-room GC.
+  - Friend requests are pending until the recipient accepts; reject/cancel flows update both clients.
 - `shakhbata.js` — **authoritative game engine** for شخبطة:
   - State machine: `lobby → wordChoice → drawing → roundEnd → (next) → ended`.
   - 420-word Arabic bank + banned-word filter.
@@ -80,9 +81,10 @@ HTTP endpoints on the same port (static files only, no game logic): `/health` (J
 ## Android shell
 
 - Capacitor 8, app id `com.dedos.game`, display name **ديدوس**.
-- `capacitor.config.ts`: `server: { androidScheme: 'http', allowMixedContent: true }`.
-- `android/app/src/main/AndroidManifest.xml`: `android:usesCleartextTraffic="true"` — without both of these, Android 9+ blocks cleartext `ws://` from the WebView (the app shows "غير متصل").
-- Build: `gradlew.bat assembleDebug` with JDK 21, SDK platform 34. `android/local.properties` (git-ignored) points at the SDK.
+- `capacitor.config.ts` uses an HTTPS WebView origin; production realtime traffic uses `wss://dedos.adelsamir.com`.
+- `AndroidManifest.xml` disables cleartext traffic and requests only `INTERNET`.
+- `MainActivity.java` forwards Android Back into the React navigation stack; Back never terminates the app at its root screen.
+- Release builds use AGP 9, target API 36, R8 code/resource shrinking, and signed APK/AAB outputs.
 
 ## Persistence
 
@@ -90,9 +92,10 @@ HTTP endpoints on the same port (static files only, no game logic): `/health` (J
 |---|---|
 | Profile, coins, XP, stats, settings, server URL | `localStorage` (per device) |
 | Rooms & matches | Server memory (reset on restart) |
-| Chat history | Seeded mock data (client) |
+| Identity, friend graph/requests, chat history | Server JSON files under `server/data/` |
 
 ## Testing
 
 - `server/smoke-test.js` — 16 protocol checks for the 2-player games (create/join/relay/reveal/reaction/rematch/leave/full-room).
 - `server/smoke-shakhbata.js` — 51 checks for شخبطة: 3 players, full 3-round match, word privacy, stroke relay rules, guess masking, "قريب جداً", hints not sent to drawer, scoring, leaderboard.
+- `server/smoke-social.js` — 68 checks for identity, pending/accepted/rejected/cancelled friend requests, persistence, chats, invites, and quick match.

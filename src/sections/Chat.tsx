@@ -61,7 +61,7 @@ export default function Chat({ openChat }: { openChat: (id: string) => void }) {
   }
 
   return (
-    <div className="px-4 pt-6 pb-28">
+    <div className="px-4 pt-6 tab-page">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-black">الدردشة 💬</h1>
         <motion.button

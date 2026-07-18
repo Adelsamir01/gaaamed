@@ -89,7 +89,7 @@
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 96%;
     --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted-foreground: 215 22% 72%;
     --accent: 43 96% 56%;
     --accent-foreground: 222 47% 11%;
     --destructive: 0 72% 51%;
@@ -115,6 +115,8 @@
   }
   html {
     -webkit-tap-highlight-color: transparent;
+    color-scheme: dark;
+    background: #0b1220;
   }
   body {
     @apply bg-background text-foreground;
@@ -123,6 +125,19 @@
       radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.12), transparent),
       radial-gradient(ellipse 60% 40% at 100% 100%, rgba(245, 158, 11, 0.06), transparent);
     min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(52 211 153 / 0.9);
+    outline-offset: 3px;
+  }
+  ::placeholder {
+    color: rgb(148 163 184 / 0.82);
+    opacity: 1;
   }
 }
 
@@ -161,6 +176,36 @@
     scrollbar-width: none;
   }
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .tab-page {
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .sticky-action {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-inline: -1rem;
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, hsl(var(--background)) 72%, hsl(var(--background) / 0));
+  }
+  .bidi-number {
+    direction: ltr;
+    unicode-bidi: isolate;
+    display: inline-block;
+  }
+  .game-stage {
+    min-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px));
+    justify-content: center;
+  }
+}
+
+@media (max-height: 700px) {
+  .game-stage {
+    min-height: auto;
+    justify-content: flex-start;
   }
 }

@@ -42,7 +42,7 @@ All online games support three ways to play from one unified game card: **غرف
 ### Platform features
 
 - Server-side identity with no signup: device-bound account, editable `@handle`, searchable by friends
-- Real friends system: search by handle, add/remove, online presence dots, persisted on the server
+- Real friends system: search by handle, send/accept/reject/cancel requests, remove friends, online presence dots, persisted on the server
 - Real chat: DMs + group chats (3+ friends), unread badges, history persisted server-side
 - Game invites inside chat: tap 🎮 in any DM/group → friend taps **انضم الآن** → both land in the room (no codes)
 - Quick match (مباراة سريعة ⚡): one tap pairs two waiting players into a game
@@ -58,10 +58,10 @@ All online games support three ways to play from one unified game card: **غرف
 
 | Layer | Tech |
 |---|---|
-| Frontend | React 18, TypeScript, Vite 7, Tailwind CSS 3.4, shadcn/ui, framer-motion |
+| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 3.4, shadcn/ui, framer-motion |
 | Realtime server | Node.js + `ws` (rooms, relay + شخبطة authoritative engine) |
-| Android | Capacitor 8 → native APK (Android 14 / API 34) |
-| Build | Gradle (JDK 21), Android SDK platform 34 |
+| Android | Capacitor 8 → native APK (min API 24, target API 36) |
+| Build | AGP 9 + Gradle (JDK 21), Android SDK platform 36, R8 shrinking/optimization |
 
 ## Project structure
 
@@ -82,7 +82,7 @@ All online games support three ways to play from one unified game card: **غرف
 │   ├── smoke-test.js         # 2-player games protocol tests
 │   ├── smoke-shakhbata.js    # شخبطة end-to-end tests
 │   ├── smoke-bankel7az.js    # بنك الحظ end-to-end tests
-│   └── smoke-social.js       # identity/friends/chats/invites/quick-match tests (42 checks)
+│   └── smoke-social.js       # identity/friend requests/chats/invites/quick-match tests (68 checks)
 ├── autostart/                # Hidden VBS launchers + HKCU Run registration (server+tunnel at logon)
 ├── android/                  # Capacitor Android project (builds the APK)
 ├── runtime/                  # Local standalone node.exe for autostart (gitignored)
@@ -118,7 +118,7 @@ npm run server       # ws://0.0.0.0:8787
 node server/smoke-test.js        # 2-player games protocol
 node server/smoke-shakhbata.js   # شخبطة full match
 node server/smoke-bankel7az.js   # بنك الحظ full match
-node server/smoke-social.js      # identity, friends, chats, invites, quick match — 42 checks
+node server/smoke-social.js      # identity, friend requests, chats, invites, quick match — 68 checks
 ```
 
 ### Auto-start on Windows logon (production)
@@ -135,12 +135,13 @@ autostart\install-autostart.bat
 
 ### Build the Android APK
 
-Requires JDK 21 + Android SDK (platform 34, build-tools 34.0.0):
+Requires JDK 21 + Android SDK (platform/build-tools 36):
 
 ```bash
 npm run build && npx cap sync android
 cd android
 gradlew.bat assembleDebug        # → android/app/build/outputs/apk/debug/app-debug.apk
+gradlew.bat bundleRelease        # signed, R8-optimized Play Store AAB
 ```
 
 If `android/local.properties` is missing, create it with your SDK path:

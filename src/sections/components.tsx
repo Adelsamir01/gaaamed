@@ -41,7 +41,7 @@ export function LevelBar({ xp, showLabel = true }: { xp: number; showLabel?: boo
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-bold text-emerald-300">المستوى {level}</span>
           <span className="text-[11px] text-muted-foreground tabular-nums">
-            {progress} / {XP_PER_LEVEL} نقطة
+            <bdi className="bidi-number">{progress} / {XP_PER_LEVEL}</bdi> نقطة
           </span>
         </div>
       )}

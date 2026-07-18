@@ -4,7 +4,7 @@
  *  1) identify جديد + عائد (ثبات الهوية بالجهاز)
  *  2) تعارض المعرّفات وصيغتها
  *  3) search_user (مع استبعاد الذات)
- *  4) friend_add ثنائي + حضور online/playing
+ *  4) طلب صداقة يحتاج قبول الطرف الآخر + حضور online/playing بعد القبول
  *  5) DM: إرسال + history + عدّاد غير المقروء + ثبات عبر إعادة تشغيل الخادم
  *  6) جروب من ٣ أعضاء
  *  7) دعوة لعبة تنشئ غرفة وينضم لها الطرفان (الأول slot=1)
@@ -164,12 +164,35 @@ async function main() {
 
   // ===== 4) الأصدقاء + الحضور =====
   console.log('== الأصدقاء والحضور ==')
-  A.send({ type: 'friend_add', userId: idB.user.userId })
-  await A.waitFor((m) => m.type === 'friend_added')
+  A.send({ type: 'friend_request', userId: idB.user.userId })
+  await A.waitFor((m) => m.type === 'friend_request_sent')
+  const pendingAtA = await A.waitFor((m) => m.type === 'friend_requests_update' && m.outgoing?.length === 1)
+  const pendingAtB = await B.waitFor((m) => m.type === 'friend_requests_update' && m.incoming?.length === 1)
+  assert(pendingAtA.outgoing[0].userId === idB.user.userId, 'A: الطلب ظاهر كطلب صداقة مرسل')
+  assert(pendingAtB.incoming[0].userId === idA.user.userId, 'B: استلم طلب الصداقة من A')
+  assert(A.last('friends_update').friends.length === 0 && B.last('friends_update').friends.length === 0, 'لا تنشأ الصداقة قبل موافقة B')
+
+  B.send({ type: 'friend_accept', userId: idA.user.userId })
+  await B.waitFor((m) => m.type === 'friend_accepted' && m.user.userId === idA.user.userId)
+  await A.waitFor((m) => m.type === 'friend_accepted' && m.user.userId === idB.user.userId)
   const updA = await A.waitFor((m) => m.type === 'friends_update' && m.friends.length === 1)
   assert(updA.friends[0].userId === idB.user.userId && updA.friends[0].presence === 'online', 'A: صديق واحد وحضوره online')
   const updB = await B.waitFor((m) => m.type === 'friends_update' && m.friends.length === 1)
-  assert(updB.friends[0].userId === idA.user.userId, 'B: العلاقة ثنائية — A ظهر عند B تلقائيًا')
+  assert(updB.friends[0].userId === idA.user.userId, 'B: العلاقة ثنائية بعد موافقته على الطلب')
+
+  C.send({ type: 'friend_request', userId: idA.user.userId })
+  await C.waitFor((m) => m.type === 'friend_request_sent' && m.user.userId === idA.user.userId)
+  await A.waitFor((m) => m.type === 'friend_requests_update' && m.incoming?.some((u) => u.userId === idC.user.userId))
+  A.send({ type: 'friend_reject', userId: idC.user.userId })
+  await A.waitFor((m) => m.type === 'friend_request_rejected' && m.userId === idC.user.userId)
+  await wait(60)
+  assert(!C.last('friend_requests_update').outgoing.some((u) => u.userId === idA.user.userId), 'A: رفض الطلب يزيله عند C بدون إنشاء صداقة')
+
+  C.send({ type: 'friend_request', userId: idA.user.userId })
+  await C.waitFor((m) => m.type === 'friend_requests_update' && m.outgoing?.some((u) => u.userId === idA.user.userId))
+  C.send({ type: 'friend_request_cancel', userId: idA.user.userId })
+  await wait(60)
+  assert(!A.last('friend_requests_update').incoming.some((u) => u.userId === idC.user.userId), 'C: إلغاء الطلب المرسل يزيله عند A')
 
   // A ينشئ غرفة → حضوره playing عند B
   A.send({ type: 'create', gameId: 'tictactoe', name: 'آدم', avatar: '😎' })
