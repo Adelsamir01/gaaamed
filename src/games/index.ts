@@ -1,21 +1,26 @@
-import type { ComponentType } from 'react'
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 import type { GameCategory, GameConfig, GameResult } from '@/types'
-import TicTacToe from './tictactoe/TicTacToe'
-import MemoryGame from './memory/MemoryGame'
-import TriviaGame from './trivia/TriviaGame'
-import RpsGame from './rps/RpsGame'
-import ReactionGame from './reaction/ReactionGame'
-import OnlineTicTacToe from './online/OnlineTicTacToe'
-import ConnectFour from './online/ConnectFour'
-import OnlineRps from './online/OnlineRps'
-import OnlineReaction from './online/OnlineReaction'
-import Shakhbata from './online/Shakhbata'
-import BankEl7az from './online/bankel7az/App'
+
+// Games are large, independent experiences. Loading them only when selected
+// keeps the home screen fast and avoids retaining every game in memory.
+const TicTacToe = lazy(() => import('./tictactoe/TicTacToe'))
+const MemoryGame = lazy(() => import('./memory/MemoryGame'))
+const TriviaGame = lazy(() => import('./trivia/TriviaGame'))
+const RpsGame = lazy(() => import('./rps/RpsGame'))
+const ReactionGame = lazy(() => import('./reaction/ReactionGame'))
+const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
+const ConnectFour = lazy(() => import('./online/ConnectFour'))
+const OnlineRps = lazy(() => import('./online/OnlineRps'))
+const OnlineReaction = lazy(() => import('./online/OnlineReaction'))
+const Shakhbata = lazy(() => import('./online/Shakhbata'))
+const BankEl7az = lazy(() => import('./online/bankel7az/App'))
 
 export interface GameProps {
   config: GameConfig
   onFinish: (result: GameResult) => void
 }
+
+type GameComponent = LazyExoticComponent<ComponentType<GameProps>>
 
 export interface GameDef {
   id: string
@@ -29,8 +34,8 @@ export interface GameDef {
   difficulties?: boolean
   online?: boolean
   /** نسخة الأونلاين من نفس اللعبة (للألعاب التي تدعم الوضعين) */
-  onlineComponent?: ComponentType<GameProps>
-  component: ComponentType<GameProps>
+  onlineComponent?: GameComponent
+  component: GameComponent
 }
 
 export const GAMES: GameDef[] = [

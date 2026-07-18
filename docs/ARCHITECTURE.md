@@ -70,7 +70,7 @@ Single Node process, `ws` library, port **8787**, no database (rooms in memory).
   - Arabic normalization for answer checking (alef/hamza, taa marbuta, yaa/maqsura, tashkeel).
   - Hints at 35%/65% of the timer (guessers only); scoring formula `30 + remaining/total × 70`, drawer +20 per guesser; timers server-side; leaderboard broadcast at the end.
 
-HTTP endpoints on the same port (static files only, no game logic): `/health` (JSON health), `/api/stats` (بنك الحظ stats), `/` (Arabic landing page from `server/public/`), `/privacy` (privacy policy page), `/dedos.apk` (serves `dedos-debug.apk` from the workspace root when present). Static serving is path-traversal-guarded (strictly inside `server/public/`).
+HTTP endpoints on the same port (static files only, no game logic): `/health` (JSON health), `/api/stats` (بنك الحظ stats), `/` (Arabic landing page from `server/public/`), `/privacy` (privacy policy page), `/dedos.apk` (serves the signed `dedos-release.apk` from the workspace root when present). Static serving is path-traversal-guarded (strictly inside `server/public/`).
 
 ### Why two models?
 

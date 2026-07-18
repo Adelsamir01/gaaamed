@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Coins, RotateCcw, LayoutGrid, Star } from 'lucide-react'
-import confetti from 'canvas-confetti'
 import type { GameResult } from '@/types'
 import { getGame } from '@/games'
 import { sounds } from '@/lib/sounds'
+import { launchConfetti } from '@/lib/confetti'
 
 interface Props {
   result: GameResult
@@ -24,9 +24,9 @@ export default function GameResults({ result, onReplay, onExit, replayLabel = 'Ø
       firedRef.current = true
       sounds.win()
       const colors = ['#10b981', '#f59e0b', '#ffffff', '#14b8a6']
-      confetti({ particleCount: 120, spread: 80, origin: { y: 0.35 }, colors })
-      setTimeout(() => confetti({ particleCount: 70, angle: 60, spread: 60, origin: { x: 0, y: 0.5 }, colors }), 250)
-      setTimeout(() => confetti({ particleCount: 70, angle: 120, spread: 60, origin: { x: 1, y: 0.5 }, colors }), 400)
+      launchConfetti({ particleCount: 120, spread: 80, origin: { y: 0.35 }, colors })
+      setTimeout(() => launchConfetti({ particleCount: 70, angle: 60, spread: 60, origin: { x: 0, y: 0.5 }, colors }), 250)
+      setTimeout(() => launchConfetti({ particleCount: 70, angle: 120, spread: 60, origin: { x: 1, y: 0.5 }, colors }), 400)
     }
   }, [result.outcome])
 

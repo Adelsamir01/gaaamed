@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { Gift, Crown, Flame, ChevronLeft, MessageCircle, UserPlus } from 'lucide-react'
-import confetti from 'canvas-confetti'
 import { useApp } from '@/store/AppContext'
 import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle, CoinChip, LevelBar, SectionTitle, StatusDot } from './components'
@@ -8,6 +7,7 @@ import { GAMES } from '@/games'
 import { levelFromXp } from '@/types'
 import { statusLabel } from '@/data/friends'
 import { sounds } from '@/lib/sounds'
+import { launchConfetti } from '@/lib/confetti'
 import type { TabId } from './TabBar'
 
 interface Props {
@@ -23,7 +23,7 @@ export default function Home({ goTab, openGame, openChat }: Props) {
   const claim = () => {
     if (claimDailyReward()) {
       sounds.win()
-      confetti({ particleCount: 90, spread: 75, origin: { y: 0.3 }, colors: ['#10b981', '#f59e0b', '#ffffff'] })
+      launchConfetti({ particleCount: 90, spread: 75, origin: { y: 0.3 }, colors: ['#10b981', '#f59e0b', '#ffffff'] })
     }
   }
 

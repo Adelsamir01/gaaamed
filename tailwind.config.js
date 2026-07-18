@@ -1,7 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  // Scan only production-reachable UI. The repository also keeps a complete
+  // component catalogue whose unused utility classes should not ship.
+  content: [
+    './index.html',
+    './src/{App,main}.{ts,tsx}',
+    './src/{data,games,lib,online,sections,store,types}/**/*.{ts,tsx}',
+    './src/components/ui/{alert-dialog,button,dialog,switch}.tsx',
+  ],
   theme: {
     extend: {
       colors: {

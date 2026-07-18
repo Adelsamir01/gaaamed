@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { Toaster } from 'sonner'
@@ -6,18 +6,32 @@ import { AppProvider, useApp } from '@/store/AppContext'
 import { OnlineProvider, useOnline } from '@/online/OnlineContext'
 import type { GameConfig, GameResult } from '@/types'
 import { getGame } from '@/games'
-import Onboarding from '@/sections/Onboarding'
-import Home from '@/sections/Home'
-import Games from '@/sections/Games'
-import GameLobby from '@/sections/GameLobby'
-import GameResults from '@/sections/GameResults'
-import OnlineLobby from '@/sections/OnlineLobby'
-import Chat from '@/sections/Chat'
-import ChatRoom from '@/sections/ChatRoom'
-import Friends from '@/sections/Friends'
-import Profile from '@/sections/Profile'
 import { TabBar, type TabId } from '@/sections/TabBar'
 import { sounds } from '@/lib/sounds'
+
+// Only the shell and active screen are needed at startup. The rest are fetched
+// from the local app bundle on demand, reducing parse time and peak JS memory.
+const Onboarding = lazy(() => import('@/sections/Onboarding'))
+const Home = lazy(() => import('@/sections/Home'))
+const Games = lazy(() => import('@/sections/Games'))
+const GameLobby = lazy(() => import('@/sections/GameLobby'))
+const GameResults = lazy(() => import('@/sections/GameResults'))
+const OnlineLobby = lazy(() => import('@/sections/OnlineLobby'))
+const Chat = lazy(() => import('@/sections/Chat'))
+const ChatRoom = lazy(() => import('@/sections/ChatRoom'))
+const Friends = lazy(() => import('@/sections/Friends'))
+const Profile = lazy(() => import('@/sections/Profile'))
+
+function AppLoader() {
+  return (
+    <div className="min-h-dvh grid place-items-center bg-background text-foreground" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-10 w-10 rounded-full border-4 border-emerald-400/25 border-t-emerald-400 animate-spin" />
+        <span className="text-sm font-bold text-muted-foreground">جارٍ التحميل…</span>
+      </div>
+    </div>
+  )
+}
 
 type View =
   | { kind: 'tabs' }
@@ -182,7 +196,9 @@ export default function App() {
   return (
     <AppProvider>
       <OnlineProvider>
-        <Shell />
+        <Suspense fallback={<AppLoader />}>
+          <Shell />
+        </Suspense>
       </OnlineProvider>
       <Toaster position="top-center" richColors dir="rtl" toastOptions={{ style: { fontFamily: 'Cairo, sans-serif' } }} />
     </AppProvider>

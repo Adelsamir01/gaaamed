@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Crown, Eraser, Pen, Send, Trash2, Undo2 } from 'lucide-react'
-import confetti from 'canvas-confetti'
 import type { GameProps } from '@/games'
 import { useOnline } from '@/online/OnlineContext'
 import type { ServerMessage } from '@/online/client'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
+import { launchConfetti } from '@/lib/confetti'
 import { AvatarCircle } from '@/sections/components'
 
 const COLORS = ['#111827', '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e', '#78350f', '#b45309', '#52525b', '#6b7280']
@@ -461,9 +461,9 @@ export default function Shakhbata({ onFinish }: GameProps) {
     if (status === 'ended' && myRank === 1 && !finishedRef.current) {
       sounds.win()
       const colors = ['#10b981', '#f59e0b', '#ffffff', '#14b8a6']
-      confetti({ particleCount: 140, spread: 85, origin: { y: 0.3 }, colors })
-      setTimeout(() => confetti({ particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.5 }, colors }), 300)
-      setTimeout(() => confetti({ particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.5 }, colors }), 500)
+      launchConfetti({ particleCount: 140, spread: 85, origin: { y: 0.3 }, colors })
+      setTimeout(() => launchConfetti({ particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.5 }, colors }), 300)
+      setTimeout(() => launchConfetti({ particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.5 }, colors }), 500)
     }
   }, [status, myRank])
 

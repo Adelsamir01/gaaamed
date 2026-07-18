@@ -54,7 +54,7 @@ const MATCH_SIZE = 2
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC_DIR = path.resolve(SERVER_DIR, 'public')
 // ملف الـ APK يعيش في جذر مساحة العمل (الأب المباشر لمجلد server/)
-const APK_PATH = path.resolve(SERVER_DIR, '..', 'dedos-debug.apk')
+const APK_PATH = path.resolve(SERVER_DIR, '..', 'dedos-release.apk')
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -72,8 +72,28 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj))
 }
 
-function sendFile(res, filePath, contentType) {
-  res.writeHead(200, { 'content-type': contentType })
+function sendFile(req, res, filePath, contentType, { cacheControl = 'no-cache', downloadName } = {}) {
+  const stat = fs.statSync(filePath)
+  const etag = `W/"${stat.size}-${Math.trunc(stat.mtimeMs)}"`
+  const headers = {
+    'content-type': contentType,
+    'content-length': stat.size,
+    'last-modified': stat.mtime.toUTCString(),
+    'cache-control': cacheControl,
+    etag,
+    'x-content-type-options': 'nosniff',
+  }
+  if (downloadName) headers['content-disposition'] = `attachment; filename="${downloadName}"`
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { etag, 'cache-control': cacheControl })
+    res.end()
+    return
+  }
+  res.writeHead(200, headers)
+  if (req.method === 'HEAD') {
+    res.end()
+    return
+  }
   const stream = fs.createReadStream(filePath)
   stream.on('error', () => {
     if (!res.headersSent) sendJson(res, 404, { error: 'not_found' })
@@ -99,10 +119,13 @@ const httpServer = createServer((req, res) => {
     return
   }
 
-  // ‎/dedos.apk ← يقدّم dedos-debug.apk من جذر مساحة العمل إن وُجد
+  // ‎/dedos.apk ← يقدّم أحدث APK موقّع للإصدار من جذر مساحة العمل إن وُجد
   if (url === '/dedos.apk') {
     if (fs.existsSync(APK_PATH)) {
-      sendFile(res, APK_PATH, MIME_TYPES['.apk'])
+      sendFile(req, res, APK_PATH, MIME_TYPES['.apk'], {
+        cacheControl: 'no-cache',
+        downloadName: 'dedos-1.1.0.apk',
+      })
     } else {
       sendJson(res, 404, { error: 'apk_not_available', message: 'ملف APK غير متوفر حاليًا — حمّل التطبيق من Google Play.' })
     }
@@ -133,7 +156,10 @@ const httpServer = createServer((req, res) => {
   }
   if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
     const contentType = MIME_TYPES[path.extname(resolved).toLowerCase()] || 'application/octet-stream'
-    sendFile(res, resolved, contentType)
+    const isHtml = path.extname(resolved).toLowerCase() === '.html'
+    sendFile(req, res, resolved, contentType, {
+      cacheControl: isHtml ? 'no-cache' : 'public, max-age=86400',
+    })
     return
   }
 

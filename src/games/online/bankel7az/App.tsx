@@ -1007,7 +1007,7 @@ function GameBoard({
             {tile.kind === "property" && <span className="property-band" />}
             <span className="tile-name">{tile.shortName}</span>
             {flagSrc ? (
-              <img className="tile-flag" src={flagSrc} alt="" draggable={false} />
+              <img className="tile-flag" src={flagSrc} alt="" draggable={false} decoding="async" />
             ) : (
               <span className="tile-symbol">{tileIcon(tile)}</span>
             )}
@@ -1656,7 +1656,7 @@ function TilePanel({
         <CircleDollarSign size={17} />
         {tile.shortName}
       </h2>
-      {flagSrc && <img className="tile-panel-flag" src={flagSrc} alt={`علم ${tile.name}`} draggable={false} />}
+      {flagSrc && <img className="tile-panel-flag" src={flagSrc} alt={`علم ${tile.name}`} draggable={false} decoding="async" />}
       <p>{tile.description}</p>
       {isOwnableTile(tile) && (
         <dl>

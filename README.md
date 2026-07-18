@@ -176,7 +176,7 @@ The same Node server also serves a small public website from `server/public/` (s
 |---|---|
 | `/` | Arabic RTL landing page (`server/public/index.html`) — hero, game cards, download buttons |
 | `/privacy` | Privacy policy page (`server/public/privacy.html`, Arabic + English) — the public URL Play Console requires |
-| `/dedos.apk` | Direct APK download — serves `dedos-debug.apk` from the workspace root when it exists, otherwise a friendly JSON 404 |
+| `/dedos.apk` | Direct APK download — serves the signed `dedos-release.apk` from the workspace root when it exists, otherwise a friendly JSON 404 |
 | `/health` | JSON health check |
 | `/api/stats` | بنك الحظ stats snapshot (JSON, CORS `*`) |
 

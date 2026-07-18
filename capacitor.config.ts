@@ -5,8 +5,7 @@ const config: CapacitorConfig = {
   appName: 'ديدوس',
   webDir: 'dist',
   server: {
-    androidScheme: 'http',
-    allowMixedContent: true,
+    androidScheme: 'https',
   },
 };
 
