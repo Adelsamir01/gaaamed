@@ -979,6 +979,7 @@ function GameBoard({
   const diceDelayMs = getPlaybackDelayMs(state.updatedAt, clockOffsetMs);
   const messageDelayMs = getMessageDelayMs(state, clockOffsetMs);
   const displayedPositions = useAnimatedPlayerPositions(state.players, state.updatedAt, clockOffsetMs);
+  const turnPlayer = state.players.find((player) => player.id === state.currentPlayerId) ?? null;
 
   return (
     <div className="board" aria-label="لوحة بنك الحظ">
@@ -1043,22 +1044,28 @@ function GameBoard({
       })}
 
       <div className="board-center">
-        {state.lastRoll && (
-          <DiceShowcase
-            roll={state.lastRoll}
-            latestEntryId={latestEntry?.id ?? "بداية"}
-            animationDelayMs={diceDelayMs}
-          />
-        )}
-        {latestEntry && (
-          <div
-            key={latestEntry.id}
-            className={`board-toast ${isRentAlert ? "money-toast" : ""}`}
-            style={{ animationDelay: `${messageDelayMs}ms` }}
-          >
-            <strong>{latestEntry.message}</strong>
-          </div>
-        )}
+        <div className="board-center-heading">
+          <span>🏦 بنك الحظ</span>
+          <small>{state.status === "finished" ? "الماتش خلص" : turnPlayer ? `الدور على ${turnPlayer.name}` : "لفّ مصر واكسب"}</small>
+        </div>
+        <div className="board-event-stage" aria-live="polite">
+          {state.lastRoll && (
+            <DiceShowcase
+              roll={state.lastRoll}
+              latestEntryId={latestEntry?.id ?? "بداية"}
+              animationDelayMs={diceDelayMs}
+            />
+          )}
+          {latestEntry && (
+            <div
+              key={latestEntry.id}
+              className={`board-toast ${isRentAlert ? "money-toast" : ""}`}
+              style={{ animationDelay: `${messageDelayMs}ms` }}
+            >
+              <strong>{latestEntry.message}</strong>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

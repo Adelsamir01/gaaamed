@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Crown, Eraser, Pen, Send, Trash2, Undo2 } from 'lucide-react'
+import { Check, Crown, Eraser, Palette, Pen, Send, Trash2, Undo2 } from 'lucide-react'
 import type { GameProps } from '@/games'
 import { useOnline } from '@/online/OnlineContext'
 import type { ServerMessage } from '@/online/client'
@@ -178,6 +178,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen')
   const [color, setColor] = useState('#111827')
   const [size, setSize] = useState(8)
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chatRef = useRef<HTMLDivElement>(null)
@@ -699,19 +700,42 @@ export default function Shakhbata({ onFinish }: GameProps) {
           onPointerCancel={endStroke}
         />
 
-        {/* ===== مرسى أدوات الرسام العائم ===== */}
+        {/* ===== زر أدوات ثابت + لوحة تُفتح عند الحاجة حتى تفضل مساحة الرسم واضحة ===== */}
+        {canDraw && (
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setToolsOpen((open) => !open)}
+            className={cn(
+              'absolute bottom-3 end-3 z-30 w-11 h-11 rounded-2xl grid place-items-center border shadow-[0_10px_28px_rgba(2,6,23,0.48)] backdrop-blur-xl transition-colors',
+              toolsOpen
+                ? 'bg-emerald-500 text-white border-emerald-300/80'
+                : 'bg-slate-950/80 text-emerald-300 border-white/20 hover:bg-slate-900/90',
+            )}
+            aria-expanded={toolsOpen}
+            aria-controls="shakhbata-drawing-tools"
+            aria-label={toolsOpen ? 'إخفاء أدوات الرسم' : 'إظهار أدوات الرسم'}
+            title={toolsOpen ? 'إخفاء أدوات الرسم' : 'إظهار أدوات الرسم'}
+          >
+            <Palette className="w-5 h-5" />
+          </motion.button>
+        )}
+
         <AnimatePresence>
-          {canDraw && (
+          {canDraw && toolsOpen && (
             <motion.div
+              id="shakhbata-drawing-tools"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 20, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className="absolute bottom-2 inset-x-2 z-20 glass-strong rounded-2xl border-white/20 shadow-[0_10px_36px_rgba(2,6,23,0.5)] p-2 flex flex-col gap-1.5"
+              className="absolute bottom-16 inset-x-2 z-20 glass-strong rounded-2xl border-white/20 shadow-[0_10px_36px_rgba(2,6,23,0.5)] p-2 flex flex-col gap-1.5"
             >
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={() => setTool('pen')}
+                  aria-label="قلم الرسم"
                   className={cn(
                     'w-8 h-8 rounded-xl grid place-items-center border transition-all',
                     tool === 'pen'
@@ -722,7 +746,9 @@ export default function Shakhbata({ onFinish }: GameProps) {
                   <Pen className="w-4 h-4" style={{ color: tool === 'pen' ? color : undefined }} />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setTool('eraser')}
+                  aria-label="الممحاة"
                   className={cn(
                     'w-8 h-8 rounded-xl grid place-items-center border transition-all',
                     tool === 'eraser'
@@ -732,17 +758,19 @@ export default function Shakhbata({ onFinish }: GameProps) {
                 >
                   <Eraser className="w-4 h-4" />
                 </button>
-                <button onClick={undoStroke} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-slate-300 hover:bg-white/10 transition-all">
+                <button type="button" onClick={undoStroke} aria-label="تراجع عن آخر خط" className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-slate-300 hover:bg-white/10 transition-all">
                   <Undo2 className="w-4 h-4" />
                 </button>
-                <button onClick={clearAll} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 grid place-items-center hover:bg-red-500/15 transition-all">
+                <button type="button" onClick={clearAll} aria-label="مسح الرسمة كلها" className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 grid place-items-center hover:bg-red-500/15 transition-all">
                   <Trash2 className="w-4 h-4 text-red-400" />
                 </button>
                 <span className="w-px h-5 bg-white/15 mx-0.5" />
                 {SIZES.map((s) => (
                   <button
+                    type="button"
                     key={s}
                     onClick={() => setSize(s)}
+                    aria-label={`حجم القلم ${s}`}
                     className={cn(
                       'flex-1 h-8 rounded-xl grid place-items-center border transition-all',
                       size === s ? 'border-emerald-400/70 bg-emerald-500/15' : 'border-white/10 bg-white/5 hover:bg-white/10',
@@ -763,6 +791,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
               <div className="grid grid-cols-9 gap-1.5">
                 {COLORS.map((c) => (
                   <button
+                    type="button"
                     key={c}
                     onClick={() => {
                       setColor(c)
@@ -773,6 +802,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
                       color === c && tool === 'pen' ? 'ring-2 ring-white ring-offset-2 ring-offset-[#111a2e] scale-110' : 'hover:scale-110',
                     )}
                     style={{ background: c }}
+                    aria-label={`اختيار اللون ${c}`}
                   />
                 ))}
               </div>

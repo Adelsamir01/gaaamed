@@ -2589,6 +2589,137 @@
   }
 }
 
+/* ===== Board readability and collision-free centre layout ===== */
+.bank-el7az-root .board-first-shell .board {
+  gap: 1px;
+  padding: 1px;
+}
+
+.bank-el7az-root .board-first-shell .board-center {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  justify-items: center;
+  gap: clamp(0.35rem, 1.2vmin, 0.7rem);
+  padding: clamp(0.55rem, 1.5vmin, 1rem) clamp(0.7rem, 2vmin, 1.4rem)
+    clamp(7.2rem, 20dvh, 10rem);
+}
+
+.bank-el7az-root .board-center-heading {
+  z-index: 3;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  gap: 0.05rem;
+  padding: 0.38rem 1rem;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 999px;
+  background: rgba(9, 14, 26, 0.66);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.bank-el7az-root .board-center-heading span {
+  color: #fde68a;
+  font-size: clamp(0.9rem, 1.8vmin, 1.25rem);
+  line-height: 1.1;
+  font-weight: 950;
+}
+
+.bank-el7az-root .board-center-heading small {
+  color: #cbd5e1;
+  font-size: clamp(0.58rem, 1.15vmin, 0.76rem);
+  line-height: 1.1;
+  font-weight: 850;
+}
+
+.bank-el7az-root .board-event-stage {
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(0.28rem, 1vmin, 0.58rem);
+}
+
+.bank-el7az-root .board-event-stage .board-toast {
+  width: min(92%, 620px);
+  padding-inline: 0.65rem;
+}
+
+.bank-el7az-root .board-info-dock {
+  top: auto;
+  bottom: calc(var(--board-tile-height) + var(--board-inner-gap));
+  max-height: min(330px, calc((100% - (var(--board-tile-height) * 2) - (var(--board-inner-gap) * 2)) * 0.52));
+}
+
+.bank-el7az-root .board-first-shell .property-band {
+  height: 11px;
+}
+
+.bank-el7az-root .board-first-shell .tile-name {
+  top: 12px;
+  min-height: 21px;
+  font-size: clamp(0.84rem, 1.62vmin, 1.12rem);
+}
+
+.bank-el7az-root .board-first-shell .token.mini.car-token {
+  width: clamp(28px, 4.6vmin, 42px);
+  height: clamp(21px, 3.45vmin, 31px);
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .bank-el7az-root .board-first-shell .board-center {
+    gap: 0.25rem;
+    padding: 0.34rem 0.5rem clamp(5.8rem, 28dvh, 7rem);
+  }
+
+  .bank-el7az-root .board-center-heading {
+    min-height: 32px;
+    padding: 0.24rem 0.72rem;
+  }
+
+  .bank-el7az-root .board-center-heading span {
+    font-size: 0.78rem;
+  }
+
+  .bank-el7az-root .board-center-heading small {
+    font-size: 0.56rem;
+  }
+
+  .bank-el7az-root .board-event-stage {
+    gap: 0.2rem;
+  }
+
+  .bank-el7az-root .board-event-stage .board-toast > strong,
+  .bank-el7az-root .board-event-stage .board-toast.money-toast > strong {
+    font-size: clamp(0.76rem, 2.2vmin, 0.94rem);
+    line-height: 1.25;
+  }
+
+  .bank-el7az-root .board-info-dock {
+    max-height: min(176px, calc((100% - (var(--board-tile-height) * 2) - (var(--board-inner-gap) * 2)) * 0.54));
+  }
+
+  .bank-el7az-root .board-first-shell .property-band {
+    height: 7px;
+  }
+
+  .bank-el7az-root .board-first-shell .tile-name {
+    top: 7px;
+    min-height: 17px;
+    font-size: clamp(0.66rem, 1.9vmin, 0.84rem);
+  }
+
+  .bank-el7az-root .board-first-shell .token.mini.car-token {
+    width: clamp(24px, 5.2vmin, 34px);
+    height: clamp(18px, 3.9vmin, 25px);
+  }
+}
+
 
 
 /* ===== غرفة انتظار بنك الحظ بهوية ديدوس (نفس لغة بقية ألعاب الأونلاين) ===== */

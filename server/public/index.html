@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ديدوس — العب ودردش مع أصحابك</title>
-<meta name="description" content="ديدوس — منصة ألعاب جماعية عربية: العب أونلاين مع أصحابك، دردش، وتحدَّهم في ٦ ألعاب ممتعة.">
+<title>ديدوس — اللعب يحلى باللّمّة</title>
+<meta name="description" content="ديدوس — لمّ الشِلّة والعبوا سوا بالمصري: شخبطة، بنك الحظ، إكس أو، شات وماتشات أونلاين.">
 <link rel="icon" type="image/png" href="assets/preview-tile-512.png">
 <style>
   :root {
@@ -145,6 +145,149 @@
   }
   footer a { color: var(--emerald-light); text-decoration: none; }
   footer a:hover { text-decoration: underline; }
+
+  /* ---------- روح مصرية: ليل النيل + أنوار القهوة + ورق لعب دافي ---------- */
+  :root {
+    --bg: #071722;
+    --bg-soft: #102535;
+    --card: rgba(255, 248, 226, 0.075);
+    --card-border: rgba(255, 232, 161, 0.16);
+    --emerald: #12a594;
+    --teal: #18b8a4;
+    --emerald-light: #57dec8;
+    --sun: #ffc83d;
+    --coral: #f05d4e;
+    --papyrus: #fff4d6;
+    --text: #fff9e9;
+    --muted: #b7c8c9;
+  }
+  body {
+    background:
+      linear-gradient(90deg, var(--coral) 0 33.333%, var(--sun) 33.333% 66.666%, var(--teal) 66.666%) top / 100% 6px no-repeat,
+      var(--bg);
+  }
+  .glow {
+    background:
+      radial-gradient(650px 420px at 90% 3%, rgba(255, 200, 61, 0.2), transparent 65%),
+      radial-gradient(720px 500px at 3% 34%, rgba(240, 93, 78, 0.13), transparent 66%),
+      radial-gradient(620px 500px at 70% 100%, rgba(24, 184, 164, 0.17), transparent 62%);
+  }
+  .glow::after {
+    content: "";
+    position: absolute; inset: 0;
+    opacity: 0.14;
+    background-image:
+      linear-gradient(30deg, transparent 48%, rgba(255,255,255,.12) 49% 51%, transparent 52%),
+      linear-gradient(-30deg, transparent 48%, rgba(255,255,255,.08) 49% 51%, transparent 52%);
+    background-size: 52px 30px;
+    mask-image: linear-gradient(to bottom, black, transparent 58%);
+  }
+  .wrap { max-width: 1120px; padding-inline: clamp(16px, 4vw, 34px); }
+  header {
+    position: sticky; top: 12px; z-index: 20;
+    margin-top: 14px; padding: 10px 14px;
+    border: 1px solid rgba(255,255,255,.1); border-radius: 22px;
+    background: rgba(7, 23, 34, 0.78); backdrop-filter: blur(16px);
+    box-shadow: 0 14px 38px rgba(0,0,0,.22);
+  }
+  .brand { gap: 10px; }
+  .brand::after {
+    content: "من مصر للشِلّة 🇪🇬";
+    color: #092129; background: var(--sun); border-radius: 999px;
+    padding: 3px 9px; font-size: .68rem; font-weight: 900;
+    transform: rotate(-2deg);
+  }
+  .brand img { box-shadow: 0 5px 18px rgba(24,184,164,.35); }
+  nav a { color: #d8e5df; font-weight: 750; }
+  nav a:hover { color: var(--sun); }
+  .hero {
+    position: relative; isolation: isolate; overflow: hidden;
+    margin-top: 34px; padding: clamp(44px, 7vw, 76px) 24px 52px;
+    border: 1px solid rgba(255, 224, 129, .2); border-radius: 38px;
+    background:
+      radial-gradient(circle at 50% -10%, rgba(255,200,61,.2), transparent 42%),
+      linear-gradient(145deg, rgba(255,244,214,.1), rgba(18,165,148,.08));
+    box-shadow: 0 32px 90px rgba(0,0,0,.3);
+  }
+  .hero::before {
+    content: "يا مساء اللعب!";
+    position: absolute; top: 24px; inset-inline-start: clamp(16px, 5vw, 60px);
+    z-index: -1; padding: 7px 13px; border-radius: 13px;
+    background: var(--coral); color: #fff; font-size: .78rem; font-weight: 900;
+    transform: rotate(5deg); box-shadow: 0 8px 0 rgba(0,0,0,.13);
+  }
+  .hero::after {
+    content: "قعدة • ضحك • تحدّي";
+    position: absolute; bottom: 16px; inset-inline-end: 24px;
+    color: rgba(255,244,214,.32); font-size: .76rem; font-weight: 900;
+    letter-spacing: .06em;
+  }
+  .hero .tile { width: 116px; height: 116px; border-radius: 28px; margin-bottom: 18px; }
+  .egypt-kicker {
+    display: inline-flex; align-items: center; gap: 7px;
+    margin-bottom: 5px; padding: 6px 13px; border-radius: 999px;
+    background: rgba(255,200,61,.12); border: 1px solid rgba(255,200,61,.28);
+    color: #ffe59a; font-size: .82rem; font-weight: 850;
+  }
+  .hero h1 {
+    background: linear-gradient(120deg, #fff4c5, var(--sun) 48%, #55ddc8 90%);
+    -webkit-background-clip: text; background-clip: text;
+  }
+  .hero .tagline { font-size: clamp(1.25rem, 3.6vw, 1.75rem); }
+  .hero .sub { max-width: 650px; color: #cbd9d6; font-size: 1.06rem; }
+  .hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
+  .hero-chips span {
+    padding: 7px 12px; border-radius: 999px;
+    background: rgba(7,23,34,.58); border: 1px solid rgba(255,255,255,.11);
+    color: #edf7f2; font-size: .8rem; font-weight: 800;
+  }
+  .download {
+    width: min(900px, 94%); margin: 18px auto 0; padding: 22px 18px;
+    border-radius: 25px; background: rgba(4,15,24,.54); border: 1px solid rgba(255,255,255,.08);
+  }
+  .badge { border-radius: 16px; min-height: 62px; }
+  .badge.apk { background: linear-gradient(120deg, var(--sun), #ffdf76); color: #2e2302; }
+  .badge.apk .txt small { color: rgba(46,35,2,.72); }
+  .badge.apk:hover { box-shadow: 0 12px 34px rgba(255,200,61,.3); }
+  .section-title { color: var(--papyrus); font-size: clamp(1.65rem, 4vw, 2.2rem); }
+  .section-sub { color: #aebfbe; }
+  .games { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .game {
+    position: relative; overflow: hidden; min-height: 190px;
+    display: grid; align-content: center;
+    border-radius: 24px; background: linear-gradient(150deg, rgba(255,248,226,.09), rgba(255,255,255,.035));
+    box-shadow: 0 16px 40px rgba(0,0,0,.18);
+  }
+  .game::before { content: ""; position: absolute; inset: 0 0 auto; height: 5px; background: var(--sun); }
+  .game:nth-child(3n+2)::before { background: var(--coral); }
+  .game:nth-child(3n)::before { background: var(--teal); }
+  .game .emoji { filter: drop-shadow(0 8px 12px rgba(0,0,0,.25)); }
+  .game h3 { color: #fff4d6; }
+  .feat {
+    border-radius: 20px; padding: 20px;
+    background: rgba(255,248,226,.06); border-color: rgba(255,224,129,.13);
+  }
+  .feat .ic {
+    width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center;
+    border-radius: 14px; background: rgba(255,200,61,.12);
+  }
+  .feat h4 { color: #fff2c7; font-weight: 850; }
+  footer { color: #aebfbe; }
+  footer a { color: #71e5d2; }
+  @media (max-width: 760px) {
+    header { top: 8px; }
+    .brand::after { display: none; }
+    nav a { margin-inline-start: 10px; font-size: .8rem; }
+    .hero { margin-top: 22px; border-radius: 28px; padding-inline: 16px; }
+    .games { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 480px) {
+    .brand { font-size: 1.05rem; }
+    .brand img { width: 38px; height: 38px; }
+    nav a:first-child { display: none; }
+    .games { grid-template-columns: 1fr; }
+    .game { min-height: 165px; }
+  }
 </style>
 </head>
 <body>
@@ -157,8 +300,8 @@
       <span>ديدوس</span>
     </div>
     <nav>
-      <a href="#games">الألعاب</a>
-      <a href="#download">التحميل</a>
+      <a href="#games">اللعب</a>
+      <a href="#download">نزّلها</a>
       <a href="/privacy">الخصوصية</a>
     </nav>
   </header>
@@ -166,9 +309,13 @@
   <!-- ======= البطل ======= -->
   <section class="hero">
     <img class="tile" src="assets/preview-tile-512.png" alt="بلاطة ديدوس د">
+    <p class="egypt-kicker">🎲 لعبة الشِلّة على أصولها</p>
     <h1>ديدوس</h1>
-    <p class="tagline">العب ودردش مع أصحابك 🎮</p>
-    <p class="sub">منصة ألعاب جماعية عربية بالكامل — غرف خاصة برمز، دردشة حقيقية مع الأصدقاء، دعوات لعب بلمسة واحدة، ومباريات سريعة أونلاين. بدون إعلانات، بدون تتبع.</p>
+    <p class="tagline">اللعب يحلى باللّمّة 🇪🇬</p>
+    <p class="sub">لمّ الشِلّة وافتحوا أوضة في ثواني: شخبطة، بنك الحظ، إكس أو، شات وهري وماتشات سريعة. من غير إعلانات تقطع القعدة ولا تسجيل يوجّع الدماغ.</p>
+    <div class="hero-chips" aria-label="مميزات سريعة">
+      <span>🔢 أوضة برقم</span><span>💬 شات بجد</span><span>⚡ ماتش سريع</span><span>🎁 مكافأة كل يوم</span>
+    </div>
   </section>
 
   <!-- ======= التحميل ======= -->
@@ -202,99 +349,99 @@
         </span>
       </a>
     </div>
-    <p class="soon-note">أندرويد ٨+ • مجاني بالكامل • بدون مشتريات داخلية</p>
+    <p class="soon-note">شغّالة من أندرويد ٨ • ببلاش خالص • مفيش مشتريات مستخبية</p>
   </section>
 
   <!-- ======= الألعاب ======= -->
   <section id="games">
-    <h2 class="section-title">٦ ألعاب… وسوالف ما تخلص</h2>
-    <p class="section-sub">كلها أونلاين مع أصحابك، وبعضها ينلعب أوفلاين ضد الكمبيوتر أو لاعبَين على نفس الجهاز.</p>
+    <h2 class="section-title">اختار لعبتك… والباقي ضحك وهري</h2>
+    <p class="section-sub">العبوا أونلاين سوا، أو اقعدوا جنب بعض والعبوا على نفس الموبايل.</p>
     <div class="games">
       <div class="game">
         <span class="emoji">⭕</span>
         <h3>إكس أو</h3>
-        <p>الكلاسيكية الخالدة — أونلاين أو ضد بوت بثلاث صعوبات.</p>
+        <p>الكلاسيكية اللي عمرها ما بتبطل — أونلاين أو ضد الكمبيوتر.</p>
       </div>
       <div class="game">
         <span class="emoji">🔴</span>
         <h3>أربعة تربح</h3>
-        <p>أسقط الأقراص ووصّل أربعة قبل خصمك.</p>
+        <p>رصّ أربعة قبل صاحبك وخليه يقول لك كانت غلطة.</p>
       </div>
       <div class="game">
         <span class="emoji">✂️</span>
         <h3>حجر ورقة مقص</h3>
-        <p>أفضل من ٥ جولات — اختيارات سرية تُكشف معًا.</p>
+        <p>اختار في سرك… والحركة تتكشف للاتنين في نفس اللحظة.</p>
       </div>
       <div class="game">
         <span class="emoji">⚡</span>
         <h3>سرعة البرق</h3>
-        <p>سباق ردّة فعل — مين يضغط أول؟ الخادم يحسم.</p>
+        <p>مين إيده أسرع؟ دوس في الوقت الصح والسيرفر يحكم.</p>
       </div>
       <div class="game">
         <span class="emoji">🎨</span>
         <h3>شخبطة</h3>
-        <p>ارسم وخمّن — حتى ٨ لاعبين، ٤٢٠ كلمة عربية، وتلميحات حروف.</p>
+        <p>ارسم أي حاجة والشِلّة تخمّن — لحد ٨ لاعبين و٤٢٠ كلمة.</p>
       </div>
       <div class="game">
         <span class="emoji">🏦</span>
         <h3>بنك الحظ</h3>
-        <p>مونوبولي مصرية: نرد، عقارات، إيجار، سجن وكروت حظ — حتى ٦ لاعبين.</p>
+        <p>لفّ مصر، اشتري محافظات، لمّ الإيجار وابعت صحابك الحجز.</p>
       </div>
     </div>
   </section>
 
   <!-- ======= ميزات المنصة ======= -->
   <section>
-    <h2 class="section-title">أكثر من مجرد ألعاب</h2>
-    <p class="section-sub">ديدوس ساحة اجتماعية كاملة بالعربية.</p>
+    <h2 class="section-title">كل اللي اللّمّة محتاجاه</h2>
+    <p class="section-sub">اللعبة والشات والدعوة في مكان واحد، من غير فذلكة.</p>
     <div class="features">
       <div class="feat">
         <span class="ic">💬</span>
         <div>
           <h4>دردشة حقيقية</h4>
-          <p>رسائل خاصة ومجموعات، سجل محفوظ، وإشعارات غير المقروء.</p>
+          <p>خاص وجروبات، والرسائل محفوظة لحد ما الشِلّة ترجع.</p>
         </div>
       </div>
       <div class="feat">
         <span class="ic">🎫</span>
         <div>
           <h4>غرف برمز من ٤ أرقام</h4>
-          <p>أنشئ غرفة وشارك الرمز — أو أرسل دعوة داخل الدردشة بلمسة واحدة.</p>
+          <p>افتح أوضة وابعت الأربع أرقام — أو ادعي صاحبك من الشات.</p>
         </div>
       </div>
       <div class="feat">
         <span class="ic">⚡</span>
         <div>
           <h4>مباراة سريعة</h4>
-          <p>زر واحد يقرنك بلاعب عشوائي ينتظر نفس اللعبة.</p>
+          <p>مستعجل؟ دوس مرة ونجيب لك حد جاهز لنفس اللعبة.</p>
         </div>
       </div>
       <div class="feat">
         <span class="ic">🪙</span>
         <div>
           <h4>عملات ومستويات</h4>
-          <p>مكافأة يومية، نقاط خبرة XP، ومستويات تكشف تقدّمك.</p>
+          <p>ادخل كل يوم وخد مكافأتك، واجمع خبرة واطلع مستويات.</p>
         </div>
       </div>
       <div class="feat">
         <span class="ic">👥</span>
         <div>
           <h4>أصدقاء وحضور</h4>
-          <p>أضف أصدقاءك بمعرّف @، وشاهد مين متصل الآن.</p>
+          <p>ابعت طلب صداقة، وهو يقبله، واعرف مين صاحي للعب.</p>
         </div>
       </div>
       <div class="feat">
         <span class="ic">🔒</span>
         <div>
           <h4>خصوصية أولًا</h4>
-          <p>بدون إعلانات ولا تحليلات ولا تتبع — اتصال مشفّر بالكامل.</p>
+          <p>لا إعلانات رخمة ولا تتبّع — القعدة بتاعتكم إنتوا.</p>
         </div>
       </div>
     </div>
   </section>
 
   <footer>
-    <p>ديدوس © ٢٠٢٥ — صُنع بحب للسوالف واللعب الجماعي 💚</p>
+    <p>ديدوس © ٢٠٢٦ — متظبّطة في مصر عشان لَمّة الصحاب 💛</p>
     <p><a href="/privacy">سياسة الخصوصية</a> · <a href="/health">حالة الخادم</a></p>
   </footer>
 

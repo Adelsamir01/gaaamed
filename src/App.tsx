@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { AppProvider, useApp } from '@/store/AppContext'
@@ -47,15 +47,24 @@ function Shell() {
   const [view, setView] = useState<View>({ kind: 'tabs' })
   const [chatRoomId, setChatRoomId] = useState<string | null>(null)
   const tabHistoryRef = useRef<TabId[]>([])
+  const activeTabRef = useRef<TabId>('home')
+  const tabScrollRef = useRef<Record<TabId, number>>({ home: 0, games: 0, chat: 0, friends: 0, profile: 0 })
 
-  const changeTab = useCallback((nextTab: TabId) => {
-    setTab((currentTab) => {
-      if (currentTab !== nextTab) {
-        tabHistoryRef.current = [...tabHistoryRef.current, currentTab].slice(-12)
-      }
-      return nextTab
-    })
+  const activateTab = useCallback((nextTab: TabId, rememberHistory = true) => {
+    const currentTab = activeTabRef.current
+    if (currentTab === nextTab) return
+
+    tabScrollRef.current[currentTab] = window.scrollY
+    if (rememberHistory) {
+      tabHistoryRef.current = [...tabHistoryRef.current, currentTab].slice(-12)
+    }
+
+    activeTabRef.current = nextTab
+    setTab(nextTab)
+    requestAnimationFrame(() => window.scrollTo({ top: tabScrollRef.current[nextTab], behavior: 'auto' }))
   }, [])
+
+  const changeTab = useCallback((nextTab: TabId) => activateTab(nextTab), [activateTab])
 
   const unreadChats = useMemo(() => online.threads.reduce((a, t) => a + t.unread, 0), [online.threads])
 
@@ -97,7 +106,7 @@ function Shell() {
     if (view.kind === 'online') {
       online.leaveRoom()
       setView({ kind: 'tabs' })
-      setTab('games')
+      activateTab('games', false)
       return
     }
     if (chatRoomId) {
@@ -105,9 +114,9 @@ function Shell() {
       return
     }
     const previousTab = tabHistoryRef.current.pop()
-    if (previousTab) setTab(previousTab)
-    else if (tab !== 'home') setTab('home')
-  }, [chatRoomId, onboarded, online, tab, view])
+    if (previousTab) activateTab(previousTab, false)
+    else if (tab !== 'home') activateTab('home', false)
+  }, [activateTab, chatRoomId, onboarded, online, tab, view])
 
   useEffect(() => {
     window.addEventListener('androidBackButton', handleAndroidBack)
@@ -153,7 +162,7 @@ function Shell() {
           onReplay={() => setView({ kind: 'playing', gameId: view.result.gameId, config: view.config })}
           onExit={() => {
             setView({ kind: 'tabs' })
-            setTab('games')
+            activateTab('games', false)
           }}
         />
       </div>
@@ -209,7 +218,7 @@ function Shell() {
         <OnlineLobby
           onBack={() => {
             setView({ kind: 'tabs' })
-            setTab('games')
+            activateTab('games', false)
           }}
         />
       </div>
@@ -227,21 +236,23 @@ function Shell() {
 
   return (
     <div className="mx-auto max-w-[420px] min-h-dvh relative safe-top">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={tab}
-          initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 16 }}
-          transition={{ duration: 0.18 }}
-        >
-          {tab === 'home' && <Home goTab={changeTab} openGame={openGame} openChat={openChat} />}
-          {tab === 'games' && <Games openGame={openGame} openOnline={openOnline} />}
-          {tab === 'chat' && <Chat openChat={(id) => setChatRoomId(id)} />}
-          {tab === 'friends' && <Friends openChat={openChat} />}
-          {tab === 'profile' && <Profile />}
-        </motion.div>
-      </AnimatePresence>
+      <div className="tab-panels">
+        <section className="tab-panel" hidden={tab !== 'home'} aria-hidden={tab !== 'home'}>
+          <Home goTab={changeTab} openGame={openGame} openChat={openChat} />
+        </section>
+        <section className="tab-panel" hidden={tab !== 'games'} aria-hidden={tab !== 'games'}>
+          <Games openGame={openGame} openOnline={openOnline} />
+        </section>
+        <section className="tab-panel" hidden={tab !== 'chat'} aria-hidden={tab !== 'chat'}>
+          <Chat openChat={(id) => setChatRoomId(id)} />
+        </section>
+        <section className="tab-panel" hidden={tab !== 'friends'} aria-hidden={tab !== 'friends'}>
+          <Friends openChat={openChat} />
+        </section>
+        <section className="tab-panel" hidden={tab !== 'profile'} aria-hidden={tab !== 'profile'}>
+          <Profile />
+        </section>
+      </div>
       <TabBar
         active={tab}
         onChange={changeTab}

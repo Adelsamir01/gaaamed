@@ -184,6 +184,11 @@
   .tab-page {
     padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
   }
+  /* Core tabs stay mounted so switching only flips visibility. This keeps
+     their data, forms, and scroll state warm between navigation taps. */
+  .tab-panel[hidden] {
+    display: none !important;
+  }
   .sticky-action {
     position: sticky;
     bottom: 0;
