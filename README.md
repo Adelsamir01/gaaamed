@@ -169,7 +169,7 @@ cloudflared.exe tunnel --no-autoupdate --protocol http2 run --token <TUNNEL_TOKE
 - `--protocol http2` is required on networks that block QUIC/UDP.
 - The tunnel token is a secret — keep it in the dashboard / your password manager, never in this repo.
 
-### Public web pages (landing, privacy, APK)
+### Public web pages (landing, privacy, deletion, APK)
 
 The same Node server also serves a small public website from `server/public/` (static files only — no game logic involved):
 
@@ -177,11 +177,13 @@ The same Node server also serves a small public website from `server/public/` (s
 |---|---|
 | `/` | Arabic RTL landing page (`server/public/index.html`) — hero, game cards, download buttons |
 | `/privacy` | Privacy policy page (`server/public/privacy.html`, Arabic + English) — the public URL Play Console requires |
+| `/delete-account` | Public privacy/account-deletion request page with in-app display-name verification |
+| `/api/privacy-request` | Same-origin POST endpoint for verified deletion and privacy requests |
 | `/dedos.apk` | Direct APK download — serves the signed `dedos-release.apk` from the workspace root when it exists, otherwise a friendly JSON 404 |
 | `/health` | JSON health check |
 | `/api/stats` | بنك الحظ stats snapshot (JSON, CORS `*`) |
 
-Static serving is guarded against path traversal (paths resolve strictly inside `server/public/`) and sets proper content types (html/png/jpg/css/js/ico/apk). On the public domain these are `https://dedos.adelsamir.com/`, `https://dedos.adelsamir.com/privacy`, and `https://dedos.adelsamir.com/dedos.apk`.
+Static serving is guarded against path traversal (paths resolve strictly inside `server/public/`) and sets proper content types (html/png/jpg/css/js/ico/apk). The Play Console URLs are `https://dedos.adelsamir.com/privacy` and `https://dedos.adelsamir.com/delete-account`.
 
 ---
 

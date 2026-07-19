@@ -80,6 +80,8 @@ export class UserStore {
       this.friendsFile.scheduleSave()
     }
     this.chatsFile = new JsonFile(join(dir, 'chats.json'), { version: 1, threads: {}, dmByPair: {} })
+    this.privacyRequestsFile = new JsonFile(join(dir, 'privacy-requests.json'), { version: 1, requests: [] })
+    this.privacyRequestsFile.data.requests ??= []
   }
 
   // ---------------- الهوية ----------------
@@ -385,10 +387,91 @@ export class UserStore {
     this.chatsFile.scheduleSave()
   }
 
+  // ---------------- الخصوصية وحذف الحساب ----------------
+  createPrivacyRequest(rawHandle, rawMessage) {
+    const handle = String(rawHandle || '').trim().toLowerCase().replace(/^@/, '')
+    if (!HANDLE_RE.test(handle)) throw new Error('اكتب معرّف ديدوس صحيحًا.')
+    const user = this.byHandle(handle)
+    if (!user) throw new Error('تعذر العثور على الحساب بهذا المعرّف.')
+    const request = {
+      id: `privacy_${randomUUID().slice(0, 12)}`,
+      type: 'privacy',
+      userId: user.userId,
+      handle,
+      message: String(rawMessage || '').trim().slice(0, 800),
+      status: 'received',
+      createdAt: Date.now(),
+    }
+    this.privacyRequestsFile.data.requests.push(request)
+    this.privacyRequestsFile.saveSync()
+    return request
+  }
+
+  deleteByHandleVerification(rawHandle, rawCode) {
+    const handle = String(rawHandle || '').trim().toLowerCase().replace(/^@/, '')
+    const code = String(rawCode || '').trim()
+    if (!HANDLE_RE.test(handle) || !/^\d{6}$/.test(code)) {
+      throw new Error('المعرّف أو رمز التحقق غير صحيح.')
+    }
+
+    const user = this.byHandle(handle)
+    const expectedName = `DELETE-${code}`
+    if (!user || String(user.name || '').trim().toUpperCase() !== expectedName) {
+      throw new Error(`غيّر اسمك داخل ديدوس إلى ${expectedName} ثم أغلق التطبيق وحاول مرة أخرى.`)
+    }
+
+    const userId = user.userId
+    const users = this.usersFile.data
+    delete users.users[userId]
+    if (user.handle) delete users.handles[user.handle]
+    if (user.deviceId) delete users.devices[user.deviceId]
+
+    const social = this.friendsFile.data
+    delete social.friends[userId]
+    delete social.requests[userId]
+    for (const [id, friendIds] of Object.entries(social.friends)) {
+      social.friends[id] = friendIds.filter((candidate) => candidate !== userId)
+    }
+    for (const [id, requesterIds] of Object.entries(social.requests)) {
+      social.requests[id] = requesterIds.filter((candidate) => candidate !== userId)
+    }
+
+    const chats = this.chatsFile.data
+    for (const [threadId, thread] of Object.entries(chats.threads)) {
+      if (!thread.memberIds.includes(userId)) continue
+      if (thread.kind === 'dm') {
+        delete chats.threads[threadId]
+        continue
+      }
+      thread.memberIds = thread.memberIds.filter((candidate) => candidate !== userId)
+      thread.messages = thread.messages.filter((message) => message.senderId !== userId)
+      delete thread.reads[userId]
+      if (thread.memberIds.length < 2) delete chats.threads[threadId]
+    }
+    for (const [pair, threadId] of Object.entries(chats.dmByPair)) {
+      if (pair.split('|').includes(userId) || !chats.threads[threadId]) delete chats.dmByPair[pair]
+    }
+
+    const request = {
+      id: `deletion_${randomUUID().slice(0, 12)}`,
+      type: 'deletion',
+      status: 'completed',
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+    }
+    this.privacyRequestsFile.data.requests.push(request)
+    this.usersFile.saveSync()
+    this.friendsFile.saveSync()
+    this.chatsFile.saveSync()
+    this.privacyRequestsFile.saveSync()
+    return { ...request, userId }
+  }
+
   /** طرد أي بيانات معلّقة للكتابة فورًا (يُستخدم عند الإغلاق النظيف) */
   flushAll() {
     this.usersFile.saveSync()
     this.friendsFile.saveSync()
     this.chatsFile.saveSync()
+    this.privacyRequestsFile.saveSync()
   }
 }

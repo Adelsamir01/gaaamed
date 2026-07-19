@@ -1,262 +1,127 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>سياسة الخصوصية — ديدوس / Privacy Policy — Dedos</title>
-<meta name="description" content="سياسة خصوصية تطبيق ديدوس / Dedos privacy policy.">
-<link rel="icon" type="image/png" href="assets/preview-tile-512.png">
-<style>
-  :root {
-    --bg: #0B1220;
-    --card: rgba(255, 255, 255, 0.04);
-    --card-border: rgba(255, 255, 255, 0.09);
-    --emerald: #10b981;
-    --emerald-light: #34d399;
-    --teal: #14b8a6;
-    --text: #e8eef7;
-    --muted: #93a4bd;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: "Segoe UI", Tahoma, "Noto Kufi Arabic", "Cairo", system-ui, -apple-system, sans-serif;
-    background: var(--bg); color: var(--text); line-height: 1.85;
-  }
-  .glow {
-    position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background:
-      radial-gradient(600px 400px at 85% -5%, rgba(16, 185, 129, 0.15), transparent 65%),
-      radial-gradient(600px 500px at 10% 40%, rgba(20, 184, 166, 0.1), transparent 65%);
-  }
-  .wrap { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
-
-  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
-  .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.2rem; color: var(--text); text-decoration: none; }
-  .brand img { width: 40px; height: 40px; border-radius: 11px; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35); }
-  .back { color: var(--emerald-light); text-decoration: none; font-size: 0.95rem; }
-  .back:hover { text-decoration: underline; }
-
-  h1 {
-    font-size: 2rem; font-weight: 900; margin: 26px 0 4px;
-    background: linear-gradient(120deg, var(--emerald-light), var(--teal), #5eead4);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .updated { color: var(--muted); font-size: 0.92rem; margin-bottom: 22px; }
-
-  .notice {
-    background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: 14px; padding: 16px 18px; margin: 18px 0 30px;
-    color: var(--text); font-size: 0.95rem;
-  }
-  .notice p + p { margin-top: 8px; }
-
-  h2 {
-    font-size: 1.45rem; font-weight: 800; margin: 40px 0 14px; padding-bottom: 8px;
-    border-bottom: 2px solid rgba(16, 185, 129, 0.35);
-  }
-  h3 { font-size: 1.12rem; font-weight: 700; margin: 26px 0 8px; color: var(--emerald-light); }
-  p { margin: 10px 0; }
-  ul { margin: 10px 0; padding-inline-start: 24px; }
-  li { margin: 6px 0; }
-  strong { color: #fff; }
-  code {
-    background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 1px 7px;
-    font-size: 0.88em; direction: ltr; unicode-bidi: embed;
-  }
-
-  .table-box { overflow-x: auto; margin: 16px 0; }
-  table {
-    width: 100%; border-collapse: collapse; font-size: 0.92rem;
-    background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden;
-  }
-  th, td { padding: 11px 14px; text-align: start; border-bottom: 1px solid rgba(255, 255, 255, 0.07); vertical-align: top; }
-  th { background: rgba(16, 185, 129, 0.12); font-weight: 800; white-space: nowrap; }
-  tr:last-child td { border-bottom: none; }
-
-  hr { border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 44px 0 8px; }
-  .ltr { direction: ltr; text-align: left; }
-  .ltr h2 { border-bottom-color: rgba(20, 184, 166, 0.4); }
-
-  footer {
-    margin-top: 60px; border-top: 1px solid rgba(255, 255, 255, 0.07);
-    padding-top: 22px; text-align: center; color: var(--muted); font-size: 0.88rem;
-  }
-  footer a { color: var(--emerald-light); text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="سياسة خصوصية تطبيق ديدوس للألعاب الجماعية، وتشمل جمع البيانات والاحتفاظ بها وحذفها.">
+  <title>سياسة الخصوصية — ديدوس | Dedos Privacy Policy</title>
+  <link rel="icon" type="image/png" href="/assets/preview-tile-512.png">
+  <style>
+    :root{color-scheme:dark;--bg:#08111f;--card:#101d30;--line:#263a54;--text:#eef6ff;--muted:#a9bad0;--gold:#f5c451;--green:#34d399;--teal:#2dd4bf}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#173553 0,#08111f 42%);color:var(--text);font-family:"Segoe UI",Tahoma,"Noto Kufi Arabic",Arial,sans-serif;line-height:1.8}
+    main{width:min(920px,calc(100% - 32px));margin:auto;padding:20px 0 64px}nav{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 24px}a{color:var(--green)}.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;text-decoration:none}.brand img{width:44px;height:44px;border-radius:13px}
+    h1{font-size:clamp(2rem,6vw,3.5rem);line-height:1.2;margin:16px 0 6px;background:linear-gradient(120deg,var(--gold),var(--green),var(--teal));background-clip:text;color:transparent}h2{margin-top:42px;border-bottom:1px solid var(--line);padding-bottom:8px}h3{color:var(--green);margin-top:28px}.updated,.muted{color:var(--muted)}
+    .notice,.card{background:rgba(16,29,48,.9);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin:22px 0}.notice{border-color:#376854}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:14px}.grid .card{margin:0}strong{color:#fff}code{direction:ltr;unicode-bidi:embed;background:#1b2c43;padding:2px 7px;border-radius:7px}ul{padding-inline-start:24px}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}th,td{padding:11px 13px;text-align:start;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--gold)}.table-wrap{overflow:auto;border-radius:14px}.ltr{direction:ltr;text-align:left}.action{display:inline-block;background:linear-gradient(120deg,#10b981,#0f9f96);color:#04130f;text-decoration:none;font-weight:900;padding:10px 16px;border-radius:11px}footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);text-align:center}
+  </style>
 </head>
 <body>
-<div class="glow"></div>
-<div class="wrap">
+<main>
+  <nav>
+    <a class="brand" href="/"><img src="/assets/preview-tile-512.png" alt="شعار ديدوس"><span>ديدوس</span></a>
+    <a href="/">العودة للرئيسية</a>
+  </nav>
 
-  <header>
-    <a class="brand" href="/">
-      <img src="assets/preview-tile-512.png" alt="شعار ديدوس">
-      <span>ديدوس</span>
-    </a>
-    <a class="back" href="/">→ العودة للرئيسية</a>
-  </header>
-
-  <h1>سياسة الخصوصية — ديدوس (Dedos) / Privacy Policy</h1>
-  <p class="updated">آخر تحديث / Last updated: <code>[LAST_UPDATED]</code></p>
-
+  <h1>سياسة الخصوصية — ديدوس</h1>
+  <p class="updated">آخر تحديث: 19 يوليو 2026 · Last updated: July 19, 2026</p>
   <div class="notice">
-    <p><strong>مسودة للنشر / Draft for publication.</strong>
-      قبل الإرسال إلى Google Play: استبدل كل <code>[CONTACT_EMAIL]</code> بالبريد الحقيقي، وحدّث
-      <code>[LAST_UPDATED]</code>. يجب استضافة هذه الصفحة على <strong>رابط عام</strong> (شرط إلزامي في Play
-      Console) — وهي متاحة الآن على <code>/privacy</code> من خادم ديدوس.</p>
-    <p dir="ltr">Before submitting to Google Play: replace every <code>[CONTACT_EMAIL]</code>, set
-      <code>[LAST_UPDATED]</code>, and host this page at a <strong>public URL</strong> (Play Console
-      requirement) — it is now served at <code>/privacy</code> on the Dedos server.</p>
+    <strong>الخلاصة:</strong> ديدوس لا يعرض إعلانات، ولا يستخدم أدوات تحليل أو تتبع، ولا يبيع بياناتك. نجمع فقط البيانات اللازمة للحسابات الاختيارية والأصدقاء والدردشة واللعب الجماعي.
   </div>
 
-  <!-- ============ العربية ============ -->
-  <h2>سياسة الخصوصية (العربية)</h2>
+  <h2>السياسة بالعربية</h2>
+  <h3>1. من نحن ونطاق السياسة</h3>
+  <p>ديدوس تطبيق ألعاب جماعية عربي يقدّم اللعب الأونلاين والأوفلاين، ملفات اللاعبين، طلبات الصداقة التي لا تتحول إلى صداقة إلا بعد موافقة المستلم، الدردشة، ودعوات اللعب. تنطبق هذه السياسة على تطبيق Android وخدمات ديدوس على النطاق <code>dedos.adelsamir.com</code>.</p>
 
-  <h3>١. نظرة عامة</h3>
-  <p>ديدوس تطبيق ألعاب جماعية اجتماعي بالعربية: ألعاب أونلاين وأوفلاين، دردشة مع
-    الأصدقاء، ودعوات لعب. نحن نجمع <strong>أقل قدر ممكن</strong> من البيانات اللازمة لتشغيل
-    التطبيق — <strong>بدون إعلانات، بدون تحليلات، بدون تتبع، وبدون مشتريات داخلية.</strong></p>
+  <h3>2. البيانات التي نعالجها</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>البيانات</th><th>الغرض</th><th>مكان التخزين</th></tr></thead>
+    <tbody>
+      <tr><td>الاسم المعروض، معرّف <code>@handle</code>، وصورة رمزية من اختيارك</td><td>عرض ملف اللاعب والعثور على الأصدقاء</td><td>خادم ديدوس</td></tr>
+      <tr><td>معرّف عشوائي ينشئه التطبيق لهذا التثبيت</td><td>ربط جهازك بملفك بين الجلسات؛ ليس معرّف إعلانات أو معرّف جهاز حقيقي</td><td>جهازك وخادم ديدوس</td></tr>
+      <tr><td>قوائم الأصدقاء وطلبات الصداقة</td><td>تشغيل الميزات الاجتماعية</td><td>خادم ديدوس</td></tr>
+      <tr><td>رسائل الدردشة النصية ودعوات اللعب</td><td>الدردشة وسجل المحادثة؛ نحتفظ بآخر 200 رسالة في كل محادثة</td><td>خادم ديدوس</td></tr>
+      <tr><td>تقدّم اللعب مثل العملات وXP والمستوى، وإحصاءات اللعب</td><td>تشغيل التقدّم والنتائج</td><td>جهازك، مع إحصاءات تشغيل مجمّعة على الخادم</td></tr>
+      <tr><td>بيانات طلب حذف الحساب التي ترسلها بنفسك</td><td>التحقق من ملكية الملف وتنفيذ الحذف</td><td>تعالجها خدمة ديدوس عند الطلب</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>لا نجمع:</strong> جهات الاتصال، الموقع الدقيق، الصور أو الفيديو، الصوت، بيانات الدفع، أو معرّف الإعلانات. التطبيق لا يحتوي على إعلانات أو مشتريات أو حزم تحليلات.</p>
 
-  <h3>٢. البيانات التي نجمعها</h3>
-  <div class="table-box">
-    <table>
-      <thead>
-        <tr><th>البيانات</th><th>السبب</th><th>مكان التخزين</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>الاسم الذي تختاره (حتى ٢٤ حرفًا)</td><td>عرض هويتك للاعبين</td><td>خادمنا الخاص</td></tr>
-        <tr><td>المعرّف <code>@</code> الاختياري (٣–١٥ حرفًا إنجليزيًا صغيرًا/رقمًا/underscore)</td><td>إضافة الأصدقاء وإدارة الحساب</td><td>خادمنا الخاص</td></tr>
-        <tr><td>الأفاتار (إيموجي من اختيارك)</td><td>تخصيص البروفايل</td><td>خادمنا الخاص</td></tr>
-        <tr><td>معرّف داخلي عشوائي للجهاز (UUID يولّده التطبيق — ليس معرّفًا إعلانيًا ولا معرّف جهاز حقيقي)</td><td>ربط جهازك ببروفايلك بين الجلسات</td><td>جهازك + خادمنا الخاص</td></tr>
-        <tr><td>قائمة الأصدقاء</td><td>الميزات الاجتماعية</td><td>خادمنا الخاص</td></tr>
-        <tr><td>رسائل الدردشة النصية ودعوات اللعب (يُحتفظ بآخر ٢٠٠ رسالة في كل محادثة)</td><td>عمل الدردشة وعرض السجل</td><td>خادمنا الخاص</td></tr>
-        <tr><td>إحصائيات اللعب (العملات، نقاط الخبرة XP، المستوى، نتائج بنك الحظ)</td><td>التقدّم داخل اللعبة</td><td>جهازك (العملات وXP) + خادمنا الخاص (إحصائيات بنك الحظ)</td></tr>
-      </tbody>
-    </table>
+  <h3>3. كيفية استخدام البيانات</h3>
+  <div class="grid">
+    <div class="card"><strong>تشغيل الخدمة</strong><br>إنشاء ملفك، ربط الجلسات، تشغيل الألعاب، الدردشة، والأصدقاء.</div>
+    <div class="card"><strong>الأمان والاستقرار</strong><br>منع إساءة الاستخدام، تشخيص الأعطال، وحماية الخدمة.</div>
+    <div class="card"><strong>لا إعلانات ولا بيع</strong><br>لا نبيع بياناتك ولا نستخدمها للإعلانات المخصّصة.</div>
   </div>
-  <p><strong>لا نجمع أبدًا:</strong> البريد الإلكتروني، رقم الهاتف، الموقع الجغرافي، جهات
-    الاتصال، الصور أو الفيديو، الصوت، أو أي بيانات دفع (لا توجد مدفوعات أصلًا).</p>
 
-  <h3>٣. الحسابات</h3>
-  <p>لا يوجد تسجيل ببريد إلكتروني أو كلمة مرور. يُنشأ بروفايل تلقائيًا عند أول
-    تشغيل ويُربط بجهازك، واختيار معرّف <code>@</code> اختياري تمامًا.</p>
+  <h3>4. المشاركة، النقل، والأمان</h3>
+  <p>لا نبيع أو نشارك بياناتك لأغراض تسويقية. تستخدم الخدمة Cloudflare كمزوّد بنية تحتية لنقل الزيارات وتأمينها. تُشفّر الاتصالات أثناء النقل عبر HTTPS/WSS وTLS. البيانات الدائمة مخزنة على خادم ذاتي الاستضافة تحت إدارة مشغّل ديدوس.</p>
 
-  <h3>٤. كيف تُنقل وتُخزن البيانات</h3>
+  <h3>5. الاحتفاظ بالبيانات</h3>
   <ul>
-    <li>كل الاتصالات بين التطبيق والخادم <strong>مشفّرة أثناء النقل عبر TLS</strong> (اتصال wss
-      عبر Cloudflare Tunnel؛ تنتهي شهادة التشفير عند Cloudflare بصفتها مزوّد
-      بنية تحتية يعالج المرور نيابةً عنا).</li>
-    <li>البيانات الدائمة مخزّنة على <strong>خادم ذاتي الاستضافة</strong> (ملفات JSON في
-      <code>server/data</code>) تحت سيطرتنا المباشرة.</li>
-    <li>رسومات لعبة «شخبطة» تُنقل مباشرةً بين اللاعبين أثناء المباراة و<strong>لا تُحفظ</strong>.</li>
+    <li>يبقى ملف اللاعب والأصدقاء ما دام الملف نشطًا أو إلى أن تطلب الحذف.</li>
+    <li>يُحتفظ بآخر 200 رسالة فقط في كل محادثة؛ الأقدم تُحذف تلقائيًا.</li>
+    <li>رسومات شخبطة تُنقل أثناء الجولة ولا تُخزّن بعد المباراة.</li>
+    <li>العملات وXP المحلية تبقى على جهازك إلى أن تمسح بيانات التطبيق أو تلغي تثبيته.</li>
+    <li>قد تبقى إحصاءات مجمّعة وغير مرتبطة بملفك بعد حذف الحساب.</li>
   </ul>
 
-  <h3>٥. المشاركة مع الغير</h3>
-  <p><strong>لا نشارك ولا نبيع بياناتك لأي طرف ثالث.</strong> لا توجد حزم إعلانات أو تحليلات
-    أو تتبع داخل التطبيق. الجهة الوحيدة التي يمر عبرها المرور هي Cloudflare كمزوّد
-    بنية تحتية للتشفير والنفق فقط.</p>
+  <h3>6. حذف الحساب والبيانات</h3>
+  <p>يمكنك بدء حذف ملفك وبياناته من صفحة الحذف العامة. تتضمن البيانات المحذوفة ملف اللاعب، ربط الجهاز، المعرّف، علاقات وطلبات الصداقة، وبيانات المحادثة المرتبطة به. تنفيذ الحذف لا يتجاوز 30 يومًا، وقد يكون فوريًا بعد التحقق.</p>
+  <p><a class="action" href="/delete-account">طلب حذف الحساب والبيانات</a></p>
 
-  <h3>٦. الاحتفاظ بالبيانات وحذفها</h3>
-  <ul>
-    <li>يُحتفظ ببيانات البروفايل والأصدقاء طالما كان حسابك نشطًا.</li>
-    <li>يُحتفظ بآخر ٢٠٠ رسالة فقط في كل محادثة؛ الرسائل الأقدم تُحذف تلقائيًا.</li>
-    <li>بيانات العملات وXP مخزّنة على جهازك فقط وتُحذف بإلغاء تثبيت التطبيق.</li>
-    <li>لطلب <strong>حذف حسابك وبياناتك من الخادم</strong> راسلنا على <code>[CONTACT_EMAIL]</code> من داخل
-      التطبيق أو مع ذكر معرّفك، وسنحذف بياناتك خلال ٣٠ يومًا.</li>
-  </ul>
+  <h3>7. الأطفال</h3>
+  <p>ديدوس غير موجّه للأطفال دون 13 عامًا. إذا تبيّن لنا أن بيانات طفل دون هذا السن عولجت، فسنحذفها. يمكن لولي الأمر استخدام صفحة حذف الحساب أعلاه.</p>
 
-  <h3>٧. خصوصية الأطفال</h3>
-  <p>التطبيق <strong>غير موجّه للأطفال دون ١٣ عامًا</strong> ولا نجمع بيانات منهم عن علم. إن
-    علمنا بوجود بيانات لطفل دون هذا السن سنحذفها فورًا — راسلنا على
-    <code>[CONTACT_EMAIL]</code>.</p>
+  <h3>8. حقوقك والتواصل</h3>
+  <p>يمكنك طلب الوصول أو التصحيح أو الحذف أو طرح سؤال خصوصية من خلال <a href="/delete-account">صفحة طلبات الخصوصية والحذف</a>. تعرض الصفحة رقم نتيجة واضحًا ولا تتطلب نشر بريدك الإلكتروني.</p>
 
-  <h3>٨. التغييرات على هذه السياسة</h3>
-  <p>قد نحدّث هذه السياسة من وقت لآخر؛ سننشر النسخة الجديدة على نفس الرابط مع تحديث
-    تاريخ «آخر تحديث».</p>
+  <h3>9. التغييرات</h3>
+  <p>قد نحدّث هذه السياسة عند تغيّر الخدمة أو المتطلبات القانونية. سننشر النسخة الجديدة على الرابط نفسه ونعدّل تاريخ آخر تحديث.</p>
 
-  <h3>٩. تواصل معنا</h3>
-  <p>لأي سؤال أو طلب يخص الخصوصية: <code>[CONTACT_EMAIL]</code></p>
-
-  <hr>
-
-  <!-- ============ English ============ -->
-  <div class="ltr" lang="en">
+  <section class="ltr" lang="en">
     <h2>Privacy Policy (English)</h2>
+    <h3>1. Scope</h3>
+    <p>Dedos is an Arabic social party-games app offering online and offline games, player profiles, friend requests that require the recipient's acceptance, chat, and game invitations. This policy applies to the Android app and services hosted at <code>dedos.adelsamir.com</code>.</p>
 
-    <h3>1. Overview</h3>
-    <p>Dedos (ديدوس) is an Arabic social party-games app: online and offline games,
-      friend chat, and in-chat game invites. We collect the <strong>minimum data needed
-      to run the app</strong> — <strong>no ads, no analytics, no tracking, and no in-app
-      purchases.</strong></p>
-
-    <h3>2. Data we collect</h3>
-    <div class="table-box">
-      <table>
-        <thead>
-          <tr><th>Data</th><th>Why</th><th>Where stored</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Your chosen display name (up to 24 chars)</td><td>Shown to other players</td><td>Our self-hosted server</td></tr>
-          <tr><td>Optional <code>@handle</code> (3–15 lowercase letters/digits/underscore)</td><td>Adding friends, account management</td><td>Our self-hosted server</td></tr>
-          <tr><td>Avatar (an emoji you pick)</td><td>Profile personalization</td><td>Our self-hosted server</td></tr>
-          <tr><td>Random app-generated device ID (UUID — not an advertising ID, not a hardware ID)</td><td>Re-links your device to your profile</td><td>Your device + our server</td></tr>
-          <tr><td>Friends list</td><td>Social features</td><td>Our self-hosted server</td></tr>
-          <tr><td>Chat text messages and game invites (only the last 200 messages per thread are kept)</td><td>Chat functionality and history</td><td>Our self-hosted server</td></tr>
-          <tr><td>Game stats (coins, XP, level, Bank of Luck results)</td><td>In-game progression</td><td>Your device (coins/XP) + our server (Bank of Luck stats)</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p><strong>We never collect:</strong> email address, phone number, location, contacts,
-      photos/videos, audio, or any payment data (there are no payments at all).</p>
-
-    <h3>3. Accounts</h3>
-    <p>There is no email/password registration. A profile is created automatically
-      on first launch and bound to your device; choosing an <code>@handle</code> is optional.</p>
-
-    <h3>4. Transport and storage</h3>
+    <h3>2. Data we process</h3>
     <ul>
-      <li>All app↔server traffic is <strong>encrypted in transit via TLS</strong> (wss over a
-        Cloudflare Tunnel; TLS terminates at Cloudflare, which acts solely as an
-        infrastructure provider processing traffic on our behalf).</li>
-      <li>Persistent data lives on a <strong>self-hosted server</strong> (JSON files under
-        <code>server/data</code>) under our direct control.</li>
-      <li>Shakhbata (draw-and-guess) drawings are relayed live between players and
-        are <strong>never stored</strong>.</li>
+      <li>Your chosen display name, optional <code>@handle</code>, and emoji avatar.</li>
+      <li>A random installation ID generated by the app. It is not an advertising ID or hardware identifier.</li>
+      <li>Friend lists, pending friend requests, chat messages, and game invitations.</li>
+      <li>Local game progress and aggregated operational game statistics.</li>
+      <li>Account-deletion request details that you submit voluntarily for verification.</li>
+    </ul>
+    <p>We do not collect contacts, precise location, photos, videos, audio, payment information, or advertising IDs. Dedos has no ads, purchases, analytics SDKs, or behavioral tracking.</p>
+
+    <h3>3. Purposes and legal basis</h3>
+    <p>We process this limited data to provide the service you request, maintain account continuity, enable multiplayer and social features, keep the service secure, and satisfy deletion or privacy requests. We do not sell personal data or use it for advertising.</p>
+
+    <h3>4. Sharing, transfer, and security</h3>
+    <p>We do not share data for marketing. Cloudflare acts as an infrastructure provider to route and secure traffic. Connections use HTTPS/WSS and TLS in transit. Persistent service data is stored on a self-hosted server managed by the Dedos operator.</p>
+
+    <h3>5. Retention</h3>
+    <ul>
+      <li>Profiles and friend data remain until deletion is requested.</li>
+      <li>Only the latest 200 messages per chat thread are retained.</li>
+      <li>Shakhbata drawings are relayed live and are not retained after a match.</li>
+      <li>Local coins and XP remain until app data is cleared or the app is uninstalled.</li>
+      <li>Aggregated statistics that no longer identify an account may remain after deletion.</li>
     </ul>
 
-    <h3>5. Third-party sharing</h3>
-    <p><strong>We do not share or sell your data to any third party.</strong> The app contains no
-      advertising, analytics, or tracking SDKs. Cloudflare only carries encrypted
-      traffic as an infrastructure provider.</p>
+    <h3>6. Account and data deletion</h3>
+    <p>Use our public <a href="/delete-account">account and data deletion page</a>. Deletion covers your profile, installation binding, handle, friend relationships and requests, and associated chat data. Requests are completed within 30 days and may be completed immediately after verification.</p>
 
-    <h3>6. Retention and deletion</h3>
-    <ul>
-      <li>Profile and friends data is kept while your account is active.</li>
-      <li>Only the most recent 200 messages per chat thread are retained; older
-        messages are deleted automatically.</li>
-      <li>Coins/XP are stored on your device only and are removed by uninstalling.</li>
-      <li>To request <strong>deletion of your account and server-side data</strong>, email
-        <code>[CONTACT_EMAIL]</code> (include your @handle) and we will delete it within 30 days.</li>
-    </ul>
+    <h3>7. Children</h3>
+    <p>Dedos is not directed to children under 13. If we learn that such data has been processed, we will delete it. A parent or guardian can use the public deletion page.</p>
 
-    <h3>7. Children's privacy</h3>
-    <p>The app is <strong>not directed at children under 13</strong> and we do not knowingly
-      collect data from them. If we learn of such data we will delete it promptly —
-      contact <code>[CONTACT_EMAIL]</code>.</p>
+    <h3>8. Your choices and contact</h3>
+    <p>Use the <a href="/delete-account">privacy and deletion request page</a> to request access, correction, or deletion, or to raise a privacy question. The page does not require you to publish an email address.</p>
 
-    <h3>8. Changes</h3>
-    <p>We may update this policy; the new version will be posted at this same URL
-      with an updated "Last updated" date.</p>
+    <h3>9. Changes</h3>
+    <p>We may update this policy when the service or legal requirements change. The current version and its effective date will remain available at this URL.</p>
+  </section>
 
-    <h3>9. Contact</h3>
-    <p>For any privacy question or request: <code>[CONTACT_EMAIL]</code></p>
-  </div>
-
-  <footer>
-    <p>ديدوس © ٢٠٢٥ · <a href="/">الرئيسية</a> · <a href="/dedos.apk?v=1.1.0-20260718">تحميل APK</a></p>
-  </footer>
-
-</div>
+  <footer>ديدوس © 2026 · <a href="/">الرئيسية</a> · <a href="/delete-account">حذف البيانات</a> · <a href="/dedos.apk?v=1.1.0">تحميل APK</a></footer>
+</main>
 </body>
 </html>

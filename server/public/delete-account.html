@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="صفحة ديدوس العامة لطلب حذف الحساب وبياناته أو إرسال طلب خصوصية.">
+  <title>حذف الحساب والبيانات — ديدوس</title>
+  <link rel="icon" type="image/png" href="/assets/preview-tile-512.png">
+  <style>
+    :root{color-scheme:dark;--bg:#08111f;--card:#101d30;--line:#2a405c;--text:#eef6ff;--muted:#a9bad0;--green:#34d399;--red:#fb7185;--gold:#f5c451}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#173553,#08111f 44%);color:var(--text);font-family:"Segoe UI",Tahoma,"Noto Kufi Arabic",Arial,sans-serif;line-height:1.75}main{width:min(760px,calc(100% - 32px));margin:auto;padding:24px 0 64px}a{color:var(--green)}.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;text-decoration:none}.brand img{width:44px;height:44px;border-radius:13px}nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px}h1{font-size:clamp(2rem,7vw,3.3rem);line-height:1.2;margin-bottom:8px}h2{margin-top:34px;color:var(--gold)}.muted{color:var(--muted)}.card{background:rgba(16,29,48,.94);border:1px solid var(--line);border-radius:18px;padding:20px;margin:18px 0}.warning{border-color:#6b3f4d}label{display:block;font-weight:800;margin:15px 0 6px}input,select,textarea{width:100%;border:1px solid #3a526e;background:#091626;color:var(--text);border-radius:11px;padding:12px;font:inherit}textarea{min-height:110px;resize:vertical}button{width:100%;border:0;border-radius:12px;padding:13px 16px;background:linear-gradient(120deg,#34d399,#2dd4bf);color:#04130f;font:inherit;font-weight:900;cursor:pointer;margin-top:18px}button:disabled{opacity:.55;cursor:wait}code{direction:ltr;unicode-bidi:embed;background:#1b2c43;padding:2px 7px;border-radius:7px}.ltr{direction:ltr;text-align:left}.result{display:none}.result.ok{display:block;border-color:#2f7b61}.result.error{display:block;border-color:#8a4351}footer{margin-top:42px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);text-align:center}
+  </style>
+</head>
+<body><main>
+  <nav><a class="brand" href="/"><img src="/assets/preview-tile-512.png" alt="شعار ديدوس">ديدوس</a><a href="/privacy">سياسة الخصوصية</a></nav>
+  <h1>حذف الحساب والبيانات</h1>
+  <p class="muted">Account and data deletion · Public request page</p>
+
+  <div class="card">
+    <h2>ما الذي يُحذف؟</h2>
+    <ul>
+      <li>ملف اللاعب، الاسم، المعرّف، الصورة الرمزية، وربط الجهاز.</li>
+      <li>علاقات وطلبات الصداقة وبيانات الدردشة المرتبطة بالملف.</li>
+      <li>بيانات الخادم القابلة للربط بالحساب.</li>
+    </ul>
+    <p>العملات وXP المخزنة محليًا تُحذف بمسح بيانات التطبيق أو إلغاء تثبيته. قد تبقى إحصاءات مجمّعة لا تعرّف حسابًا بعينه.</p>
+  </div>
+
+  <div class="card warning">
+    <h2>التحقق قبل الحذف</h2>
+    <ol>
+      <li>افتح ديدوس على الجهاز المرتبط بالحساب.</li>
+      <li>غيّر اسمك المعروض مؤقتًا إلى <code>DELETE-123456</code> مع استبدال الأرقام الستة برمز تختاره.</li>
+      <li>أغلق التطبيق تمامًا، ثم اكتب معرّفك والرمز نفسه في النموذج.</li>
+      <li>بعد الحذف، امسح بيانات التطبيق أو ألغِ تثبيته حتى لا يُنشئ ملفًا جديدًا تلقائيًا.</li>
+    </ol>
+    <p><strong>تنبيه:</strong> حذف الحساب نهائي ولا يمكن التراجع عنه.</p>
+  </div>
+
+  <form id="request-form" class="card">
+    <h2>إرسال الطلب</h2>
+    <label for="requestType">نوع الطلب</label>
+    <select id="requestType" name="requestType">
+      <option value="deletion">حذف الحساب والبيانات</option>
+      <option value="privacy">سؤال أو طلب خصوصية</option>
+    </select>
+
+    <label for="handle">معرّف ديدوس</label>
+    <input id="handle" name="handle" dir="ltr" autocomplete="off" placeholder="@your_handle" minlength="3" maxlength="16" required>
+
+    <div id="verification-fields">
+      <label for="verificationCode">رمز التحقق المكوّن من 6 أرقام</label>
+      <input id="verificationCode" name="verificationCode" dir="ltr" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+    </div>
+
+    <label for="message">تفاصيل إضافية (اختياري)</label>
+    <textarea id="message" name="message" maxlength="800" placeholder="اكتب سؤالك أو أي تفاصيل مفيدة"></textarea>
+
+    <label><input id="confirm" type="checkbox" required style="width:auto;margin-left:8px"> أفهم أن حذف الحساب نهائي.</label>
+    <button id="submit" type="submit">إرسال الطلب</button>
+  </form>
+
+  <div id="result" class="card result" role="status" aria-live="polite"></div>
+
+  <section class="card ltr" lang="en">
+    <h2>English instructions</h2>
+    <p>To verify ownership, open Dedos on the linked device and temporarily change your display name to <code>DELETE-123456</code>, replacing the six digits with a code you choose. Fully close the app, then submit your handle and the same code above. Verified deletion removes the profile, installation binding, handle, friend relationships and requests, and associated chat data. Clear app data or uninstall afterward to remove local progress and avoid automatically creating a new profile.</p>
+    <p>Privacy requests are handled through the same form. Deletion requests are completed within 30 days and may be completed immediately after successful verification.</p>
+  </section>
+
+  <footer>ديدوس © 2026 · <a href="/privacy">سياسة الخصوصية</a> · <a href="/">الرئيسية</a></footer>
+</main>
+<script>
+  const form = document.getElementById('request-form')
+  const type = document.getElementById('requestType')
+  const verificationFields = document.getElementById('verification-fields')
+  const code = document.getElementById('verificationCode')
+  const confirm = document.getElementById('confirm')
+  const submit = document.getElementById('submit')
+  const result = document.getElementById('result')
+
+  type.addEventListener('change', () => {
+    const deletion = type.value === 'deletion'
+    verificationFields.hidden = !deletion
+    code.required = deletion
+    confirm.parentElement.hidden = !deletion
+    confirm.required = deletion
+    submit.textContent = deletion ? 'حذف حسابي وبياناتي' : 'إرسال طلب الخصوصية'
+  })
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    submit.disabled = true
+    result.className = 'card result'
+    try {
+      const response = await fetch('/api/privacy-request', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({
+          requestType: type.value,
+          handle: document.getElementById('handle').value,
+          verificationCode: code.value,
+          message: document.getElementById('message').value,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.message || 'تعذر تنفيذ الطلب.')
+      result.className = 'card result ok'
+      result.textContent = payload.message
+      form.reset()
+    } catch (error) {
+      result.className = 'card result error'
+      result.textContent = error.message || 'تعذر تنفيذ الطلب. حاول مرة أخرى.'
+    } finally {
+      submit.disabled = false
+    }
+  })
+</script>
+</body></html>

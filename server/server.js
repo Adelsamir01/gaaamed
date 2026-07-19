@@ -119,6 +119,45 @@ const httpServer = createServer((req, res) => {
     return
   }
 
+  if (url === '/api/privacy-request' && req.method === 'POST') {
+    let body = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk) => {
+      body += chunk
+      if (body.length > 12_000) req.destroy()
+    })
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}')
+        const requestType = payload.requestType === 'privacy' ? 'privacy' : 'deletion'
+        if (requestType === 'privacy') {
+          const request = userStore.createPrivacyRequest(payload.handle, payload.message)
+          sendJson(res, 202, {
+            ok: true,
+            requestId: request.id,
+            message: `تم استلام طلب الخصوصية. رقم الطلب: ${request.id}`,
+          })
+          return
+        }
+
+        const request = userStore.deleteByHandleVerification(payload.handle, payload.verificationCode)
+        const sockets = onlineUsers.get(request.userId)
+        if (sockets) {
+          for (const socket of sockets) socket.close(1000, 'account_deleted')
+          onlineUsers.delete(request.userId)
+        }
+        sendJson(res, 200, {
+          ok: true,
+          requestId: request.id,
+          message: `تم حذف الحساب وبياناته من خادم ديدوس. رقم العملية: ${request.id}`,
+        })
+      } catch (error) {
+        sendJson(res, 400, { ok: false, message: error?.message || 'تعذر تنفيذ الطلب.' })
+      }
+    })
+    return
+  }
+
   // ‎/dedos.apk ← يقدّم أحدث APK موقّع للإصدار من جذر مساحة العمل إن وُجد
   if (url === '/dedos.apk') {
     if (fs.existsSync(APK_PATH)) {
@@ -147,6 +186,7 @@ const httpServer = createServer((req, res) => {
   }
   if (pathname === '/') pathname = '/index.html'
   else if (pathname === '/privacy') pathname = '/privacy.html'
+  else if (pathname === '/delete-account') pathname = '/delete-account.html'
 
   const resolved = path.resolve(PUBLIC_DIR, '.' + pathname)
   // يجب أن يبقى المسار المحلول داخل مجلد public حصرًا
