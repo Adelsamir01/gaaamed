@@ -1,6 +1,7 @@
 /**
  * خادم ديدوس للعب الأونلاين — WebSocket relay بسيط
  * الغرف: إنشاء/انضمام برمز من 4 أرقام، تمرير الحركات بين لاعبَين
+ * + الذاكرة والأسئلة الثقافية بحالة وتوقيت ونقاط يتحكم فيها الخادم
  * + لعبة شخبطة (حتى 8 لاعبين) عبر محرك server/shakhbata.js
  * + لعبة بنك الحظ (حتى 6 لاعبين) عبر محرك server/bankel7az.js بنفق {type:'bank', msg}
  *   ونقاط HTTP: ‎/health و ‎/api/stats (إحصائيات بنك الحظ)
@@ -17,6 +18,19 @@ import {
 } from './shakhbata.js'
 import { RoomManager, StatsStore, parseClientMessage, resolveStatsFilePath } from './bankel7az.js'
 import { UserStore, resolveDataDir, publicCard } from './users.js'
+import {
+  advanceTriviaQuestion,
+  applyMemoryFlip,
+  createMemoryGame,
+  createTriviaGame,
+  finishTriviaGame,
+  memorySnapshot,
+  memoryWinner,
+  resolveTriviaQuestion,
+  settleMemoryMiss,
+  submitTriviaAnswer,
+  triviaQuestionSnapshot,
+} from './competitive-games.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -39,6 +53,8 @@ const INVITE_GAMES = {
   connect4: { name: 'أربعة تربح', emoji: '🔴' },
   rps: { name: 'حجر ورقة مقص', emoji: '✂️' },
   reaction: { name: 'سرعة البرق', emoji: '⚡' },
+  memory: { name: 'لعبة الذاكرة', emoji: '🧠' },
+  trivia: { name: 'أسئلة ثقافية', emoji: '📚' },
   shakhbata: { name: 'شخبطة', emoji: '🎨' },
   'bank-el7az': { name: 'بنك الحظ', emoji: '🏦' },
 }
@@ -220,7 +236,7 @@ function ensureBankVws(ws) {
   return ws._bankVws
 }
 
-/** code -> { code, gameId, players: Map<slot, ws>, names: Map<slot, {name, avatar}>, rpsChoices: Map, reactTaps: Map, rpsWins: Map, reactWins: Map, settings: {rounds}, shak? } */
+/** code -> room state: players/names, competitive game state, settings, and optional Shakhbata state. */
 const rooms = new Map()
 
 function genCode() {
@@ -237,6 +253,94 @@ function send(ws, obj) {
 
 function broadcast(room, obj) {
   for (const ws of room.players.values()) send(ws, obj)
+}
+
+function clearCompetitiveTimers(room) {
+  if (room.memoryTimer) clearTimeout(room.memoryTimer)
+  if (room.triviaTimer) clearTimeout(room.triviaTimer)
+  room.memoryTimer = null
+  room.triviaTimer = null
+}
+
+function memoryEndPayload(room) {
+  return {
+    type: 'memory_end',
+    winnerSlot: memoryWinner(room.memory),
+    scores: { 1: room.memory.scores.get(1) || 0, 2: room.memory.scores.get(2) || 0 },
+    moves: room.memory.moves,
+  }
+}
+
+function broadcastMemoryState(room, effect = 'sync') {
+  if (!room.memory) return
+  broadcast(room, { type: 'memory_state', state: memorySnapshot(room.memory), effect })
+}
+
+function startMemoryGame(room) {
+  clearCompetitiveTimers(room)
+  room.trivia = null
+  room.memory = createMemoryGame()
+  broadcastMemoryState(room, 'start')
+}
+
+function broadcastTriviaQuestion(room) {
+  if (!room.trivia) return
+  for (const [slot, ws] of room.players) {
+    send(ws, { type: 'trivia_question', ...triviaQuestionSnapshot(room.trivia, slot) })
+  }
+}
+
+function scheduleTriviaDeadline(room, game) {
+  if (room.triviaTimer) clearTimeout(room.triviaTimer)
+  const delay = Math.max(0, game.startAt + game.durationMs + 320 - Date.now())
+  room.triviaTimer = setTimeout(() => {
+    if (room.trivia !== game || game.phase !== 'question') return
+    finishTriviaQuestion(room, game)
+  }, delay)
+}
+
+function finishTriviaQuestion(room, game) {
+  if (room.trivia !== game || game.phase !== 'question') return
+  if (room.triviaTimer) clearTimeout(room.triviaTimer)
+  const result = resolveTriviaQuestion(game)
+  broadcast(room, { type: 'trivia_result', ...result })
+  room.triviaTimer = setTimeout(() => {
+    if (room.trivia !== game || game.phase !== 'result') return
+    if (advanceTriviaQuestion(game, Date.now())) {
+      broadcastTriviaQuestion(room)
+      scheduleTriviaDeadline(room, game)
+    } else {
+      broadcast(room, { type: 'trivia_end', ...finishTriviaGame(game) })
+      room.triviaTimer = null
+    }
+  }, 2200)
+}
+
+function startTriviaGame(room) {
+  clearCompetitiveTimers(room)
+  room.memory = null
+  room.trivia = createTriviaGame()
+  broadcastTriviaQuestion(room)
+  scheduleTriviaDeadline(room, room.trivia)
+}
+
+function startCompetitiveGame(room) {
+  room.rematchVotes.clear()
+  if (room.gameId === 'memory') startMemoryGame(room)
+  else if (room.gameId === 'trivia') startTriviaGame(room)
+}
+
+function sendCompetitiveSync(ws, room) {
+  if (room.gameId === 'memory' && room.memory) {
+    send(ws, { type: 'memory_state', state: memorySnapshot(room.memory), effect: 'sync' })
+    if (room.memory.ended) send(ws, memoryEndPayload(room))
+    return
+  }
+  if (room.gameId !== 'trivia' || !room.trivia) return
+  const game = room.trivia
+  if (game.ended) send(ws, { type: 'trivia_end', ...finishTriviaGame(game) })
+  else if (game.phase === 'result') send(ws, { type: 'trivia_result', ...game.lastResult })
+  else send(ws, { type: 'trivia_question', ...triviaQuestionSnapshot(game, ws._slot) })
 }
 
 // تطبيع إعدادات الغرفة: rounds خارج {3,5,7} أو غير موجودة → الافتراضي 5
@@ -346,6 +450,11 @@ function createRoomRecord(gameId, drawTime, settings) {
     reactTaps: new Map(),
     rpsWins: new Map(),
     reactWins: new Map(),
+    rematchVotes: new Set(),
+    memory: null,
+    memoryTimer: null,
+    trivia: null,
+    triviaTimer: null,
     shak: null,
     settings: normalizeSettings(settings),
     // غرف دعوات المحادثات الفردية تبدأ تلقائيًا عند اكتمال لاعبَين (الجروبات تنتظر المضيف)
@@ -424,6 +533,7 @@ function lowestFreeSlot(room, max = SHAKHBATA_MAX) {
 function cleanupRoom(code) {
   const room = rooms.get(code)
   if (room && room.players.size === 0) {
+    clearCompetitiveTimers(room)
     destroyShakhbata(room)
     rooms.delete(code)
     console.log(`ROOM_CLOSED ${code}`)
@@ -568,8 +678,50 @@ wss.on('connection', (ws) => {
       case 'action': {
         const room = rooms.get(ws._room)
         if (!room) return
+        if (msg.action?.kind === 'start' && (room.gameId === 'memory' || room.gameId === 'trivia')) {
+          if (ws._slot !== 1 || room.players.size < 2) return
+          // start قد يتكرر بسبب إعادة إرسال الشبكة؛ المباراة النشطة لا تُصفّر أبدًا.
+          if ((room.memory && !room.memory.ended) || (room.trivia && !room.trivia.ended)) return
+          startCompetitiveGame(room)
+        }
         const other = room.players.get(otherSlot(ws._slot))
         send(other, { type: 'action', action: msg.action, from: ws._slot })
+        break
+      }
+
+      case 'game_sync': {
+        const room = rooms.get(ws._room)
+        if (!room) return
+        sendCompetitiveSync(ws, room)
+        break
+      }
+
+      case 'memory_flip': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'memory' || !room.memory || room.players.size < 2) return
+        const game = room.memory
+        const outcome = applyMemoryFlip(game, ws._slot, msg.index)
+        if (!outcome.accepted) return
+        broadcastMemoryState(room, outcome.effect)
+        if (outcome.ended) {
+          broadcast(room, memoryEndPayload(room))
+        } else if (outcome.effect === 'miss') {
+          room.memoryTimer = setTimeout(() => {
+            if (room.memory !== game || !settleMemoryMiss(game)) return
+            room.memoryTimer = null
+            broadcastMemoryState(room, 'settled')
+          }, 900)
+        }
+        break
+      }
+
+      case 'trivia_answer': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'trivia' || !room.trivia || room.players.size < 2) return
+        const game = room.trivia
+        if (!submitTriviaAnswer(game, ws._slot, msg.questionIndex, msg.option)) return
+        if (game.answers.size === 2) finishTriviaQuestion(room, game)
+        else broadcastTriviaQuestion(room)
         break
       }
 
@@ -621,8 +773,12 @@ wss.on('connection', (ws) => {
       case 'rematch': {
         const room = rooms.get(ws._room)
         if (!room) return
+        if (room.gameId === 'memory' && room.memory && !room.memory.ended) return
+        if (room.gameId === 'trivia' && room.trivia && !room.trivia.ended) return
+        room.rematchVotes.add(ws._slot)
         const other = room.players.get(otherSlot(ws._slot))
         send(other, { type: 'rematch', from: ws._slot })
+        if (room.rematchVotes.size === 2) startCompetitiveGame(room)
         break
       }
 

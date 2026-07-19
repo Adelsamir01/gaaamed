@@ -25,6 +25,8 @@ export type GameEvent =
   | { kind: 'rps_series_end'; winnerSlot: number; wins: Record<number, number>; rounds: number }
   | { kind: 'react_result'; winnerSlot: number; times: Record<number, number | null>; fouls: Record<number, boolean> }
   | { kind: 'react_series_end'; winnerSlot: number; wins: Record<number, number>; rounds: number }
+  | { kind: 'memory'; msg: ServerMessage }
+  | { kind: 'trivia'; msg: ServerMessage }
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
 
@@ -61,6 +63,9 @@ interface OnlineContextValue {
   sendAction: (action: Record<string, unknown>) => void
   sendRpsChoice: (choice: string) => void
   sendReactTap: (ms: number | null, foul: boolean) => void
+  sendMemoryFlip: (index: number) => void
+  sendTriviaAnswer: (questionIndex: number, option: number) => void
+  requestGameSync: () => void
   sendRaw: (obj: Record<string, unknown>) => void
   requestRematch: () => void
   resetRematch: () => void
@@ -277,6 +282,15 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               rounds: msg.rounds as number,
             }),
           )
+          break
+        case 'memory_state':
+        case 'memory_end':
+          gameHandlersRef.current.forEach((h) => h({ kind: 'memory', msg }))
+          break
+        case 'trivia_question':
+        case 'trivia_result':
+        case 'trivia_end':
+          gameHandlersRef.current.forEach((h) => h({ kind: 'trivia', msg }))
           break
         case 'rematch': {
           rematchRef.current.theirs = true
@@ -495,21 +509,19 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const startGame = useCallback(() => {
-    setGameId((gid) => {
-      if (gid === 'shakhbata') {
-        // شخبطة: الخادم يبدأ المباراة ويبث أول جولة
-        onlineClient.send({ type: 'start' })
-      } else if (gid && gid !== 'bank-el7az') {
-        onlineClient.send({ type: 'action', action: { kind: 'start' } })
-        rematchRef.current = { mine: false, theirs: false }
-        setRematchMine(false)
-        setRematchTheirs(false)
-        setMatchId((id) => id + 1)
-        setPhase('playing')
-      }
-      return gid
-    })
-  }, [])
+    // لا تضع إرسال الشبكة داخل state updater: React قد يستدعي updater مرتين في وضع التطوير.
+    if (gameId === 'shakhbata') {
+      // شخبطة: الخادم يبدأ المباراة ويبث أول جولة
+      onlineClient.send({ type: 'start' })
+    } else if (gameId && gameId !== 'bank-el7az') {
+      onlineClient.send({ type: 'action', action: { kind: 'start' } })
+      rematchRef.current = { mine: false, theirs: false }
+      setRematchMine(false)
+      setRematchTheirs(false)
+      setMatchId((id) => id + 1)
+      setPhase('playing')
+    }
+  }, [gameId])
   startGameRef.current = startGame
 
   const sendAction = useCallback((action: Record<string, unknown>) => {
@@ -522,6 +534,18 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   const sendReactTap = useCallback((ms: number | null, foul: boolean) => {
     onlineClient.send({ type: 'react_tap', ms, foul })
+  }, [])
+
+  const sendMemoryFlip = useCallback((index: number) => {
+    onlineClient.send({ type: 'memory_flip', index })
+  }, [])
+
+  const sendTriviaAnswer = useCallback((questionIndex: number, option: number) => {
+    onlineClient.send({ type: 'trivia_answer', questionIndex, option })
+  }, [])
+
+  const requestGameSync = useCallback(() => {
+    onlineClient.send({ type: 'game_sync' })
   }, [])
 
   const sendRaw = useCallback((obj: Record<string, unknown>) => {
@@ -704,7 +728,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       status, phase, code, slot, gameId, opponent, players, matchId,
       rematchMine, rematchTheirs, serverUrl, roomSettings,
       createRoom, joinRoom, leaveRoom, startGame,
-      sendAction, sendRpsChoice, sendReactTap, sendRaw,
+      sendAction, sendRpsChoice, sendReactTap, sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
@@ -714,7 +738,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       ownInviteRoom, clearOwnInviteRoom,
     }),
     [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
-      createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap, sendRaw,
+      createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap,
+      sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,

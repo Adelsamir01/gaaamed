@@ -12,6 +12,8 @@ const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
 const ConnectFour = lazy(() => import('./online/ConnectFour'))
 const OnlineRps = lazy(() => import('./online/OnlineRps'))
 const OnlineReaction = lazy(() => import('./online/OnlineReaction'))
+const OnlineMemory = lazy(() => import('./online/OnlineMemory'))
+const OnlineTrivia = lazy(() => import('./online/OnlineTrivia'))
 const Shakhbata = lazy(() => import('./online/Shakhbata'))
 const BankEl7az = lazy(() => import('./online/bankel7az/App'))
 
@@ -67,9 +69,12 @@ export const GAMES: GameDef[] = [
       'اضغط على أي بطاقة لقلبها وكشف رمزها',
       'اقلب بطاقة ثانية — إن تطابقتا بقيتا مكشوفتين',
       'أكمل الأزواج الثمانية بأقل عدد من الحركات لتحصل على عملات أكثر',
+      'أونلاين: طابق زوجًا لتحتفظ بالدور، والخطأ ينقل الدور للخصم',
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    online: true,
+    onlineComponent: OnlineMemory,
     component: MemoryGame,
   },
   {
@@ -83,9 +88,12 @@ export const GAMES: GameDef[] = [
       'كل إجابة صحيحة تكسبك ٥ عملات',
       'كل ٣ إجابات صحيحة متتالية تمنحك عملتين إضافيتين 🔥',
       'راجع أخطاءك في النهاية لتتعلم منها',
+      'أونلاين: إذا أجبتما بشكل صحيح، النقطة للأسرع والتوقيت يكسر التعادل',
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    online: true,
+    onlineComponent: OnlineTrivia,
     component: TriviaGame,
   },
   {
