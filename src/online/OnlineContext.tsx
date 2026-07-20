@@ -99,10 +99,10 @@ interface OnlineContextValue {
   rematchMine: boolean
   rematchTheirs: boolean
   serverUrl: string
-  /** إعدادات الغرفة الحالية (عدد الجولات) — تأتي من created/joined/matched/opponent_joined */
+  /** إعدادات جلسة اللعب الحالية (عدد الجولات). */
   roomSettings: RoomSettings | null
-  createRoom: (gameId: string, name: string, avatar: string, settings?: RoomSettings) => void
-  joinRoom: (code: string, name: string, avatar: string) => void
+  /** Accept a chat game invitation; the session identifier stays private to the UI. */
+  acceptGameInvite: (inviteToken: string, name: string, avatar: string) => void
   leaveRoom: () => void
   startGame: () => void
   sendAction: (action: Record<string, unknown>) => void
@@ -140,9 +140,7 @@ interface OnlineContextValue {
   chatSendInvite: (threadId: string, gameId: string, settings?: RoomSettings) => void
   refreshSocial: () => void
   // المباراة السريعة
-  quickMatchGame: string | null
   quickMatch: (gameId: string) => void
-  quickMatchCancel: () => void
   /** الغرفة الحالية جاءت من مباراة سريعة (تُستخدم للبدء التلقائي في بنك الحظ) */
   fromQuickMatch: boolean
   /** غرفة دعوة محادثة فردية: تبدأ تلقائيًا فور اكتمال لاعبَين */
@@ -177,7 +175,6 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [chatOutbox, setChatOutbox] = useState<QueuedChatMessage[]>([])
   const [socialCacheReady, setSocialCacheReady] = useState(false)
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
-  const [quickMatchGame, setQuickMatchGame] = useState<string | null>(null)
   const [fromQuickMatch, setFromQuickMatch] = useState(false)
   const [autoStartRoom, setAutoStartRoom] = useState(false)
   const [roomSettings, setRoomSettings] = useState<RoomSettings | null>(null)
@@ -231,12 +228,6 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     const offStatus = onlineClient.onStatus(setStatus)
     const offMsg = onlineClient.onMessage((msg: ServerMessage) => {
       switch (msg.type) {
-        case 'created':
-          setCode(msg.code as string)
-          setSlot(1)
-          setPhase('waiting')
-          setRoomSettings((msg.settings as RoomSettings) ?? null)
-          break
         case 'joined': {
           const auto = msg.autoStart === true
           setAutoStartRoom(auto)
@@ -490,10 +481,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'quick_match_waiting':
           break
         case 'quick_match_cancelled':
-          setQuickMatchGame(null)
           break
         case 'matched': {
-          setQuickMatchGame(null)
           setFromQuickMatch(true)
           setCode(msg.code as string)
           setSlot(msg.slot as number)
@@ -625,17 +614,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     }
   }, [status, onboarded, profile.name, profile.avatar, profile.handle])
 
-  const createRoom = useCallback((gid: string, name: string, avatar: string, settings?: RoomSettings) => {
-    setGameId(gid)
-    setOpponent(null)
-    setFromQuickMatch(false)
-    setAutoStartRoom(false)
-    setRoomSettings(settings ?? null)
-    lastAutoStartRef.current = 0
-    onlineClient.send({ type: 'create', gameId: gid, name, avatar, ...(settings ? { settings } : {}) })
-  }, [])
-
-  const joinRoom = useCallback((c: string, name: string, avatar: string) => {
+  const acceptGameInvite = useCallback((inviteToken: string, name: string, avatar: string) => {
     setOpponent(null)
     setFromQuickMatch(false)
     setAutoStartRoom(false)
@@ -645,10 +624,11 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(autoStartTimerRef.current)
       autoStartTimerRef.current = null
     }
-    onlineClient.send({ type: 'join', code: c.trim(), name, avatar })
+    onlineClient.send({ type: 'join', code: inviteToken.trim(), name, avatar })
   }, [])
 
   const leaveRoom = useCallback(() => {
+    onlineClient.send({ type: 'quick_match_cancel' })
     onlineClient.send({ type: 'leave' })
     rematchRef.current = { mine: false, theirs: false }
     setRematchMine(false)
@@ -879,40 +859,34 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   // ---------------- المباراة السريعة ----------------
   const quickMatch = useCallback(
     (gid: string) => {
-      setQuickMatchGame(gid)
       onlineClient.send({ type: 'quick_match', gameId: gid, name: app.profile.name, avatar: app.profile.avatar })
     },
     [app.profile.name, app.profile.avatar],
   )
 
-  const quickMatchCancel = useCallback(() => {
-    onlineClient.send({ type: 'quick_match_cancel' })
-    setQuickMatchGame(null)
-  }, [])
-
   const value = useMemo<OnlineContextValue>(
     () => ({
       status, phase, code, slot, gameId, opponent, players, matchId,
       rematchMine, rematchTheirs, serverUrl, roomSettings,
-      createRoom, joinRoom, leaveRoom, startGame,
+      acceptGameInvite, leaveRoom, startGame,
       sendAction, sendRpsChoice, sendReactTap, sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
-      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
+      quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
     }),
     [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
-      createRoom, joinRoom, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap,
+      acceptGameInvite, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap,
       sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatSendInvite, refreshSocial,
-      quickMatchGame, quickMatch, quickMatchCancel, fromQuickMatch, autoStartRoom,
+      quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],
   )
 

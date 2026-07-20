@@ -24,7 +24,6 @@ import {
   Check,
   CircleDollarSign,
   Coffee,
-  Copy,
   Dice5,
   House,
   Hourglass,
@@ -111,11 +110,11 @@ const governorateFlagByName: Record<string, string> = {
 };
 
 // نقطة دخول ديدوس: المكوّن الافتراضي المسجَّل في src/games/index.ts
-export default function BankEl7azGame({ onFinish }: { onFinish?: (result: GameResult) => void }) {
+export default function BankEl7azGame({ onFinish, onExit }: { onFinish?: (result: GameResult) => void; onExit?: () => void }) {
   const { profile } = useApp();
   return (
     <div className="bank-el7az-root" dir="rtl">
-      <GameApp playerName={profile.name} onFinishGame={onFinish} />
+      <GameApp playerName={profile.name} onFinishGame={onFinish} onExitGame={onExit} />
     </div>
   );
 }
@@ -131,13 +130,15 @@ export function App() {
 
 function GameApp({
   playerName,
-  onFinishGame
+  onFinishGame,
+  onExitGame
 }: {
   playerName?: string;
   onFinishGame?: (result: GameResult) => void;
+  onExitGame?: () => void;
 } = {}) {
   const game = useGameSocket({ name: playerName });
-  const { fromQuickMatch } = useOnline();
+  const { fromQuickMatch, leaveRoom: leaveDedosMatch } = useOnline();
   const [selectedTileId, setSelectedTileId] = useState<number | null>(null);
   const state = game.state;
   const selectedTile = selectedTileId === null ? null : BOARD_TILES[selectedTileId] ?? null;
@@ -147,6 +148,12 @@ function GameApp({
   const startGameRef = useRef(game.startGame);
   const autoStartFiredRef = useRef(false);
   startGameRef.current = game.startGame;
+
+  function exitGame() {
+    game.leaveRoom();
+    if (onExitGame) onExitGame();
+    else leaveDedosMatch();
+  }
 
   // انحراف موثّق: إبلاغ ديدوس بنتيجة المباراة بعد لحظة من إعلان الفائز (عملات/XP)
   useEffect(() => {
@@ -243,7 +250,7 @@ function GameApp({
         buildProperty={game.buildProperty}
         sellProperty={game.sellProperty}
         payBail={game.payBail}
-        leaveRoom={game.leaveRoom}
+        leaveRoom={exitGame}
       />
       <LandscapeGate />
     </>
@@ -714,10 +721,7 @@ function StatsPlayerTable({ players }: { players: PlayerStats[] }) {
   );
 }
 
-/**
- * غرفة انتظار بنك الحظ بهوية ديدوس — نفس لغة بقية ألعاب الأونلاين:
- * رمز الغرفة للنسخ فقط، بطاقات اللاعبين، وبدء يدوي من المضيف (أو تلقائي في المباراة السريعة).
- */
+/** شاشة انتظار بنك الحظ: تعرض المشاركين فقط؛ معرّف جلسة الشبكة يظل داخليًا. */
 function LobbyScreen({
   state,
   playerId,
@@ -735,17 +739,6 @@ function LobbyScreen({
 }) {
   const isHost = playerId === state.hostId;
   const canStart = isHost && state.players.length >= 2;
-  const [copied, setCopied] = useState(false);
-
-  async function copyCode() {
-    try {
-      await navigator.clipboard?.writeText(state.roomCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   function startImmersiveGame() {
     void enterImmersiveMode();
@@ -758,20 +751,8 @@ function LobbyScreen({
         <div className="gaa-emoji">🏦</div>
         <h1 className="gaa-title">بنك الحظ</h1>
         <p className="gaa-sub">
-          {quickMatch ? "مباراة سريعة ⚡" : "شارك الرمز مع صديقك — حتى ٦ لاعبين"}
+          {quickMatch ? "مباراة سريعة ⚡" : "تحدي أصحاب — حتى ٦ لاعبين"}
         </p>
-
-        {!quickMatch && (
-          <button className="gaa-code" onClick={copyCode} aria-label="انسخ رمز الغرفة">
-            <span className="gaa-code-label">{copied ? "اتنسخ! ✅" : "رمز الغرفة — اضغط للنسخ"}</span>
-            <span className="gaa-code-value" dir="ltr">
-              {state.roomCode.split("").map((digit, index) => (
-                <b key={index}>{digit}</b>
-              ))}
-              <Copy size={15} />
-            </span>
-          </button>
-        )}
 
         <div className="gaa-players-count">اللاعبون ({state.players.length} / 6)</div>
         <div className="gaa-players">
@@ -921,9 +902,7 @@ function GameScreen({
         <div className="menu-head">
           <div>
             <strong>بنك الحظ</strong>
-            <span>
-              أوضة <b className="room-code" dir="ltr">{state.roomCode}</b>
-            </span>
+            <span>مباراة أونلاين</span>
           </div>
           <button className="icon-button" onClick={() => setIsMenuOpen(false)} aria-label="اقفل القائمة">
             <X size={20} />
@@ -951,7 +930,7 @@ function GameScreen({
 
         <button className="leave-room-button" onClick={leaveRoom}>
           <LogOut size={18} />
-          ارجع للمدخل
+          خروج من المباراة
         </button>
 
         <PlayerPanel state={state} playerId={playerId} />

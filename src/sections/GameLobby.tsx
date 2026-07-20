@@ -188,7 +188,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
               <div className="flex-1">
                 <p className="font-extrabold text-sm">{game.publicArena ? 'الساحة العامة 🌐' : 'أونلاين 🌐'}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {game.publicArena ? 'ادخل فورًا والعب مع أشخاص عشوائيين' : 'غرفة برمز أو مباراة سريعة ضد لاعب حقيقي'}
+                  {game.publicArena ? 'ادخل فورًا والعب مع أشخاص عشوائيين' : 'اضغط وهنلاقي لك خصم في نفس اللعبة فورًا'}
                 </p>
               </div>
               {mode === 'online' && <span className="text-emerald-400 text-lg">✓</span>}
@@ -231,7 +231,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
           className="w-full min-h-14 py-3.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-black text-lg flex items-center justify-center gap-2 glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
         >
           {mode === 'online' ? <Globe className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
-          {mode === 'online' ? (game.publicArena ? 'ادخل الساحة العامة' : 'العب أونلاين') : 'ابدأ اللعب'}
+          {mode === 'online' ? (game.publicArena ? 'ادخل الساحة العامة' : 'ابحث عن خصم الآن') : 'ابدأ اللعب'}
         </motion.button>
       </div>
     </div>

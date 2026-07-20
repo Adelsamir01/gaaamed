@@ -39,7 +39,7 @@ type View =
   | { kind: 'lobby'; gameId: string }
   | { kind: 'playing'; gameId: string; config: GameConfig }
   | { kind: 'results'; result: GameResult; config: GameConfig }
-  | { kind: 'online' }
+  | { kind: 'online'; quickGameId?: string }
   | { kind: 'snake-online' }
 
 function Shell() {
@@ -71,13 +71,13 @@ function Shell() {
 
   const unreadChats = useMemo(() => online.threads.reduce((a, t) => a + t.unread, 0), [online.threads])
 
-  // عندما أرسل دعوة لعبة: الخادم ينشئ الغرفة وأنا أدخلها تلقائيًا لأنتظر أصدقائي
+  // عندما أرسل دعوة لعبة: افتح التحدي تلقائيًا وانتظر أصدقائي.
   const ownInvite = online.ownInviteRoom
   useEffect(() => {
     if (!ownInvite) return
     online.clearOwnInviteRoom()
     setFriendMatchThreadId(ownInvite.threadId)
-    online.joinRoom(ownInvite.code, profile.name, profile.avatar)
+    online.acceptGameInvite(ownInvite.code, profile.name, profile.avatar)
     setChatRoomId(null)
     setView({ kind: 'online' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,22 +138,16 @@ function Shell() {
     setView({ kind: 'lobby', gameId: id })
   }
 
-  const openOnline = () => {
-    sounds.click()
-    setFriendMatchThreadId(null)
-    setView({ kind: 'online' })
-  }
-
   const openChat = (id: string) => {
     changeTab('chat')
     setChatRoomId(id)
     setView({ kind: 'tabs' })
   }
 
-  // انضمام لغرفة من دعوة دردشة
-  const joinRoomFromInvite = (code: string) => {
+  // قبول تحدٍ من دعوة دردشة
+  const acceptInvite = (inviteToken: string) => {
     setFriendMatchThreadId(chatRoomId)
-    online.joinRoom(code, profile.name, profile.avatar)
+    online.acceptGameInvite(inviteToken, profile.name, profile.avatar)
     setChatRoomId(null)
     setView({ kind: 'online' })
   }
@@ -248,7 +242,12 @@ function Shell() {
         <GameLobby
           game={game}
           onStart={(config) => setView({ kind: 'playing', gameId: view.gameId, config })}
-          onOnline={() => setView(view.gameId === 'snake' ? { kind: 'snake-online' } : { kind: 'online' })}
+          onOnline={() => {
+            setFriendMatchThreadId(null)
+            setView(view.gameId === 'snake'
+              ? { kind: 'snake-online' }
+              : { kind: 'online', quickGameId: view.gameId })
+          }}
           onBack={() => setView({ kind: 'tabs' })}
         />
       </div>
@@ -260,6 +259,7 @@ function Shell() {
     return (
       <div className="mx-auto max-w-[420px] min-h-dvh safe-top">
         <OnlineLobby
+          quickGameId={view.quickGameId}
           friendThreadId={friendMatchThreadId}
           onFriendMatchFinished={returnToFriendChat}
           onBack={() => {
@@ -276,7 +276,7 @@ function Shell() {
   if (tab === 'chat' && chatRoomId) {
     return (
       <div className="mx-auto max-w-[420px] h-dvh overflow-hidden safe-top">
-        <ChatRoom threadId={chatRoomId} onBack={() => setChatRoomId(null)} onJoinRoom={joinRoomFromInvite} />
+        <ChatRoom threadId={chatRoomId} onBack={() => setChatRoomId(null)} onAcceptInvite={acceptInvite} />
       </div>
     )
   }
@@ -288,7 +288,7 @@ function Shell() {
           <Home goTab={changeTab} openGame={openGame} openChat={openChat} />
         </section>
         <section className="tab-panel" hidden={tab !== 'games'} aria-hidden={tab !== 'games'}>
-          <Games openGame={openGame} openOnline={openOnline} />
+          <Games openGame={openGame} />
         </section>
         <section className="tab-panel" hidden={tab !== 'chat'} aria-hidden={tab !== 'chat'}>
           <Chat openChat={(id) => setChatRoomId(id)} />

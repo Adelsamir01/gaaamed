@@ -7,7 +7,7 @@ import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
 import type { GameCategory } from '@/types'
 
-export default function Games({ openGame, openOnline }: { openGame: (id: string) => void; openOnline: () => void }) {
+export default function Games({ openGame }: { openGame: (id: string) => void }) {
   const { stats } = useApp()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<'الكل' | GameCategory>('الكل')
@@ -26,27 +26,6 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
     <div className="px-4 pt-6 tab-page">
       <h1 className="text-2xl font-black mb-1">الألعاب 🎮</h1>
       <p className="text-sm text-muted-foreground mb-4">اختر لعبتك وابدأ التحدي</p>
-
-      {/* بطاقة اللعب أونلاين */}
-      <motion.button
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={openOnline}
-        className="w-full mb-4 rounded-3xl overflow-hidden relative glass text-start"
-      >
-        <div className="absolute inset-0 bg-gradient-to-l from-teal-600/40 via-emerald-600/25 to-transparent" />
-        <div className="relative p-4 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center glow-emerald shrink-0">
-            <Globe className="w-7 h-7 text-emerald-300" />
-          </div>
-          <div className="flex-1">
-            <p className="font-black text-lg">🌐 العب أونلاين</p>
-            <p className="text-xs text-slate-300 mt-0.5">غرف برمز، مباراة سريعة، وتحديات مباشرة مع أصدقائك</p>
-          </div>
-          <span className="text-xs font-extrabold bg-emerald-400 text-emerald-950 rounded-full px-3 py-1.5 shrink-0">العب الآن</span>
-        </div>
-      </motion.button>
 
       {/* البحث */}
       <div className="relative mb-4">

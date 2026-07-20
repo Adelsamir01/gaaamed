@@ -298,7 +298,7 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
         <DialogContent className="max-w-[380px] rounded-3xl">
           <DialogHeader>
             <DialogTitle className="text-center">دعوة {inviteFor?.name} للعب 🎮</DialogTitle>
-            <DialogDescription className="text-center">اختر اللعبة — هيوصله لينك انضمام في الدردشة</DialogDescription>
+            <DialogDescription className="text-center">اختر اللعبة — هيوصله تحدي يقدر يقبله من الدردشة</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2 py-2">
             {ONLINE_GAMES.map((g) => (

@@ -16,11 +16,10 @@ const SESSION_KEY = "bank-el7az-session";
 
 export function useGameSocket(options: { name?: string } = {}) {
   const online = useOnline();
-  const { sendRaw, subscribe, leaveRoom: leaveDedosRoom } = online;
+  const { sendRaw, subscribe } = online;
   const playerName = options.name?.trim() || localStorage.getItem("bank-el7az-name") || "لاعب";
   const [state, setState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
-  const [roomCode, setRoomCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [latencyMs, setLatencyMs] = useState(0);
@@ -103,7 +102,6 @@ export function useGameSocket(options: { name?: string } = {}) {
         };
         sessionRef.current = session;
         saveSession(session);
-        setRoomCode(message.payload.roomCode);
         setPlayerId(message.payload.playerId);
         setState(message.payload.state);
         setError(null);
@@ -114,7 +112,6 @@ export function useGameSocket(options: { name?: string } = {}) {
         clearSession();
         sessionRef.current = null;
         joinRequestRef.current = null;
-        setRoomCode(null);
         setPlayerId(null);
         setState(null);
         setError(null);
@@ -132,7 +129,6 @@ export function useGameSocket(options: { name?: string } = {}) {
           localStorage.removeItem(SESSION_KEY);
           setState(null);
           setPlayerId(null);
-          setRoomCode(null);
         }
         setError(message.payload.message);
         window.setTimeout(() => setError(null), 3500);
@@ -188,54 +184,21 @@ export function useGameSocket(options: { name?: string } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, dedosCode, dedosSlot]);
 
-  const createRoom = useCallback(
-    (name: string) => {
-      const cleanName = name.trim() || "لاعب";
-      pendingNameRef.current = cleanName;
-      send({ type: "CREATE_ROOM", payload: { name: cleanName } });
-    },
-    [send]
-  );
-
-  const joinRoom = useCallback(
-    (rawRoomCode: string, name: string) => {
-      const cleanName = name.trim() || "لاعب";
-      const cleanRoomCode = rawRoomCode.trim().toUpperCase();
-      pendingNameRef.current = cleanName;
-      const existingSession = sessionRef.current?.roomCode === cleanRoomCode ? sessionRef.current : null;
-      send({
-        type: "JOIN_ROOM",
-        payload: {
-          roomCode: cleanRoomCode,
-          name: cleanName,
-          playerId: existingSession?.playerId
-        }
-      });
-    },
-    [send]
-  );
-
   const leaveRoom = useCallback(() => {
     send({ type: "LEAVE_ROOM" });
     clearSession();
     sessionRef.current = null;
     joinRequestRef.current = null;
-    setRoomCode(null);
     setPlayerId(null);
     setState(null);
     setError(null);
-    // انحراف موثّق: مغادرة اللعبة تغلق غرفة ديدوس نفسها أيضًا
-    leaveDedosRoom();
-  }, [send, leaveDedosRoom]);
+  }, [send]);
 
   return {
     status,
     state,
     playerId,
-    roomCode,
     error,
-    createRoom,
-    joinRoom,
     startGame: () => send({ type: "START_GAME" }),
     rollDice: () => send({ type: "ROLL_DICE" }),
     buyProperty: () => send({ type: "BUY_PROPERTY" }),

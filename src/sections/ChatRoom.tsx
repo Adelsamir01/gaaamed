@@ -15,7 +15,7 @@ import {
 interface Props {
   threadId: string
   onBack: () => void
-  onJoinRoom: (code: string) => void
+  onAcceptInvite: (inviteToken: string) => void
 }
 
 function fmtTime(ts: number) {
@@ -69,7 +69,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, onJoin }: 
               onClick={() => onJoin(m.invite!.roomCode)}
               className="mt-3 w-full py-2.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold text-sm glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
             >
-              انضم الآن 🎮
+              اقبل التحدي 🎮
             </motion.button>
           )}
           <p className="text-[9px] text-muted-foreground mt-2 text-end">{fmtTime(m.time)}</p>
@@ -110,7 +110,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, onJoin }: 
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 
-export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
+export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const { me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatSendInvite } = useOnline()
   const thread = threads.find((t) => t.id === threadId)
   const msgs: ChatMessage[] = messages[threadId] ?? EMPTY_MESSAGES
@@ -128,13 +128,13 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
   const isGroup = thread?.kind === 'group'
   const myId = me?.userId
 
-  // مرجع ثابت لزر الانضمام حتى لا تُكسر مذكرة الفقاعات
+  // مرجع ثابت لزر قبول التحدي حتى لا تُكسر مذكرة الفقاعات
   const handleJoin = useCallback(
-    (code: string) => {
+    (inviteToken: string) => {
       sounds.pop()
-      onJoinRoom(code)
+      onAcceptInvite(inviteToken)
     },
-    [onJoinRoom],
+    [onAcceptInvite],
   )
 
   // عند الفتح: حمّل التاريخ وعلّم كمقروء — وعند الخروج أغلق المؤشر
