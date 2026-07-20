@@ -63,10 +63,10 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
           <h1 className="text-2xl font-black">{game.name}</h1>
           <p className="text-sm text-slate-300 mt-1.5 leading-relaxed">{game.description}</p>
           {s && (
-            <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-              <span>لعبت {s.played} مرة</span>
-              <span>فزت {s.won} مرة</span>
-              {s.bestScore !== undefined && <span>أفضل نتيجة: {s.bestScore}</span>}
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-3 text-xs text-muted-foreground">
+              <span>لعبت <bdi className="bidi-number tabular-nums">{s.played}</bdi> مرة</span>
+              <span>فزت <bdi className="bidi-number tabular-nums">{s.won}</bdi> مرة</span>
+              {s.bestScore !== undefined && <span>أفضل نتيجة: <bdi className="bidi-number tabular-nums">{s.bestScore}</bdi></span>}
             </div>
           )}
         </div>
@@ -77,7 +77,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
         <button
           type="button"
           onClick={() => setShowHowToPlay((open) => !open)}
-          className="w-full min-h-11 flex items-center gap-2 text-start"
+          className="w-full min-h-11 rounded-2xl flex items-center gap-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
           aria-expanded={showHowToPlay}
           aria-controls="game-instructions"
         >
@@ -97,9 +97,9 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
             >
               {game.howToPlay.map((line, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-sm text-slate-300 leading-relaxed">
-                  <span className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5 bidi-number">
+                  <bdi dir="ltr" className="w-6 h-6 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[11px] leading-none font-black grid place-items-center shrink-0 mt-0.5 tabular-nums">
                     {i + 1}
-                  </span>
+                  </bdi>
                   {line}
                 </li>
               ))}
@@ -222,7 +222,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
       )}
 
       {/* زر البدء */}
-      <div className="sticky-action">
+      <div className="game-start-action">
         <motion.button
           whileTap={{ scale: 0.96 }}
           onClick={start}

@@ -95,7 +95,7 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
                 sounds.click()
                 openGame(g.id)
               }}
-              className="glass rounded-3xl p-4 flex items-center gap-4 text-start hover:bg-white/10 transition-colors"
+              className="glass rounded-3xl p-4 flex items-center gap-4 text-start hover:bg-white/10 transition-colors overflow-hidden"
             >
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center text-4xl shrink-0">
                 {g.emoji}
@@ -133,8 +133,10 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
                       أونلاين
                     </span>
                   )}
-                  <span className="text-[10px] text-muted-foreground ms-auto">لعبت {s?.played ?? 0} مرة</span>
                 </div>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  لعبت <bdi className="bidi-number tabular-nums">{s?.played ?? 0}</bdi> مرة
+                </p>
               </div>
             </motion.button>
           )

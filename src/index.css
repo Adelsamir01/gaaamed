@@ -189,10 +189,7 @@
   .tab-panel[hidden] {
     display: none !important;
   }
-  .sticky-action {
-    position: sticky;
-    bottom: 0;
-    z-index: 20;
+  .game-start-action {
     margin-inline: -1rem;
     padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
     background: linear-gradient(to top, hsl(var(--background)) 72%, hsl(var(--background) / 0));
@@ -200,7 +197,6 @@
   .bidi-number {
     direction: ltr;
     unicode-bidi: isolate;
-    display: inline-block;
   }
   .game-stage {
     min-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px));
