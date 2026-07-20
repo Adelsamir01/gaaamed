@@ -140,7 +140,7 @@ interface OnlineContextValue {
   /** غرفة دعوة محادثة فردية: تبدأ تلقائيًا فور اكتمال لاعبَين */
   autoStartRoom: boolean
   // غرفة دعوة أرسلها المستخدم — ليدخلها تلقائيًا فور إرسالها
-  ownInviteRoom: { code: string; gameId: string } | null
+  ownInviteRoom: { code: string; gameId: string; threadId: string } | null
   clearOwnInviteRoom: () => void
 }
 
@@ -173,7 +173,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [fromQuickMatch, setFromQuickMatch] = useState(false)
   const [autoStartRoom, setAutoStartRoom] = useState(false)
   const [roomSettings, setRoomSettings] = useState<RoomSettings | null>(null)
-  const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string } | null>(null)
+  const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string; threadId: string } | null>(null)
   const clearOwnInviteRoom = useCallback(() => setOwnInviteRoom(null), [])
 
   const gameHandlersRef = useRef(new Set<GameEventHandler>())
@@ -469,7 +469,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             message.senderId === meRef.current?.userId &&
             message.invite?.roomCode
           ) {
-            setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId })
+            setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId, threadId })
           }
           if (message.senderId !== meRef.current?.userId && openThreadRef.current !== threadId) {
             const threadName = (msg.thread as ServerThread | undefined)?.name ?? message.senderName

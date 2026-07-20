@@ -46,6 +46,7 @@ function Shell() {
   const [tab, setTab] = useState<TabId>('home')
   const [view, setView] = useState<View>({ kind: 'tabs' })
   const [chatRoomId, setChatRoomId] = useState<string | null>(null)
+  const [friendMatchThreadId, setFriendMatchThreadId] = useState<string | null>(null)
   const tabHistoryRef = useRef<TabId[]>([])
   const activeTabRef = useRef<TabId>('home')
   const tabScrollRef = useRef<Record<TabId, number>>({ home: 0, games: 0, chat: 0, friends: 0, profile: 0 })
@@ -73,6 +74,7 @@ function Shell() {
   useEffect(() => {
     if (!ownInvite) return
     online.clearOwnInviteRoom()
+    setFriendMatchThreadId(ownInvite.threadId)
     online.joinRoom(ownInvite.code, profile.name, profile.avatar)
     setChatRoomId(null)
     setView({ kind: 'online' })
@@ -132,6 +134,7 @@ function Shell() {
 
   const openOnline = () => {
     sounds.click()
+    setFriendMatchThreadId(null)
     setView({ kind: 'online' })
   }
 
@@ -143,6 +146,7 @@ function Shell() {
 
   // انضمام لغرفة من دعوة دردشة
   const joinRoomFromInvite = (code: string) => {
+    setFriendMatchThreadId(chatRoomId)
     online.joinRoom(code, profile.name, profile.avatar)
     setChatRoomId(null)
     setView({ kind: 'online' })
@@ -151,6 +155,14 @@ function Shell() {
   const handleFinish = (result: GameResult, config: GameConfig) => {
     finishGame(result)
     setView({ kind: 'results', result, config })
+  }
+
+  const returnToFriendChat = (threadId: string) => {
+    online.leaveRoom()
+    setFriendMatchThreadId(null)
+    setView({ kind: 'tabs' })
+    activateTab('chat', false)
+    setChatRoomId(threadId)
   }
 
   // شاشة نتائج اللعبة
@@ -216,7 +228,10 @@ function Shell() {
     return (
       <div className="mx-auto max-w-[420px] min-h-dvh safe-top">
         <OnlineLobby
+          friendThreadId={friendMatchThreadId}
+          onFriendMatchFinished={returnToFriendChat}
           onBack={() => {
+            setFriendMatchThreadId(null)
             setView({ kind: 'tabs' })
             activateTab('games', false)
           }}

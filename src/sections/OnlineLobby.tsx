@@ -15,7 +15,13 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-export default function OnlineLobby({ onBack }: { onBack: () => void }) {
+interface OnlineLobbyProps {
+  onBack: () => void
+  friendThreadId?: string | null
+  onFriendMatchFinished?: (threadId: string) => void
+}
+
+export default function OnlineLobby({ onBack, friendThreadId, onFriendMatchFinished }: OnlineLobbyProps) {
   const online = useOnline()
   const { profile, finishGame } = useApp()
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu')
@@ -31,6 +37,15 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
   }, [online.phase, online.matchId])
 
   const game = online.gameId ? getGame(online.gameId) : undefined
+
+  const handleGameFinished = (gameResult: GameResult) => {
+    finishGame(gameResult)
+    if (friendThreadId && onFriendMatchFinished) {
+      onFriendMatchFinished(friendThreadId)
+      return
+    }
+    setResult(gameResult)
+  }
 
   const copyCode = () => {
     if (!online.code) return
@@ -106,10 +121,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
         <motion.div key={online.matchId} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex-1 px-4 pb-8">
           <GameComp
             config={{ mode: 'bot', difficulty: 'medium' }}
-            onFinish={(r) => {
-              finishGame(r)
-              setResult(r)
-            }}
+            onFinish={handleGameFinished}
           />
         </motion.div>
       </div>
@@ -124,10 +136,7 @@ export default function OnlineLobby({ onBack }: { onBack: () => void }) {
       <div className="fixed inset-0 z-40">
         <BankComp
           config={{ mode: 'bot', difficulty: 'medium' }}
-          onFinish={(r) => {
-            finishGame(r)
-            setResult(r)
-          }}
+          onFinish={handleGameFinished}
         />
       </div>
     )
