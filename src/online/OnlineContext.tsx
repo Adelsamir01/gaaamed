@@ -30,10 +30,18 @@ export type GameEvent =
   | { kind: 'trivia'; msg: ServerMessage }
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
+  | { kind: 'snake'; msg: ServerMessage }
 
 type GameEventHandler = (ev: GameEvent) => void
 
 const SHAKHBATA_MSGS = new Set(['round_choosing', 'word_options', 'your_word', 'round', 'draw', 'hint', 'chat', 'scores', 'round_end', 'ended'])
+const SNAKE_PUBLIC_MSGS = new Set([
+  'snake_public_joined',
+  'snake_public_respawned',
+  'snake_public_snapshot',
+  'snake_public_dead',
+  'snake_public_count',
+])
 
 export interface MeIdentity {
   userId: string
@@ -501,6 +509,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           break
         }
         default:
+          if (SNAKE_PUBLIC_MSGS.has(msg.type)) {
+            gameHandlersRef.current.forEach((h) => h({ kind: 'snake', msg }))
+            break
+          }
           // رسائل شخبطة تمر لشاشة اللعبة
           if (SHAKHBATA_MSGS.has(msg.type)) {
             gameHandlersRef.current.forEach((h) => h({ kind: 'sh', msg }))

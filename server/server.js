@@ -32,6 +32,7 @@ import {
   submitTriviaAnswer,
   triviaQuestionSnapshot,
 } from './competitive-games.js'
+import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -110,6 +111,7 @@ function sendJson(res, status, obj) {
 
 function serviceHealth() {
   const storage = database.health()
+  const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
   return {
     ok: storage.ok,
     service: 'dedos-server',
@@ -117,6 +119,8 @@ function serviceHealth() {
     uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
     connections: wss?.clients?.size ?? 0,
     rooms: rooms?.size ?? 0,
+    snakeArenas: snakeManager.arenas.size,
+    snakePlayers,
     storage,
     time: Date.now(),
   }
@@ -125,6 +129,7 @@ function serviceHealth() {
 function serviceMetrics() {
   const storage = database.health()
   const queueSize = [...matchQueues.values()].reduce((total, queue) => total + queue.length, 0)
+  const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
   return [
     '# HELP dedos_up Whether the service and its storage are healthy.',
     '# TYPE dedos_up gauge',
@@ -141,6 +146,9 @@ function serviceMetrics() {
     '# HELP dedos_matchmaking_queue_players Players waiting for a quick match.',
     '# TYPE dedos_matchmaking_queue_players gauge',
     `dedos_matchmaking_queue_players ${queueSize}`,
+    '# HELP dedos_snake_arena_players Players currently in public snake arenas.',
+    '# TYPE dedos_snake_arena_players gauge',
+    `dedos_snake_arena_players ${snakePlayers}`,
     '',
   ].join('\n')
 }
@@ -286,7 +294,7 @@ const httpServer = createServer((req, res) => {
     if (fs.existsSync(APK_PATH)) {
       sendFile(req, res, APK_PATH, MIME_TYPES['.apk'], {
         cacheControl: 'no-cache',
-        downloadName: 'dedos-1.2.0.apk',
+        downloadName: 'dedos-1.4.0.apk',
       })
     } else {
       sendJson(res, 404, { error: 'apk_not_available', message: 'ملف APK غير متوفر حاليًا — حمّل التطبيق من Google Play.' })
@@ -369,6 +377,10 @@ function send(ws, obj) {
   ws.send(payload)
   return true
 }
+
+// Public Snake uses its own continuously running, server-authoritative arenas.
+// It deliberately does not share the two-player room lifecycle below.
+const snakeManager = new SnakeArenaManager({ send })
 
 function consumeMessageRate(ws) {
   const now = Date.now()
@@ -707,6 +719,7 @@ wss.on('connection', (ws, request) => {
   ws._slot = null
   ws._ip = request.socket.remoteAddress || 'unknown'
   ws._messageRate = { startedAt: Date.now(), count: 0, violations: 0 }
+  snakeManager.track(ws)
   ws.on('pong', () => {
     ws.isAlive = true
   })
@@ -733,7 +746,30 @@ wss.on('connection', (ws, request) => {
     }
 
     switch (msg.type) {
+      case 'snake_public_join': {
+        handleLeave(ws)
+        removeFromQueues(ws)
+        snakeManager.join(ws, { name: msg.name, avatar: msg.avatar })
+        break
+      }
+
+      case 'snake_public_steer': {
+        snakeManager.steer(ws, msg.angle)
+        break
+      }
+
+      case 'snake_public_respawn': {
+        snakeManager.respawn(ws)
+        break
+      }
+
+      case 'snake_public_leave': {
+        snakeManager.leave(ws)
+        break
+      }
+
       case 'create': {
+        snakeManager.leave(ws)
         const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime, msg.settings)
         room.players.set(1, ws)
         room.names.set(1, { name: msg.name || 'لاعب', avatar: msg.avatar || '🎮' })
@@ -747,6 +783,7 @@ wss.on('connection', (ws, request) => {
       }
 
       case 'join': {
+        snakeManager.leave(ws)
         const room = rooms.get(String(msg.code || ''))
         if (!room) {
           send(ws, { type: 'error', message: 'الغرفة غير موجودة، تأكد من الرمز' })
@@ -946,6 +983,7 @@ wss.on('connection', (ws, request) => {
       }
 
       case 'leave': {
+        snakeManager.leave(ws)
         const room = rooms.get(ws._room)
         if (room && room.gameId === 'bank-el7az' && ws._bankVws) {
           // مغادرة صريحة: تمرير LEAVE_ROOM لبروتوكول البنك ثم الفصل
@@ -1181,6 +1219,7 @@ wss.on('connection', (ws, request) => {
 
       // ---------------- المباراة السريعة ----------------
       case 'quick_match': {
+        snakeManager.leave(ws)
         if (ws._room) return
         const gameId = String(msg.gameId || '')
         if (!INVITE_GAMES[gameId]) {
@@ -1225,6 +1264,7 @@ wss.on('connection', (ws, request) => {
   ws.on('close', () => {
     handleLeave(ws)
     removeFromQueues(ws)
+    snakeManager.untrack(ws)
     if (ws._userId) {
       untrackOnline(ws._userId, ws)
       broadcastFriendsUpdate(ws._userId)
@@ -1270,6 +1310,11 @@ httpServer.listen(PORT, () => {
   log('info', 'server_started', { port: PORT, version: APP_VERSION })
 })
 
+const snakeTickTimer = setInterval(() => snakeManager.tick(), SNAKE_TICK_MS)
+if (snakeTickTimer.unref) snakeTickTimer.unref()
+const snakeSnapshotTimer = setInterval(() => snakeManager.broadcastSnapshots(), SNAKE_SNAPSHOT_MS)
+if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()
+
 httpServer.on('error', (error) => {
   log('error', 'http_server_error', { message: error.message, code: error.code ?? null })
   if (error.code === 'EADDRINUSE' || error.code === 'EACCES') void shutdown('http_server_error', 1)
@@ -1282,6 +1327,8 @@ async function shutdown(reason, exitCode = 0) {
   log('info', 'server_shutdown_started', { reason, connections: wss.clients.size, rooms: rooms.size })
   clearInterval(heartbeatTimer)
   clearInterval(bankCleanupTimer)
+  clearInterval(snakeTickTimer)
+  clearInterval(snakeSnapshotTimer)
 
   for (const room of rooms.values()) clearCompetitiveTimers(room)
   for (const ws of wss.clients) {

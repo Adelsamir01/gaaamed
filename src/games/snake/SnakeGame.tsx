@@ -451,6 +451,12 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [])
 
+  useEffect(() => {
+    if (status !== 'running' || hasSteered) return
+    const timer = window.setTimeout(() => setHasSteered(true), 4_200)
+    return () => window.clearTimeout(timer)
+  }, [hasSteered, status])
+
   useEffect(() => () => {
     if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
   }, [])

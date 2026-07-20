@@ -17,6 +17,7 @@ const Games = lazy(() => import('@/sections/Games'))
 const GameLobby = lazy(() => import('@/sections/GameLobby'))
 const GameResults = lazy(() => import('@/sections/GameResults'))
 const OnlineLobby = lazy(() => import('@/sections/OnlineLobby'))
+const OnlineSnake = lazy(() => import('@/games/online/OnlineSnake'))
 const Chat = lazy(() => import('@/sections/Chat'))
 const ChatRoom = lazy(() => import('@/sections/ChatRoom'))
 const Friends = lazy(() => import('@/sections/Friends'))
@@ -39,6 +40,7 @@ type View =
   | { kind: 'playing'; gameId: string; config: GameConfig }
   | { kind: 'results'; result: GameResult; config: GameConfig }
   | { kind: 'online' }
+  | { kind: 'snake-online' }
 
 function Shell() {
   const { onboarded, profile, finishGame } = useApp()
@@ -109,6 +111,10 @@ function Shell() {
       online.leaveRoom()
       setView({ kind: 'tabs' })
       activateTab('games', false)
+      return
+    }
+    if (view.kind === 'snake-online') {
+      setView({ kind: 'lobby', gameId: 'snake' })
       return
     }
     if (chatRoomId) {
@@ -182,6 +188,14 @@ function Shell() {
   }
 
   // شاشة اللعب
+  if (view.kind === 'snake-online') {
+    return (
+      <div className="mx-auto h-dvh max-w-[420px] overflow-hidden safe-top">
+        <OnlineSnake onExit={() => setView({ kind: 'lobby', gameId: 'snake' })} />
+      </div>
+    )
+  }
+
   if (view.kind === 'playing') {
     const game = getGame(view.gameId)!
     const GameComp = game.component
@@ -234,7 +248,7 @@ function Shell() {
         <GameLobby
           game={game}
           onStart={(config) => setView({ kind: 'playing', gameId: view.gameId, config })}
-          onOnline={() => setView({ kind: 'online' })}
+          onOnline={() => setView(view.gameId === 'snake' ? { kind: 'snake-online' } : { kind: 'online' })}
           onBack={() => setView({ kind: 'tabs' })}
         />
       </div>

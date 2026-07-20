@@ -42,6 +42,8 @@ export interface GameDef {
   singlePlayer?: boolean
   difficulties?: boolean
   online?: boolean
+  /** Public drop-in arena; it does not use private rooms or two-player quick matching. */
+  publicArena?: boolean
   /** نسخة الأونلاين من نفس اللعبة (للألعاب التي تدعم الوضعين) */
   onlineComponent?: GameComponent
   component: GameComponent
@@ -145,19 +147,22 @@ export const GAMES: GameDef[] = [
   {
     id: 'snake',
     name: 'الثعبان',
-    description: 'عالم لا نهائي بأسلوب Snake.io — اجمع الكرات المضيئة وكبّر الثعبان بتحكم سريع بإصبعك',
+    description: 'عالم مفتوح بلا حواف — اجمع الكرات المضيئة وكبّر الثعبان بتحكم سريع بإصبعك',
     emoji: '🐍',
     category: 'سرعة',
     howToPlay: [
       'حط إصبعك في أي مكان داخل الساحة واسحب — الاتجاه يتغير فورًا وإصبعك ما زال على الشاشة',
       'اجمع الكرات المضيئة لزيادة نقاطك وطول الثعبان',
       'العالم مفتوح بلا حواف؛ استمر في الاستكشاف وتجنّب الالتفاف على جسم الثعبان',
+      'أونلاين: ادخل فورًا إلى ساحة عامة مع لاعبين عشوائيين وتجنّب الاصطدام بثعابينهم',
       'اختر مستوى السرعة المناسب؛ السرعة ثابتة ولا تزيد فجأة أثناء اللعب',
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
     singlePlayer: true,
     difficulties: true,
+    online: true,
+    publicArena: true,
     component: SnakeGame,
   },
   {
@@ -241,6 +246,6 @@ export function getGame(id: string): GameDef | undefined {
   return GAMES.find((g) => g.id === id)
 }
 
-export const ONLINE_GAMES = GAMES.filter((g) => g.online)
+export const ONLINE_GAMES = GAMES.filter((g) => g.online && !g.publicArena)
 
 export const CATEGORIES: Array<'الكل' | GameCategory> = ['الكل', 'أونلاين', 'ذكاء', 'ذاكرة', 'معلومات', 'سرعة']
