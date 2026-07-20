@@ -1,0 +1,68 @@
+name: dedos
+
+services:
+  app:
+    image: ${DEDOS_IMAGE:-dedos-server:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      APP_VERSION: ${APP_VERSION:-local}
+      DEDOS_DATA_DIR: /data
+      DEDOS_DB_PATH: /data/dedos.sqlite
+      DEDOS_BACKUP_DIR: /backups
+      DEDOS_BACKUP_RETENTION_DAYS: ${DEDOS_BACKUP_RETENTION_DAYS:-30}
+      DEDOS_BACKUP_KEEP: ${DEDOS_BACKUP_KEEP:-30}
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - dedos-data:/data
+      - ${DEDOS_BACKUP_DIR:-./server/backups}:/backups
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.2
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      app:
+        condition: service_healthy
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --protocol
+      - http2
+      - --edge-ip-version
+      - "4"
+      - run
+      - --token-file
+      - /run/secrets/tunnel_token
+    secrets:
+      - tunnel_token
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  tunnel_token:
+    file: ${TUNNEL_TOKEN_FILE:-./sdk-installer/tunnel-token.txt}
+
+volumes:
+  dedos-data:

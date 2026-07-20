@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Dedos database backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

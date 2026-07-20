@@ -2,6 +2,7 @@
 node_modules/
 dist/
 *.apk
+!dedos-release.apk
 
 # signing secrets — NEVER commit
 *.keystore
@@ -35,6 +36,10 @@ template-info.md
 # local runtime & data
 runtime/
 server/data/
+server/backups/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 test-shots/
 third-user.log
 third-user.err

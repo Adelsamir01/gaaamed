@@ -1,14 +1,12 @@
 /**
  * server/users.js — هوية المستخدمين والأصدقاء والدردشات (بيانات دائمة على الخادم)
- * - users.json:   { version, users: {userId: {userId, deviceId, handle, name, avatar, createdAt, lastSeen}}, handles: {handle: userId}, devices: {deviceId: userId} }
- * - friends.json: { version, friends: {userId: [userId…]}, requests: {recipientId: [requesterId…]} }
- * - chats.json:   { version, threads: {threadId: {id, kind, name, memberIds, messages, reads, createdAt, updatedAt}}, dmByPair: {"a|b": threadId} }
- * الكتابة ذرّية (tmp + rename) مع تجميع التغييرات كل ~500ms.
+ * مستندات users/friends/chats/privacy محفوظة ذريًا في SQLite، مع استيراد ملفات JSON القديمة مرة واحدة.
+ * تُجمّع التغييرات المتقاربة لمدة 500ms لتقليل الكتابات مع flush إجباري عند إيقاف الخادم.
  */
 import { randomBytes, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DocumentDatabase, resolveDatabasePath } from './database.js'
 
 export const HANDLE_RE = /^[a-z0-9_]{3,15}$/
 // معرّفات الرسائل المتفائلة: يولّدها العميل ويصدّها الخادم كما هي ليتعرف العميل على الصدى ويزيل التكرار
@@ -23,22 +21,13 @@ export function resolveDataDir() {
   return fileURLToPath(new URL('./data/', import.meta.url))
 }
 
-class JsonFile {
-  constructor(path, fallback) {
-    this.path = path
+class JsonDocument {
+  constructor(database, name, legacyPath, fallback) {
+    this.database = database
+    this.name = name
+    this.path = legacyPath
     this.timer = null
-    this.data = fallback
-    try {
-      if (existsSync(path)) {
-        const parsed = JSON.parse(readFileSync(path, 'utf8'))
-        if (parsed && typeof parsed === 'object') this.data = { ...fallback, ...parsed }
-      } else {
-        this.saveSync()
-      }
-    } catch (error) {
-      console.error(`[users] تعذّر تحميل ${path} — البدء ببيانات فارغة`, error)
-      this.data = fallback
-    }
+    this.data = database.loadDocument(name, fallback, legacyPath)
   }
 
   scheduleSave() {
@@ -51,14 +40,11 @@ class JsonFile {
   }
 
   saveSync() {
-    try {
-      mkdirSync(dirname(this.path), { recursive: true })
-      const tmp = `${this.path}.tmp`
-      writeFileSync(tmp, `${JSON.stringify(this.data, null, 2)}\n`, 'utf8')
-      renameSync(tmp, this.path)
-    } catch (error) {
-      console.error(`[users] تعذّر حفظ ${this.path}`, error)
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
     }
+    this.database.saveDocument(this.name, this.data)
   }
 }
 
@@ -69,18 +55,20 @@ export function publicCard(user) {
 }
 
 export class UserStore {
-  constructor(dir = resolveDataDir()) {
+  constructor(dir = resolveDataDir(), database = null) {
     this.dir = dir
-    this.usersFile = new JsonFile(join(dir, 'users.json'), { version: 1, users: {}, handles: {}, devices: {} })
-    this.friendsFile = new JsonFile(join(dir, 'friends.json'), { version: 2, friends: {}, requests: {} })
+    this.database = database ?? new DocumentDatabase(resolveDatabasePath(dir))
+    this.ownsDatabase = database === null
+    this.usersFile = new JsonDocument(this.database, 'users', join(dir, 'users.json'), { version: 1, users: {}, handles: {}, devices: {} })
+    this.friendsFile = new JsonDocument(this.database, 'friends', join(dir, 'friends.json'), { version: 2, friends: {}, requests: {} })
     this.friendsFile.data.friends ??= {}
     this.friendsFile.data.requests ??= {}
     if ((this.friendsFile.data.version ?? 1) < 2) {
       this.friendsFile.data.version = 2
       this.friendsFile.scheduleSave()
     }
-    this.chatsFile = new JsonFile(join(dir, 'chats.json'), { version: 1, threads: {}, dmByPair: {} })
-    this.privacyRequestsFile = new JsonFile(join(dir, 'privacy-requests.json'), { version: 1, requests: [] })
+    this.chatsFile = new JsonDocument(this.database, 'chats', join(dir, 'chats.json'), { version: 1, threads: {}, dmByPair: {} })
+    this.privacyRequestsFile = new JsonDocument(this.database, 'privacy-requests', join(dir, 'privacy-requests.json'), { version: 1, requests: [] })
     this.privacyRequestsFile.data.requests ??= []
   }
 
@@ -473,5 +461,10 @@ export class UserStore {
     this.friendsFile.saveSync()
     this.chatsFile.saveSync()
     this.privacyRequestsFile.saveSync()
+  }
+
+  close() {
+    this.flushAll()
+    if (this.ownsDatabase) this.database.close()
   }
 }

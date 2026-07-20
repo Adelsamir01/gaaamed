@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Dedos local and public health
+After=dedos-compose.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/dedos/dedos.env
+ExecStart=/opt/dedos/deploy/healthcheck.sh

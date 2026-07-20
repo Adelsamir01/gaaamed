@@ -18,6 +18,7 @@ import {
 } from './shakhbata.js'
 import { RoomManager, StatsStore, parseClientMessage, resolveStatsFilePath } from './bankel7az.js'
 import { UserStore, resolveDataDir, publicCard } from './users.js'
+import { DocumentDatabase, resolveDatabasePath } from './database.js'
 import {
   advanceTriviaQuestion,
   applyMemoryFlip,
@@ -39,13 +40,23 @@ const INVITE_ROOM_TTL_MS = 10 * 60 * 1000
 // إعدادات الغرف: عدد الجولات المسموح به (أفضل من ٣/٥/٧) والقيمة الافتراضية
 const VALID_ROUNDS = new Set([3, 5, 7])
 const DEFAULT_ROUNDS = 5
+const APP_VERSION = process.env.APP_VERSION || 'dev'
+const STARTED_AT = Date.now()
+const MAX_WS_PAYLOAD_BYTES = 128 * 1024
+const MAX_WS_BUFFERED_BYTES = 512 * 1024
+const MESSAGE_RATE_WINDOW_MS = 10_000
+const MESSAGE_RATE_LIMIT = 300
+const PRIVACY_RATE_WINDOW_MS = 60_000
+const PRIVACY_RATE_LIMIT = 10
 
 // بنك الحظ: مخزن الإحصائيات + مدير الغرف (بروتوكول اللعبة الأصلي كما هو)
-const bankStats = new StatsStore(resolveStatsFilePath())
+const dataDir = resolveDataDir()
+const database = new DocumentDatabase(resolveDatabasePath(dataDir))
+const bankStats = new StatsStore(resolveStatsFilePath(), database)
 const bankManager = new RoomManager(bankStats)
 
 // الهوية والأصدقاء والدردشات (ملفات JSON دائمة)
-const userStore = new UserStore(resolveDataDir())
+const userStore = new UserStore(dataDir, database)
 
 // معلومات الألعاب لدعوات الدردشة
 const INVITE_GAMES = {
@@ -64,6 +75,14 @@ const onlineUsers = new Map()
 // gameId -> Array<{ws, userId, name, avatar, at}> (طوابير المباراة السريعة — مصممة لدعم N لاحقًا)
 const matchQueues = new Map()
 const MATCH_SIZE = 2
+const privacyRateLimits = new Map()
+
+function log(level, event, details = {}) {
+  const entry = { level, event, time: new Date().toISOString(), ...details }
+  const line = JSON.stringify(entry)
+  if (level === 'error') console.error(line)
+  else console.log(line)
+}
 
 // ===== صفحات الويب العامة (صفحة الهبوط + سياسة الخصوصية + تحميل APK) =====
 // ملاحظة: هذا القسم خدمة ملفات ثابتة فقط — لا علاقة له بمنطق WebSocket/الألعاب
@@ -84,8 +103,65 @@ const MIME_TYPES = {
 }
 
 function sendJson(res, status, obj) {
+  res.setHeader('cache-control', 'no-store')
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(obj))
+}
+
+function serviceHealth() {
+  const storage = database.health()
+  return {
+    ok: storage.ok,
+    service: 'dedos-server',
+    version: APP_VERSION,
+    uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
+    connections: wss?.clients?.size ?? 0,
+    rooms: rooms?.size ?? 0,
+    storage,
+    time: Date.now(),
+  }
+}
+
+function serviceMetrics() {
+  const storage = database.health()
+  const queueSize = [...matchQueues.values()].reduce((total, queue) => total + queue.length, 0)
+  return [
+    '# HELP dedos_up Whether the service and its storage are healthy.',
+    '# TYPE dedos_up gauge',
+    `dedos_up ${storage.ok ? 1 : 0}`,
+    '# HELP dedos_uptime_seconds Process uptime in seconds.',
+    '# TYPE dedos_uptime_seconds gauge',
+    `dedos_uptime_seconds ${Math.floor((Date.now() - STARTED_AT) / 1000)}`,
+    '# HELP dedos_websocket_connections Active WebSocket connections.',
+    '# TYPE dedos_websocket_connections gauge',
+    `dedos_websocket_connections ${wss.clients.size}`,
+    '# HELP dedos_rooms Active game rooms.',
+    '# TYPE dedos_rooms gauge',
+    `dedos_rooms ${rooms.size}`,
+    '# HELP dedos_matchmaking_queue_players Players waiting for a quick match.',
+    '# TYPE dedos_matchmaking_queue_players gauge',
+    `dedos_matchmaking_queue_players ${queueSize}`,
+    '',
+  ].join('\n')
+}
+
+function applySecurityHeaders(res) {
+  res.setHeader('x-content-type-options', 'nosniff')
+  res.setHeader('x-frame-options', 'DENY')
+  res.setHeader('referrer-policy', 'strict-origin-when-cross-origin')
+  res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()')
+  res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' wss:")
+}
+
+function allowPrivacyRequest(ip) {
+  const now = Date.now()
+  const current = privacyRateLimits.get(ip)
+  if (!current || now - current.startedAt >= PRIVACY_RATE_WINDOW_MS) {
+    privacyRateLimits.set(ip, { startedAt: now, count: 1 })
+    return true
+  }
+  current.count += 1
+  return current.count <= PRIVACY_RATE_LIMIT
 }
 
 function sendFile(req, res, filePath, contentType, { cacheControl = 'no-cache', downloadName } = {}) {
@@ -120,10 +196,26 @@ function sendFile(req, res, filePath, contentType, { cacheControl = 'no-cache', 
 
 // خادم HTTP صريح: نقاط صحة/إحصائيات + ملفات ثابتة + ترقية WebSocket
 const httpServer = createServer((req, res) => {
+  applySecurityHeaders(res)
   const url = (req.url || '/').split('?')[0]
   if (url === '/health') {
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({ ok: true, service: 'dedos-server', time: Date.now() }))
+    const health = serviceHealth()
+    sendJson(res, health.ok ? 200 : 503, health)
+    return
+  }
+  if (url === '/ready') {
+    const health = serviceHealth()
+    sendJson(res, health.ok ? 200 : 503, { ...health, ready: health.ok })
+    return
+  }
+  if (url === '/metrics') {
+    const metrics = serviceMetrics()
+    res.writeHead(200, {
+      'content-type': 'text/plain; version=0.0.4; charset=utf-8',
+      'cache-control': 'no-store',
+      'content-length': Buffer.byteLength(metrics),
+    })
+    res.end(metrics)
     return
   }
   if (url === '/api/stats') {
@@ -136,13 +228,28 @@ const httpServer = createServer((req, res) => {
   }
 
   if (url === '/api/privacy-request' && req.method === 'POST') {
+    const ip = req.socket.remoteAddress || 'unknown'
+    if (!allowPrivacyRequest(ip)) {
+      sendJson(res, 429, { ok: false, message: 'طلبات كثيرة جدًا. حاول مرة أخرى بعد دقيقة.' })
+      return
+    }
+    if (!String(req.headers['content-type'] || '').toLowerCase().includes('application/json')) {
+      sendJson(res, 415, { ok: false, message: 'نوع المحتوى غير مدعوم.' })
+      return
+    }
     let body = ''
+    let tooLarge = false
     req.setEncoding('utf8')
     req.on('data', (chunk) => {
+      if (tooLarge) return
       body += chunk
-      if (body.length > 12_000) req.destroy()
+      if (body.length > 12_000) {
+        tooLarge = true
+        sendJson(res, 413, { ok: false, message: 'الطلب أكبر من الحد المسموح.' })
+      }
     })
     req.on('end', () => {
+      if (tooLarge) return
       try {
         const payload = JSON.parse(body || '{}')
         const requestType = payload.requestType === 'privacy' ? 'privacy' : 'deletion'
@@ -179,7 +286,7 @@ const httpServer = createServer((req, res) => {
     if (fs.existsSync(APK_PATH)) {
       sendFile(req, res, APK_PATH, MIME_TYPES['.apk'], {
         cacheControl: 'no-cache',
-        downloadName: 'dedos-1.1.0.apk',
+        downloadName: 'dedos-1.2.0.apk',
       })
     } else {
       sendJson(res, 404, { error: 'apk_not_available', message: 'ملف APK غير متوفر حاليًا — حمّل التطبيق من Google Play.' })
@@ -222,7 +329,11 @@ const httpServer = createServer((req, res) => {
   sendJson(res, 404, { error: 'not_found' })
 })
 
-const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: false })
+httpServer.requestTimeout = 15_000
+httpServer.headersTimeout = 10_000
+httpServer.keepAliveTimeout = 5_000
+
+const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: false, maxPayload: MAX_WS_PAYLOAD_BYTES })
 
 // سوكيت افتراضي يمرّر رسائل بروتوكول بنك الحظ عبر نفق {type:'bank', msg}
 function ensureBankVws(ws) {
@@ -248,7 +359,28 @@ function genCode() {
 }
 
 function send(ws, obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
+  if (!ws || ws.readyState !== 1) return false
+  if (ws.bufferedAmount > MAX_WS_BUFFERED_BYTES) {
+    log('warn', 'slow_client_disconnected', { bufferedBytes: ws.bufferedAmount, userId: ws._userId ?? null })
+    ws.close(1013, 'slow_client')
+    return false
+  }
+  const payload = JSON.stringify(obj)
+  ws.send(payload)
+  return true
+}
+
+function consumeMessageRate(ws) {
+  const now = Date.now()
+  if (!ws._messageRate || now - ws._messageRate.startedAt >= MESSAGE_RATE_WINDOW_MS) {
+    ws._messageRate = { startedAt: now, count: 1, violations: ws._messageRate?.violations ?? 0 }
+    return true
+  }
+  ws._messageRate.count += 1
+  if (ws._messageRate.count <= MESSAGE_RATE_LIMIT) return true
+  ws._messageRate.violations += 1
+  if (ws._messageRate.violations >= 3) ws.close(1008, 'rate_limit')
+  return false
 }
 
 function broadcast(room, obj) {
@@ -569,19 +701,34 @@ function handleLeave(ws) {
   cleanupRoom(code)
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, request) => {
   ws.isAlive = true
   ws._room = null
   ws._slot = null
+  ws._ip = request.socket.remoteAddress || 'unknown'
+  ws._messageRate = { startedAt: Date.now(), count: 0, violations: 0 }
   ws.on('pong', () => {
     ws.isAlive = true
   })
 
-  ws.on('message', (raw) => {
+  ws.on('message', (raw, isBinary) => {
+    if (isBinary) {
+      ws.close(1003, 'json_only')
+      return
+    }
+    if (!consumeMessageRate(ws)) {
+      send(ws, { type: 'error', message: 'رسائل كثيرة جدًا — انتظر لحظة.' })
+      return
+    }
     let msg
     try {
       msg = JSON.parse(raw.toString())
     } catch {
+      send(ws, { type: 'error', message: 'صيغة الرسالة غير صحيحة.' })
+      return
+    }
+    if (!msg || Array.isArray(msg) || typeof msg !== 'object' || typeof msg.type !== 'string' || msg.type.length > 40) {
+      send(ws, { type: 'error', message: 'صيغة الرسالة غير صحيحة.' })
       return
     }
 
@@ -821,6 +968,7 @@ wss.on('connection', (ws) => {
           ws._userId = user.userId
           trackOnline(user.userId, ws)
           send(ws, { type: 'identified', user: { ...publicCard(user), createdAt: user.createdAt }, created })
+          send(ws, { type: 'session_state', inRoom: Boolean(ws._room), serverStartedAt: STARTED_AT })
           broadcastFriendsUpdate(user.userId)
           pushFriendRequestsUpdate(user.userId)
           console.log(`IDENTIFY ${user.handle} (${created ? 'جديد' : 'عائد'})`)
@@ -1086,7 +1234,7 @@ wss.on('connection', (ws) => {
 })
 
 // نبضات القلب: قطع الاتصالات الميتة + جمع غرف الدعوات الفارغة المنتهية
-setInterval(() => {
+const heartbeatTimer = setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) {
       handleLeave(ws)
@@ -1108,12 +1256,70 @@ setInterval(() => {
       console.log(`INVITE_ROOM_EXPIRED ${code}`)
     }
   }
+  for (const [ip, rate] of privacyRateLimits) {
+    if (now - rate.startedAt > PRIVACY_RATE_WINDOW_MS * 2) privacyRateLimits.delete(ip)
+  }
 }, 20000)
+if (heartbeatTimer.unref) heartbeatTimer.unref()
 
 // تنظيف غرف بنك الحظ المنتهية الصلاحية كل 10 دقائق
 const bankCleanupTimer = setInterval(() => bankManager.cleanup(), 10 * 60 * 1000)
 if (bankCleanupTimer.unref) bankCleanupTimer.unref()
 
 httpServer.listen(PORT, () => {
-  console.log(`DEDOS_SERVER listening on ws://0.0.0.0:${PORT} (+ http /health /api/stats)`)
+  log('info', 'server_started', { port: PORT, version: APP_VERSION })
+})
+
+httpServer.on('error', (error) => {
+  log('error', 'http_server_error', { message: error.message, code: error.code ?? null })
+  if (error.code === 'EADDRINUSE' || error.code === 'EACCES') void shutdown('http_server_error', 1)
+})
+
+let shuttingDown = false
+async function shutdown(reason, exitCode = 0) {
+  if (shuttingDown) return
+  shuttingDown = true
+  log('info', 'server_shutdown_started', { reason, connections: wss.clients.size, rooms: rooms.size })
+  clearInterval(heartbeatTimer)
+  clearInterval(bankCleanupTimer)
+
+  for (const room of rooms.values()) clearCompetitiveTimers(room)
+  for (const ws of wss.clients) {
+    send(ws, { type: 'server_shutdown', retry: true })
+    try {
+      ws.close(1001, 'server_restart')
+    } catch {
+      ws.terminate()
+    }
+  }
+
+  const forceTimer = setTimeout(() => {
+    for (const ws of wss.clients) ws.terminate()
+    httpServer.closeAllConnections?.()
+  }, 2_000)
+  if (forceTimer.unref) forceTimer.unref()
+
+  await new Promise((resolve) => httpServer.close(resolve))
+  clearTimeout(forceTimer)
+  try {
+    userStore.flushAll()
+    bankStats.flush()
+    database.close()
+    log('info', 'server_shutdown_complete', { reason })
+  } catch (error) {
+    exitCode = 1
+    log('error', 'server_shutdown_storage_error', { message: error.message })
+  }
+  process.exit(exitCode)
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))
+process.on('uncaughtException', (error) => {
+  log('error', 'uncaught_exception', { message: error.message, stack: error.stack })
+  void shutdown('uncaughtException', 1)
+})
+process.on('unhandledRejection', (error) => {
+  log('error', 'unhandled_rejection', { message: error?.message ?? String(error), stack: error?.stack })
+  void shutdown('unhandledRejection', 1)
 })

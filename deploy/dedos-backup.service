@@ -1,0 +1,9 @@
+[Unit]
+Description=Back up the Dedos SQLite database
+After=dedos-compose.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/dedos
+EnvironmentFile=-/etc/dedos/dedos.env
+ExecStart=/usr/bin/docker compose -f /opt/dedos/compose.production.yml exec -T app node tools/backup-server.mjs

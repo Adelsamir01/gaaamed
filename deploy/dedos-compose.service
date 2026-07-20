@@ -1,0 +1,18 @@
+[Unit]
+Description=Dedos game server and Cloudflare tunnel
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/dedos
+EnvironmentFile=-/etc/dedos/dedos.env
+ExecStart=/usr/bin/docker compose -f /opt/dedos/compose.production.yml up -d --remove-orphans
+ExecReload=/opt/dedos/deploy/deploy.sh
+ExecStop=/usr/bin/docker compose -f /opt/dedos/compose.production.yml down
+RemainAfterExit=yes
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

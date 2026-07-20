@@ -12,7 +12,7 @@ type StatusHandler = (status: ConnectionStatus) => void
 
 const STORAGE_KEY = 'gaaamed_server_url'
 const DEVICE_KEY = 'gaaamed_device_id'
-const MAX_RETRIES = 3
+const MAX_RECONNECT_DELAY_MS = 30_000
 
 /** معرّف الجهاز: يُولّد مرة واحدة ويُخزن محليًا */
 export function getDeviceId(): string {
@@ -51,25 +51,36 @@ class OnlineClient {
   private statusHandlers = new Set<StatusHandler>()
   private retries = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private manualClose = false
+  private manualSockets = new WeakSet<WebSocket>()
   status: ConnectionStatus = 'offline'
+
+  constructor() {
+    if (typeof window === 'undefined') return
+    window.addEventListener('online', () => this.reconnect())
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.status === 'offline') this.connect()
+    })
+  }
 
   connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
-    this.manualClose = false
     this.setStatus('connecting')
+    let socket: WebSocket
     try {
-      this.ws = new WebSocket(getServerUrl())
+      socket = new WebSocket(getServerUrl())
+      this.ws = socket
     } catch {
       this.setStatus('offline')
       this.scheduleReconnect()
       return
     }
-    this.ws.onopen = () => {
+    socket.onopen = () => {
+      if (this.ws !== socket) return
       this.retries = 0
       this.setStatus('online')
     }
-    this.ws.onmessage = (ev) => {
+    socket.onmessage = (ev) => {
+      if (this.ws !== socket) return
       try {
         const msg = JSON.parse(ev.data as string) as ServerMessage
         this.messageHandlers.forEach((h) => h(msg))
@@ -77,23 +88,27 @@ class OnlineClient {
         /* ignore */
       }
     }
-    this.ws.onclose = () => {
-      this.ws = null
+    socket.onclose = () => {
+      if (this.ws === socket) this.ws = null
+      if (this.manualSockets.has(socket)) return
       this.setStatus('offline')
-      if (!this.manualClose) this.scheduleReconnect()
+      this.scheduleReconnect()
     }
-    this.ws.onerror = () => {
+    socket.onerror = () => {
       /* onclose يتكفل بالباقي */
     }
   }
 
   private scheduleReconnect() {
-    if (this.retries >= MAX_RETRIES || this.reconnectTimer) return
-    this.retries++
+    if (this.reconnectTimer) return
+    const attempt = this.retries++
+    const baseDelay = Math.min(MAX_RECONNECT_DELAY_MS, 1000 * 2 ** Math.min(attempt, 5))
+    const delay = Math.round(baseDelay * (1 + Math.random() * 0.3))
+    this.setStatus('connecting')
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connect()
-    }, 1500 * this.retries)
+    }, delay)
   }
 
   reconnect() {
@@ -103,9 +118,10 @@ class OnlineClient {
       this.reconnectTimer = null
     }
     if (this.ws) {
-      this.manualClose = true
+      const socket = this.ws
+      this.manualSockets.add(socket)
       try {
-        this.ws.close()
+        socket.close()
       } catch {
         /* ignore */
       }

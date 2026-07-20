@@ -10,6 +10,10 @@
     "preview": "vite preview",
     "android:sync": "npm run build && npx cap sync android",
     "server": "node server/server.js",
+    "server:backup": "node tools/backup-server.mjs",
+    "server:verify-backup": "node tools/verify-backup.mjs",
+    "smoke:reliability": "node server/smoke-reliability.js",
+    "test:server": "node --test server/competitive-games.test.js server/database.test.js",
     "test:competitive": "node --test server/competitive-games.test.js",
     "smoke:competitive": "node server/smoke-competitive.js"
   },

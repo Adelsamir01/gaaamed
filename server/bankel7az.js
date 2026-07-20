@@ -1151,8 +1151,10 @@ const STATS_VERSION = 1;
 const MAX_RECENT_GAMES = 30;
 
 class StatsStore {
-  constructor(filePath) {
+  constructor(filePath, database = null) {
     this.filePath = filePath;
+    this.database = database;
+    this.writeTimer = null;
     this.lastError = null;
     this.stats = this.load();
     this.write();
@@ -1620,11 +1622,23 @@ class StatsStore {
 
   touchAndWrite(at) {
     this.stats.updatedAt = at;
-    this.write();
+    this.scheduleWrite();
+  }
+
+  scheduleWrite() {
+    if (this.writeTimer) return;
+    this.writeTimer = setTimeout(() => {
+      this.writeTimer = null;
+      this.write();
+    }, 500);
+    if (this.writeTimer.unref) this.writeTimer.unref();
   }
 
   load() {
     try {
+      if (this.database) {
+        return normalizeStats(this.database.loadDocument("bank-stats", createEmptyStats(), this.filePath));
+      }
       if (!existsSync(this.filePath)) {
         return createEmptyStats();
       }
@@ -1638,6 +1652,15 @@ class StatsStore {
 
   write() {
     try {
+      if (this.writeTimer) {
+        clearTimeout(this.writeTimer);
+        this.writeTimer = null;
+      }
+      if (this.database) {
+        this.database.saveDocument("bank-stats", this.stats);
+        this.lastError = null;
+        return;
+      }
       mkdirSync(dirname(this.filePath), { recursive: true });
       const temporaryPath = `${this.filePath}.tmp`;
       writeFileSync(temporaryPath, `${JSON.stringify(this.stats, null, 2)}\n`, "utf8");
@@ -1646,6 +1669,10 @@ class StatsStore {
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : "Unknown stats write error";
     }
+  }
+
+  flush() {
+    this.write();
   }
 }
 

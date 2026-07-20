@@ -360,6 +360,22 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           toast.info('طلب صداقة جديد 👋', { description: requester ? `${requester.name} يريد إضافتك` : undefined })
           break
         }
+        case 'session_state':
+          if (msg.inRoom !== true && phaseRef.current !== 'idle') {
+            if (phaseRef.current === 'playing' || phaseRef.current === 'ready') {
+              setPhase('opponent_left')
+              toast.info('انتهت الجلسة بعد انقطاع الخادم', { description: 'اتصلنا من جديد، لكن المباراة القديمة لم تعد موجودة.' })
+            } else {
+              setPhase('idle')
+              setCode(null)
+              setSlot(null)
+              setGameId(null)
+              setOpponent(null)
+              setPlayers([])
+              toast.info('تمت إعادة الاتصال بالخادم')
+            }
+          }
+          break
         case 'friend_accepted': {
           const friend = msg.user as PublicUserCard | undefined
           toast.success('تم قبول طلب الصداقة 🎉', { description: friend ? `أنت و${friend.name} أصدقاء الآن` : undefined })
