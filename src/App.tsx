@@ -243,7 +243,7 @@ function Shell() {
   // غرفة دردشة مفتوحة
   if (tab === 'chat' && chatRoomId) {
     return (
-      <div className="mx-auto max-w-[420px] min-h-dvh safe-top">
+      <div className="mx-auto max-w-[420px] h-dvh overflow-hidden safe-top">
         <ChatRoom threadId={chatRoomId} onBack={() => setChatRoomId(null)} onJoinRoom={joinRoomFromInvite} />
       </div>
     )

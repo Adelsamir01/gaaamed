@@ -119,7 +119,10 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
   // منتقي الدعوات: اللعبة ذات الجولات المختارة + عدد الجولات (الافتراضي ٥)
   const [inviteGame, setInviteGame] = useState<string | null>(null)
   const [inviteRounds, setInviteRounds] = useState<number>(DEFAULT_ROUNDS)
+  const [showNewestButton, setShowNewestButton] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const stickToBottomRef = useRef(true)
 
   const dmFriend = thread?.kind === 'dm' ? friends.find((f) => thread.memberIds.includes(f.userId)) : undefined
   const isGroup = thread?.kind === 'group'
@@ -142,16 +145,52 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId])
 
+  const scrollToBottom = useCallback(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    scroller.scrollTop = scroller.scrollHeight
+    stickToBottomRef.current = true
+    setShowNewestButton(false)
+  }, [])
+
+  const lastMessage = msgs[msgs.length - 1]
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [msgs.length])
+    const frame = requestAnimationFrame(() => {
+      if (stickToBottomRef.current || lastMessage?.senderId === myId) scrollToBottom()
+      else setShowNewestButton(true)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [lastMessage?.id, lastMessage?.senderId, myId, scrollToBottom, threadId])
+
+  useEffect(() => {
+    const keepLatestVisible = () => {
+      stickToBottomRef.current = true
+      requestAnimationFrame(() => requestAnimationFrame(scrollToBottom))
+    }
+    window.addEventListener('keyboardDidShow', keepLatestVisible)
+    window.visualViewport?.addEventListener('resize', keepLatestVisible)
+    return () => {
+      window.removeEventListener('keyboardDidShow', keepLatestVisible)
+      window.visualViewport?.removeEventListener('resize', keepLatestVisible)
+    }
+  }, [scrollToBottom])
+
+  const handleMessageScroll = () => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 72
+    if (stickToBottomRef.current) setShowNewestButton(false)
+  }
 
   const send = () => {
     const text = draft.trim()
     if (!text) return
     sounds.click()
+    stickToBottomRef.current = true
     chatSend(threadId, text)
     setDraft('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
   }
 
   const sendInvite = (gameId: string) => {
@@ -179,7 +218,7 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-dvh">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* الترويسة */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-white/10 shrink-0">
         <button
@@ -203,21 +242,39 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
       </div>
 
       {/* الرسائل */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 flex flex-col gap-2.5">
-        {msgs.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-            <div className="text-4xl mb-2">💬</div>
-            <p className="text-xs font-bold">لا رسائل بعد — ابدأ المحادثة!</p>
-          </div>
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={handleMessageScroll}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          className="flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain px-4 py-4 no-scrollbar"
+        >
+          {msgs.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
+              <div className="mb-2 text-4xl">💬</div>
+              <p className="text-xs font-bold">لا رسائل بعد — ابدأ المحادثة!</p>
+            </div>
+          )}
+          {msgs.map((m) => (
+            <MessageBubble key={m.id} m={m} mine={m.senderId === myId} isGroup={isGroup === true} onJoin={handleJoin} />
+          ))}
+        </div>
+        {showNewestButton && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full border border-emerald-400/35 bg-slate-900/95 px-4 py-2 text-[11px] font-extrabold text-emerald-300 shadow-xl backdrop-blur-xl"
+          >
+            رسائل جديدة ↓
+          </button>
         )}
-        {msgs.map((m) => (
-          <MessageBubble key={m.id} m={m} mine={m.senderId === myId} isGroup={isGroup === true} onJoin={handleJoin} />
-        ))}
       </div>
 
       {/* الإدخال */}
       <div className="px-4 pt-2 shrink-0 safe-bottom">
-        <div className="flex items-center gap-2 glass rounded-3xl p-2">
+        <div className="flex items-end gap-2 glass rounded-3xl p-2">
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => {
@@ -229,12 +286,27 @@ export default function ChatRoom({ threadId, onBack, onJoinRoom }: Props) {
           >
             <Gamepad2 className="w-5 h-5" />
           </motion.button>
-          <input
+          <textarea
+            ref={composerRef}
+            rows={1}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
+            onInput={(e) => {
+              e.currentTarget.style.height = 'auto'
+              e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 96)}px`
+            }}
+            onFocus={() => {
+              stickToBottomRef.current = true
+              requestAnimationFrame(() => requestAnimationFrame(scrollToBottom))
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+              e.preventDefault()
+              send()
+            }}
+            enterKeyHint="send"
             placeholder="اكتب رسالة…"
-            className="flex-1 min-w-0 bg-transparent text-sm font-medium placeholder:text-muted-foreground/60 focus:outline-none"
+            className="max-h-24 min-h-11 flex-1 min-w-0 resize-none overflow-y-auto bg-transparent px-1 py-2.5 text-base font-medium leading-6 placeholder:text-muted-foreground/60 focus:outline-none"
           />
           <motion.button
             whileTap={{ scale: 0.9 }}

@@ -20,6 +20,7 @@
   "dependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/keyboard": "^8.0.5",
     "@capacitor/preferences": "^8.0.1",
     "@fontsource/cairo": "^5.2.7",
     "@hookform/resolvers": "^5.2.2",
