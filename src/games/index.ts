@@ -25,6 +25,7 @@ const OnlineBankEl7az = lazy(() => import('./online/bankel7az/App'))
 export interface GameProps {
   config: GameConfig
   onFinish: (result: GameResult) => void
+  onExit?: () => void
 }
 
 type GameComponent = LazyExoticComponent<ComponentType<GameProps>>
@@ -144,14 +145,14 @@ export const GAMES: GameDef[] = [
   {
     id: 'snake',
     name: 'الثعبان',
-    description: 'الكلاسيكية الشهيرة — اجمع التفاح وكبّر الثعبان من غير ما تخبط في الحيط أو في نفسك',
+    description: 'عالم لا نهائي بأسلوب Snake.io — اجمع الكرات المضيئة وكبّر الثعبان بتحكم سريع بإصبعك',
     emoji: '🐍',
     category: 'سرعة',
     howToPlay: [
-      'حرّك الثعبان بالأسهم أو اسحب بإصبعك في الاتجاه المطلوب',
-      'اجمع التفاح لزيادة نقاطك وطول الثعبان',
-      'تجنّب الاصطدام بحواف اللوحة أو بجسم الثعبان',
-      'اختر مستوى الصعوبة لتغيير سرعة الحركة',
+      'حط إصبعك في أي مكان داخل الساحة واسحب — الاتجاه يتغير فورًا وإصبعك ما زال على الشاشة',
+      'اجمع الكرات المضيئة لزيادة نقاطك وطول الثعبان',
+      'العالم مفتوح بلا حواف؛ استمر في الاستكشاف وتجنّب الالتفاف على جسم الثعبان',
+      'اختر مستوى السرعة المناسب؛ السرعة ثابتة ولا تزيد فجأة أثناء اللعب',
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
