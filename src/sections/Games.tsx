@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Globe, Search, Users } from 'lucide-react'
+import { Bot, Globe, Search, UserRound, Users } from 'lucide-react'
 import { useApp } from '@/store/AppContext'
 import { GAMES, CATEGORIES } from '@/games'
 import { sounds } from '@/lib/sounds'
@@ -108,7 +108,13 @@ export default function Games({ openGame, openOnline }: { openGame: (id: string)
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{g.description}</p>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {g.singlePlayer && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-400/30 rounded-full px-2 py-0.5">
+                      <UserRound className="w-3 h-3" />
+                      فردي
+                    </span>
+                  )}
                   {g.supportsBot && (
                     <span className="flex items-center gap-1 text-[10px] font-bold text-sky-300 bg-sky-500/10 border border-sky-400/30 rounded-full px-2 py-0.5">
                       <Bot className="w-3 h-3" />

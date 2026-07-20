@@ -8,6 +8,8 @@ const MemoryGame = lazy(() => import('./memory/MemoryGame'))
 const TriviaGame = lazy(() => import('./trivia/TriviaGame'))
 const RpsGame = lazy(() => import('./rps/RpsGame'))
 const ReactionGame = lazy(() => import('./reaction/ReactionGame'))
+const SnakeGame = lazy(() => import('./snake/SnakeGame'))
+const MinesweeperGame = lazy(() => import('./minesweeper/MinesweeperGame'))
 const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
 const ConnectFour = lazy(() => import('./online/ConnectFour'))
 const OnlineRps = lazy(() => import('./online/OnlineRps'))
@@ -33,6 +35,7 @@ export interface GameDef {
   howToPlay: string[]
   supportsBot: boolean
   supportsTwoPlayer: boolean
+  singlePlayer?: boolean
   difficulties?: boolean
   online?: boolean
   /** نسخة الأونلاين من نفس اللعبة (للألعاب التي تدعم الوضعين) */
@@ -73,6 +76,7 @@ export const GAMES: GameDef[] = [
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    singlePlayer: true,
     online: true,
     onlineComponent: OnlineMemory,
     component: MemoryGame,
@@ -92,6 +96,7 @@ export const GAMES: GameDef[] = [
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    singlePlayer: true,
     online: true,
     onlineComponent: OnlineTrivia,
     component: TriviaGame,
@@ -128,9 +133,46 @@ export const GAMES: GameDef[] = [
     ],
     supportsBot: false,
     supportsTwoPlayer: false,
+    singlePlayer: true,
     online: true,
     onlineComponent: OnlineReaction,
     component: ReactionGame,
+  },
+  {
+    id: 'snake',
+    name: 'الثعبان',
+    description: 'الكلاسيكية الشهيرة — اجمع التفاح وكبّر الثعبان من غير ما تخبط في الحيط أو في نفسك',
+    emoji: '🐍',
+    category: 'سرعة',
+    howToPlay: [
+      'حرّك الثعبان بالأسهم أو اسحب بإصبعك في الاتجاه المطلوب',
+      'اجمع التفاح لزيادة نقاطك وطول الثعبان',
+      'تجنّب الاصطدام بحواف اللوحة أو بجسم الثعبان',
+      'اختر مستوى الصعوبة لتغيير سرعة الحركة',
+    ],
+    supportsBot: false,
+    supportsTwoPlayer: false,
+    singlePlayer: true,
+    difficulties: true,
+    component: SnakeGame,
+  },
+  {
+    id: 'minesweeper',
+    name: 'كاسحة الألغام',
+    description: 'اكشف المربعات الآمنة واستعمل الأرقام لتحدد أماكن كل الألغام قبل ما تنفجر',
+    emoji: '💣',
+    category: 'ذكاء',
+    howToPlay: [
+      'اكشف أي مربع للبدء — أول ضغطة آمنة دائمًا',
+      'الرقم يخبرك بعدد الألغام الملامسة للمربع',
+      'فعّل وضع العلم وحدد المربعات التي تشك أن بها لغمًا',
+      'تكسب عندما تكشف كل المربعات الآمنة من غير لمس لغم',
+    ],
+    supportsBot: false,
+    supportsTwoPlayer: false,
+    singlePlayer: true,
+    difficulties: true,
+    component: MinesweeperGame,
   },
   // ===== ألعاب الأونلاين =====
   {

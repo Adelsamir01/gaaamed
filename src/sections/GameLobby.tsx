@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bot, ChevronDown, ChevronRight, Globe, Play, Users, Info } from 'lucide-react'
+import { Bot, ChevronDown, ChevronRight, Globe, Play, UserRound, Users, Info } from 'lucide-react'
 import type { GameDef } from '@/games'
 import type { Difficulty, GameConfig } from '@/types'
 import { useApp } from '@/store/AppContext'
@@ -13,7 +13,7 @@ const DIFFICULTIES: { id: Difficulty; label: string; hint: string }[] = [
   { id: 'hard', label: 'صعب', hint: 'للمحترفين' },
 ]
 
-type Mode = 'bot' | 'twoPlayer' | 'online'
+type Mode = 'solo' | 'bot' | 'twoPlayer' | 'online'
 
 interface Props {
   game: GameDef
@@ -24,8 +24,8 @@ interface Props {
 
 export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
   const { stats } = useApp()
-  const onlineOnly = !!game.online && !game.supportsBot && !game.supportsTwoPlayer
-  const [mode, setMode] = useState<Mode>(onlineOnly ? 'online' : game.supportsBot ? 'bot' : 'twoPlayer')
+  const onlineOnly = !!game.online && !game.singlePlayer && !game.supportsBot && !game.supportsTwoPlayer
+  const [mode, setMode] = useState<Mode>(onlineOnly ? 'online' : game.singlePlayer ? 'solo' : game.supportsBot ? 'bot' : 'twoPlayer')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
   const [showHowToPlay, setShowHowToPlay] = useState(false)
   const s = stats[game.id]
@@ -112,6 +112,26 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
       <div className="glass rounded-3xl p-4 mb-4">
         <h2 className="font-extrabold mb-3">نمط اللعب</h2>
         <div className="flex flex-col gap-2">
+          {game.singlePlayer && (
+            <button
+              onClick={() => {
+                sounds.click()
+                setMode('solo')
+              }}
+              className={cn(
+                'flex items-center gap-3 rounded-2xl p-3.5 border transition-all text-start',
+                mode === 'solo' ? 'bg-emerald-500/15 border-emerald-400/60 glow-emerald' : 'bg-white/5 border-white/10 hover:bg-white/10',
+              )}
+              aria-pressed={mode === 'solo'}
+            >
+              <UserRound className={cn('w-6 h-6', mode === 'solo' ? 'text-emerald-400' : 'text-muted-foreground')} />
+              <div className="flex-1">
+                <p className="font-extrabold text-sm">لاعب واحد</p>
+                <p className="text-[11px] text-muted-foreground">العب وسجّل أفضل نتيجة</p>
+              </div>
+              {mode === 'solo' && <span className="text-emerald-400 text-lg">✓</span>}
+            </button>
+          )}
           {game.supportsBot && (
             <button
               onClick={() => {
@@ -176,7 +196,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
       </div>
 
       {/* الصعوبة */}
-      {game.difficulties && mode === 'bot' && (
+      {game.difficulties && (mode === 'bot' || mode === 'solo') && (
         <div className="glass rounded-3xl p-4 mb-6">
           <h2 className="font-extrabold mb-3">مستوى الصعوبة</h2>
           <div className="grid grid-cols-3 gap-2">
