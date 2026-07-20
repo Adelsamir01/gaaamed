@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, type ConnectionStatus, type ServerMessage } from './client'
+import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineClientStorage, type ConnectionStatus, type ServerMessage } from './client'
 import { useApp } from '@/store/AppContext'
 import type { PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
+import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 
 export interface Opponent {
   name: string
@@ -41,6 +42,42 @@ export interface MeIdentity {
 
 /** رسالة دردشة كما يخزنها العميل — تمتد برسالة الخادم + علم "قيد الإرسال" للرسائل المتفائلة */
 export type ChatMessage = ServerChatMessage & { pending?: boolean }
+
+interface QueuedChatMessage {
+  clientId: string
+  threadId: string
+  text: string
+  createdAt: number
+}
+
+interface SocialCache {
+  ownerUserId?: string
+  friends: ServerFriend[]
+  incomingFriendRequests: PublicUserCard[]
+  outgoingFriendRequests: PublicUserCard[]
+  threads: ServerThread[]
+  messages: Record<string, ChatMessage[]>
+  cachedAt: number
+}
+
+const SOCIAL_CACHE_KEY = 'gaaamed-social-cache-v1'
+const CHAT_OUTBOX_KEY = 'gaaamed-chat-outbox-v1'
+const MAX_CACHED_MESSAGES_PER_THREAD = 100
+
+const EMPTY_SOCIAL_CACHE: SocialCache = {
+  friends: [],
+  incomingFriendRequests: [],
+  outgoingFriendRequests: [],
+  threads: [],
+  messages: {},
+  cachedAt: 0,
+}
+
+function trimMessageCache(messages: Record<string, ChatMessage[]>): Record<string, ChatMessage[]> {
+  return Object.fromEntries(
+    Object.entries(messages).map(([threadId, list]) => [threadId, list.slice(-MAX_CACHED_MESSAGES_PER_THREAD)]),
+  )
+}
 
 interface OnlineContextValue {
   status: ConnectionStatus
@@ -129,6 +166,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [outgoingFriendRequests, setOutgoingFriendRequests] = useState<PublicUserCard[]>([])
   const [threads, setThreads] = useState<ServerThread[]>([])
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
+  const [chatOutbox, setChatOutbox] = useState<QueuedChatMessage[]>([])
+  const [socialCacheReady, setSocialCacheReady] = useState(false)
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [quickMatchGame, setQuickMatchGame] = useState<string | null>(null)
   const [fromQuickMatch, setFromQuickMatch] = useState(false)
@@ -156,6 +195,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const handleResolverRef = useRef<((r: { ok: boolean; message?: string }) => void) | null>(null)
   const threadResolverRef = useRef<((t: ServerThread | null) => void) | null>(null)
   const startGameRef = useRef<() => void>(() => {})
+  const sentOutboxIdsRef = useRef(new Set<string>())
+  const initialProfileUserIdRef = useRef(app.profile.userId)
 
   const upsertThread = useCallback((thread: ServerThread) => {
     setThreads((list) => {
@@ -166,7 +207,6 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    onlineClient.connect()
     // البدء التلقائي لغرف دعوات الـ DM: المضيف (slot=1) يرسل start بعد لحظة قصيرة من اكتمال لاعبَين
     // (يعكس مسار المباراة السريعة). الخادم يتجاهل start المكرر بأمان، والختم الزمني يمنع الإطلاق المزدوج.
     const scheduleAutoStart = () => {
@@ -396,7 +436,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           break
         case 'chat_history': {
           const threadId = msg.threadId as string
-          setMessages((m) => ({ ...m, [threadId]: (msg.messages as ServerChatMessage[]) ?? [] }))
+          setMessages((current) => {
+            const official = (msg.messages as ServerChatMessage[]) ?? []
+            const officialIds = new Set(official.map((message) => message.id))
+            const pending = (current[threadId] ?? []).filter((message) => message.pending && !officialIds.has(message.id))
+            return { ...current, [threadId]: [...official, ...pending] }
+          })
           if (msg.thread) upsertThread(msg.thread as ServerThread)
           break
         }
@@ -415,6 +460,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             }
             return { ...m, [threadId]: [...list, message] }
           })
+          sentOutboxIdsRef.current.delete(message.id)
+          setChatOutbox((queue) => queue.filter((item) => item.clientId !== message.id))
           if (msg.thread) upsertThread(msg.thread as ServerThread)
           // دعوتي أنا: الخادم أنشأ الغرفة — أدخلها تلقائيًا لأنتظر الخصم داخلها
           if (
@@ -467,17 +514,103 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ابدأ الاتصال بعد أن تظهر الواجهة الأولى، وبعد تحميل إعدادات الجهاز الأصلية.
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | null = null
+    void hydrateOnlineClientStorage().then(() => {
+      if (cancelled) return
+      setServerUrl(getServerUrl())
+      timer = window.setTimeout(() => onlineClient.connect(), 350)
+    })
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [])
+
+  // اعرض آخر حالة اجتماعية فورًا حتى لو كان الخادم ما زال يعيد الاتصال.
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([
+      readStoredJson<SocialCache>(SOCIAL_CACHE_KEY, EMPTY_SOCIAL_CACHE),
+      readStoredJson<QueuedChatMessage[]>(CHAT_OUTBOX_KEY, []),
+    ]).then(([cache, outbox]) => {
+      if (cancelled) return
+      const initialUserId = initialProfileUserIdRef.current
+      const sameOwner = !cache.ownerUserId || !initialUserId || cache.ownerUserId === initialUserId
+      if (sameOwner) {
+        setFriends(cache.friends ?? [])
+        setIncomingFriendRequests(cache.incomingFriendRequests ?? [])
+        setOutgoingFriendRequests(cache.outgoingFriendRequests ?? [])
+        setThreads(cache.threads ?? [])
+        setMessages(cache.messages ?? {})
+        setChatOutbox(outbox)
+      }
+      setSocialCacheReady(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!socialCacheReady) return
+    const timer = window.setTimeout(() => {
+      void writeStoredJson(SOCIAL_CACHE_KEY, {
+        ownerUserId: app.profile.userId,
+        friends,
+        incomingFriendRequests,
+        outgoingFriendRequests,
+        threads,
+        messages: trimMessageCache(messages),
+        cachedAt: Date.now(),
+      } satisfies SocialCache)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [app.profile.userId, friends, incomingFriendRequests, messages, outgoingFriendRequests, socialCacheReady, threads])
+
+  useEffect(() => {
+    if (!socialCacheReady) return
+    void writeStoredJson(CHAT_OUTBOX_KEY, chatOutbox)
+  }, [chatOutbox, socialCacheReady])
+
+  useEffect(() => {
+    if (status !== 'online') {
+      sentOutboxIdsRef.current.clear()
+      return
+    }
+    if (!me || chatOutbox.length === 0) return
+    for (const item of chatOutbox) {
+      if (sentOutboxIdsRef.current.has(item.clientId)) continue
+      sentOutboxIdsRef.current.add(item.clientId)
+      onlineClient.send({
+        type: 'chat_send',
+        threadId: item.threadId,
+        text: item.text,
+        clientId: item.clientId,
+      })
+    }
+  }, [chatOutbox, me, status])
+
   // identify عند الاتصال (وعند تغيّر الملف) — بعد اكتمال الأونبوردنج فقط
   const { onboarded, profile } = app
   useEffect(() => {
     if (status !== 'online' || !onboarded || !profile.name) return
-    onlineClient.send({
-      type: 'identify',
-      deviceId: getDeviceId(),
-      name: profile.name,
-      avatar: profile.avatar,
-      handle: profile.handle,
+    let cancelled = false
+    void getDeviceId().then((deviceId) => {
+      if (cancelled) return
+      onlineClient.send({
+        type: 'identify',
+        deviceId,
+        name: profile.name,
+        avatar: profile.avatar,
+        handle: profile.handle,
+      })
     })
+    return () => {
+      cancelled = true
+    }
   }, [status, onboarded, profile.name, profile.avatar, profile.handle])
 
   const createRoom = useCallback((gid: string, name: string, avatar: string, settings?: RoomSettings) => {
@@ -690,10 +823,11 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       // إرسال متفائل: أظهر الرسالة فورًا بمعرّف محلي — الخادم يصدّ نفس المعرّف فيستبدل الصدى النسخة المعلّقة
       const clientId = `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
       const meNow = meRef.current
-      if (meNow) {
+      const senderId = meNow?.userId ?? app.profile.userId
+      if (senderId) {
         const optimistic: ChatMessage = {
           id: clientId,
-          senderId: meNow.userId,
+          senderId,
           senderName: app.profile.name || 'أنا',
           senderAvatar: app.profile.avatar || '🎮',
           text: clean.slice(0, 1000),
@@ -704,9 +838,14 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         }
         setMessages((m) => ({ ...m, [threadId]: [...(m[threadId] ?? []), optimistic] }))
       }
-      onlineClient.send({ type: 'chat_send', threadId, text: clean, clientId })
+      setChatOutbox((queue) => [...queue.filter((item) => item.clientId !== clientId), {
+        clientId,
+        threadId,
+        text: clean,
+        createdAt: Date.now(),
+      }])
     },
-    [app.profile.name, app.profile.avatar],
+    [app.profile.avatar, app.profile.name, app.profile.userId],
   )
 
   const chatSendInvite = useCallback((threadId: string, gameId: string, settings?: RoomSettings) => {

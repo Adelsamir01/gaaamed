@@ -11,13 +11,16 @@ const ReactionGame = lazy(() => import('./reaction/ReactionGame'))
 const SnakeGame = lazy(() => import('./snake/SnakeGame'))
 const MinesweeperGame = lazy(() => import('./minesweeper/MinesweeperGame'))
 const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
-const ConnectFour = lazy(() => import('./online/ConnectFour'))
+const ConnectFourLocal = lazy(() => import('./connect4/ConnectFourLocal'))
+const OnlineConnectFour = lazy(() => import('./online/ConnectFour'))
 const OnlineRps = lazy(() => import('./online/OnlineRps'))
 const OnlineReaction = lazy(() => import('./online/OnlineReaction'))
 const OnlineMemory = lazy(() => import('./online/OnlineMemory'))
 const OnlineTrivia = lazy(() => import('./online/OnlineTrivia'))
-const Shakhbata = lazy(() => import('./online/Shakhbata'))
-const BankEl7az = lazy(() => import('./online/bankel7az/App'))
+const ShakhbataLocal = lazy(() => import('./shakhbata/ShakhbataLocal'))
+const OnlineShakhbata = lazy(() => import('./online/Shakhbata'))
+const BankEl7azLocal = lazy(() => import('./bankel7az/BankEl7azLocal'))
+const OnlineBankEl7az = lazy(() => import('./online/bankel7az/App'))
 
 export interface GameProps {
   config: GameConfig
@@ -178,40 +181,44 @@ export const GAMES: GameDef[] = [
   {
     id: 'connect4',
     name: 'أربعة تربح',
-    description: 'أسقط الأقراص في الأعمدة وصفّ أربعة قبل خصمك — أونلاين',
+    description: 'صفّ أربعة قبل خصمك — ضد الكمبيوتر، على نفس الجهاز، أو أونلاين',
     emoji: '🔴',
     category: 'أونلاين',
     howToPlay: [
       'اضغط على أي عمود لإسقاط قرصك فيه',
-      'الأحمر (صاحب الغرفة) يبدأ أولًا ثم يتناوبان',
+      'الأحمر يبدأ أولًا ثم يتناوب اللاعبان؛ اختر كمبيوتر أو نفس الجهاز أو أونلاين',
       'أول من يصفّ أربعة أقراص أفقيًا أو عموديًا أو قطريًا يفوز',
     ],
-    supportsBot: false,
-    supportsTwoPlayer: false,
+    supportsBot: true,
+    supportsTwoPlayer: true,
+    difficulties: true,
     online: true,
-    component: ConnectFour,
+    onlineComponent: OnlineConnectFour,
+    component: ConnectFourLocal,
   },
   {
     id: 'shakhbata',
     name: 'شخبطة',
-    description: 'ارسم وخمّن مع أصدقائك — حتى ٨ لاعبين في الغرفة',
+    description: 'ارسم وخمّن على نفس الجهاز أو مع أصدقائك أونلاين — حتى ٨ لاعبين',
     emoji: '🎨',
     category: 'أونلاين',
     howToPlay: [
-      'كل لاعب يرسم مرة واحدة في المباراة',
+      'محليًا: اختاروا الكلمة بسرية ومرّروا الجهاز بين الرسام والمخمّن',
+      'أونلاين: كل لاعب يرسم مرة واحدة في المباراة',
       'الرسام يختار كلمة من ٣ خيارات ويرسمها بدون كتابتها',
       'الباقي يخمّنون في الدردشة — الأسرع يأخذ نقاطًا أكثر',
       'تصلك تلميحات حروف مع مرور الوقت — والرسام يكسب نقاطًا مع كل تخمين صحيح',
     ],
     supportsBot: false,
-    supportsTwoPlayer: false,
+    supportsTwoPlayer: true,
     online: true,
-    component: Shakhbata,
+    onlineComponent: OnlineShakhbata,
+    component: ShakhbataLocal,
   },
   {
     id: 'bank-el7az',
     name: 'بنك الحظ',
-    description: 'لعبة محافظات مصرية أونلاين — ارمِ الزهر واشترِ وابنِ حتى يفلس خصومك',
+    description: 'لفّ محافظات مصر واشترِ وابنِ — ضد الكمبيوتر، على نفس الجهاز، أو أونلاين',
     emoji: '🏦',
     category: 'أونلاين',
     howToPlay: [
@@ -220,10 +227,12 @@ export const GAMES: GameDef[] = [
       'اللي يقف على ملكك يدفع إيجار — والمباني ترفع الإيجار',
       'كروت الحظ والضرائب والقسم تقلب الموازين — آخر لاعب واقف يكسب',
     ],
-    supportsBot: false,
-    supportsTwoPlayer: false,
+    supportsBot: true,
+    supportsTwoPlayer: true,
+    difficulties: true,
     online: true,
-    component: BankEl7az,
+    onlineComponent: OnlineBankEl7az,
+    component: BankEl7azLocal,
   },
 ]
 

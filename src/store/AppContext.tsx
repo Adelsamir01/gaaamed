@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { GameResult, GameStats, Profile, Settings } from '@/types'
 import { levelFromXp } from '@/types'
 import { setSoundEnabled } from '@/lib/sounds'
+import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 
 const STORAGE_KEY = 'gaaamed-state-v1'
 
@@ -35,7 +36,7 @@ const defaultState: PersistedState = {
   lastDailyClaim: null,
 }
 
-function loadState(): PersistedState {
+function loadLegacyState(): PersistedState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultState
@@ -53,11 +54,25 @@ function todayKey() {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PersistedState>(loadState)
+  const [state, setState] = useState<PersistedState>(loadLegacyState)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    let cancelled = false
+    void readStoredJson<PersistedState>(STORAGE_KEY, loadLegacyState()).then((stored) => {
+      if (cancelled) return
+      setState({ ...defaultState, ...stored, profile: { ...defaultState.profile, ...stored.profile } })
+      setHydrated(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    void writeStoredJson(STORAGE_KEY, state)
+  }, [hydrated, state])
 
   useEffect(() => {
     setSoundEnabled(state.settings.sound)
@@ -169,6 +184,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [state, canClaimDaily, completeOnboarding, addCoins, addXp, finishGame, claimDailyReward, setIdentity, updateProfile, toggleSound, resetProgress],
   )
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-dvh grid place-items-center bg-background text-foreground" role="status" aria-live="polite">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-full border-4 border-emerald-400/25 border-t-emerald-400 animate-spin" />
+          <span className="text-sm font-bold text-muted-foreground">جارٍ تجهيز ألعابك…</span>
+        </div>
+      </div>
+    )
+  }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

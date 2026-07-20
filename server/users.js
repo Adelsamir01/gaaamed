@@ -339,12 +339,15 @@ export class UserStore {
     const thread = this.threadById(threadId)
     if (!this.isMember(thread, senderId)) throw new Error('المحادثة دي مش موجودة.')
     const sender = this.byId(senderId)
-    // صدّ معرّف العميل إن كان صالحًا وغير مكرر داخل المحادثة (إلغاء تكرار الرسائل المتفائلة)
+    // إعادة إرسال نفس الرسالة بعد انقطاع الشبكة يجب أن تكون آمنة تمامًا.
+    const validClientId = typeof clientId === 'string' && CLIENT_ID_RE.test(clientId)
+    const existing = validClientId ? thread.messages.find((message) => message.id === clientId) : null
+    if (existing?.senderId === senderId) return { thread, message: existing }
+    // صدّ معرّف العميل إن كان صالحًا (يسمح للعميل باستبدال النسخة المعلّقة).
     let id = `m_${Date.now().toString(36)}_${randomBytes(3).toString('hex')}`
     if (
-      typeof clientId === 'string' &&
-      CLIENT_ID_RE.test(clientId) &&
-      !thread.messages.some((m) => m.id === clientId)
+      validClientId &&
+      !existing
     ) {
       id = clientId
     }

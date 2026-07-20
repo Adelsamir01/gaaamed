@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { readStoredString, writeStoredString } from '@/lib/persistentStorage'
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline'
 
@@ -13,36 +14,51 @@ type StatusHandler = (status: ConnectionStatus) => void
 const STORAGE_KEY = 'gaaamed_server_url'
 const DEVICE_KEY = 'gaaamed_device_id'
 const MAX_RECONNECT_DELAY_MS = 30_000
+let cachedServerUrl: string | null = null
+let cachedDeviceId: string | null = null
+
+function legacyString(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+cachedServerUrl = legacyString(STORAGE_KEY)
+cachedDeviceId = legacyString(DEVICE_KEY)
 
 /** معرّف الجهاز: يُولّد مرة واحدة ويُخزن محليًا */
-export function getDeviceId(): string {
-  try {
-    const saved = localStorage.getItem(DEVICE_KEY)
-    if (saved) return saved
-    const id = crypto.randomUUID()
-    localStorage.setItem(DEVICE_KEY, id)
-    return id
-  } catch {
-    return 'unknown-device'
+export async function getDeviceId(): Promise<string> {
+  if (cachedDeviceId) return cachedDeviceId
+  const saved = await readStoredString(DEVICE_KEY)
+  if (saved) {
+    cachedDeviceId = saved
+    return saved
   }
+  const id = crypto.randomUUID()
+  cachedDeviceId = id
+  await writeStoredString(DEVICE_KEY, id)
+  return id
 }
 
 export function getServerUrl(): string {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved && saved.startsWith('ws')) return saved
-  } catch {
-    /* ignore */
-  }
+  if (cachedServerUrl?.startsWith('ws')) return cachedServerUrl
   return Capacitor.isNativePlatform() ? 'wss://dedos.adelsamir.com' : 'ws://localhost:8787'
 }
 
-export function saveServerUrl(url: string) {
-  try {
-    localStorage.setItem(STORAGE_KEY, url)
-  } catch {
-    /* ignore */
-  }
+export async function hydrateOnlineClientStorage(): Promise<void> {
+  const [serverUrl, deviceId] = await Promise.all([
+    readStoredString(STORAGE_KEY),
+    readStoredString(DEVICE_KEY),
+  ])
+  if (serverUrl?.startsWith('ws')) cachedServerUrl = serverUrl
+  if (deviceId) cachedDeviceId = deviceId
+}
+
+export function saveServerUrl(url: string): void {
+  cachedServerUrl = url
+  void writeStoredString(STORAGE_KEY, url)
 }
 
 class OnlineClient {
