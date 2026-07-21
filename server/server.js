@@ -1293,6 +1293,28 @@ wss.on('connection', (ws, request) => {
         break
       }
 
+      case 'chat_react': {
+        if (!ws._userId) return
+        try {
+          const { thread, message } = userStore.toggleMessageHeart(
+            String(msg.threadId || ''),
+            String(msg.messageId || ''),
+            ws._userId,
+          )
+          for (const memberId of thread.memberIds) {
+            pushToUser(memberId, {
+              type: 'chat_reaction',
+              threadId: thread.id,
+              messageId: message.id,
+              heartUserIds: message.heartUserIds,
+            })
+          }
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
       // ---------------- المباراة السريعة ----------------
       case 'quick_match': {
         snakeManager.leave(ws)

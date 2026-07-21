@@ -5,7 +5,7 @@
  *  2) تعارض المعرّفات وصيغتها
  *  3) search_user (مع استبعاد الذات)
  *  4) طلب صداقة يحتاج قبول الطرف الآخر + حضور online/playing بعد القبول
- *  5) DM: إرسال + history + عدّاد غير المقروء + ثبات عبر إعادة تشغيل الخادم
+ *  5) DM: إرسال + تفاعل قلب + history + عدّاد غير المقروء + ثبات عبر إعادة تشغيل الخادم
  *  6) جروب من ٣ أعضاء
  *  7) دعوة لعبة تنشئ غرفة وينضم لها الطرفان (الأول slot=1)
  *  8) quick_match يزاوج عميلين (matched للطرفين)
@@ -217,6 +217,14 @@ async function main() {
   assert(msgAtB.thread.unread === 1, 'B: عدّاد غير المقروء = 1')
   const echoAtA = await A.waitFor((m) => m.type === 'chat_message' && m.threadId === threadId)
   assert(echoAtA.thread.unread === 0, 'A: الرسالة مقروءة عند مرسلها')
+
+  B.send({ type: 'chat_react', threadId, messageId: msgAtB.message.id })
+  const heartAtA = await A.waitFor((m) => m.type === 'chat_reaction' && m.messageId === msgAtB.message.id && m.heartUserIds?.includes(idB.user.userId))
+  await B.waitFor((m) => m.type === 'chat_reaction' && m.messageId === msgAtB.message.id && m.heartUserIds?.includes(idB.user.userId))
+  assert(heartAtA.heartUserIds.length === 1, 'B: القلب وصل للطرفين باسم المستخدم الصحيح')
+  B.send({ type: 'chat_react', threadId, messageId: msgAtB.message.id })
+  const heartRemoved = await A.waitFor((m) => m.type === 'chat_reaction' && m.messageId === msgAtB.message.id && m.heartUserIds?.length === 0)
+  assert(heartRemoved.heartUserIds.length === 0, 'B: الضغط المزدوج التالي يزيل القلب')
 
   B.send({ type: 'chat_history', threadId })
   const hist = await B.waitFor((m) => m.type === 'chat_history' && m.threadId === threadId)

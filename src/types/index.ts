@@ -63,6 +63,8 @@ export interface ServerChatMessage {
   text: string
   kind: 'text' | 'game_invite'
   invite?: GameInvite | null
+  /** User IDs that currently reacted to this message with a heart. */
+  heartUserIds?: string[]
   time: number
 }
 

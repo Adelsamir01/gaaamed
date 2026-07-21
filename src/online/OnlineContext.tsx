@@ -88,6 +88,31 @@ function trimMessageCache(messages: Record<string, ChatMessage[]>): Record<strin
   )
 }
 
+function showChatNotification(message: ServerChatMessage) {
+  const preview = message.kind === 'game_invite' ? 'دعوة للعب 🎮' : message.text.trim().slice(0, 72)
+  toast.custom((toastId) => (
+    <button
+      type="button"
+      onClick={() => toast.dismiss(toastId)}
+      className="group flex w-[min(92vw,370px)] items-center gap-3 rounded-[1.35rem] border border-emerald-300/30 bg-gradient-to-l from-slate-950 via-[#101f2a] to-emerald-950 p-3 text-right text-white shadow-[0_18px_55px_rgba(2,12,23,0.7),0_0_28px_rgba(16,185,129,0.16)]"
+      dir="rtl"
+      aria-label={`رسالة جديدة من ${message.senderName}`}
+    >
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-white/15 bg-gradient-to-br from-emerald-400/25 to-teal-400/5 text-2xl shadow-inner">
+        {message.senderAvatar || '💬'}
+      </span>
+      <p className="min-w-0 flex-1 truncate text-[13px] leading-6">
+        <strong className="font-black text-emerald-300">{message.senderName}</strong>
+        <span className="text-white/40"> · </span>
+        <span className="font-semibold text-white/80">{preview || 'رسالة جديدة'}</span>
+      </p>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pink-400/12 text-base transition-transform group-hover:scale-110" aria-hidden="true">
+        💚
+      </span>
+    </button>
+  ), { duration: 4_200 })
+}
+
 interface OnlineContextValue {
   status: ConnectionStatus
   phase: OnlinePhase
@@ -138,6 +163,7 @@ interface OnlineContextValue {
   createGroup: (name: string, memberIds: string[]) => Promise<ServerThread | null>
   loadThread: (threadId: string) => void
   chatSend: (threadId: string, text: string) => void
+  chatReact: (threadId: string, messageId: string) => void
   chatSendInvite: (threadId: string, gameId: string, settings?: RoomSettings) => void
   refreshSocial: () => void
   // المباراة السريعة
@@ -478,11 +504,29 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId, threadId })
           }
           if (message.senderId !== meRef.current?.userId && openThreadRef.current !== threadId) {
-            const threadName = (msg.thread as ServerThread | undefined)?.name ?? message.senderName
-            toast.info(`💬 ${message.senderName} في ${threadName}`, {
-              description: message.kind === 'game_invite' ? 'دعوة للعب 🎮' : message.text.slice(0, 60),
-            })
+            showChatNotification(message)
           }
+          break
+        }
+        case 'chat_reaction': {
+          const threadId = String(msg.threadId || '')
+          const messageId = String(msg.messageId || '')
+          const heartUserIds = Array.isArray(msg.heartUserIds) ? msg.heartUserIds.map(String) : []
+          setMessages((current) => {
+            const list = current[threadId]
+            if (!list?.some((message) => message.id === messageId)) return current
+            return {
+              ...current,
+              [threadId]: list.map((message) => (
+                message.id === messageId ? { ...message, heartUserIds } : message
+              )),
+            }
+          })
+          setThreads((current) => current.map((thread) => (
+            thread.id === threadId && thread.lastMessage?.id === messageId
+              ? { ...thread, lastMessage: { ...thread.lastMessage, heartUserIds } }
+              : thread
+          )))
           break
         }
         case 'quick_match_waiting':
@@ -847,6 +891,26 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     [app.profile.avatar, app.profile.name, app.profile.userId],
   )
 
+  const chatReact = useCallback((threadId: string, messageId: string) => {
+    const userId = meRef.current?.userId
+    if (!userId) return
+    setMessages((current) => {
+      const list = current[threadId]
+      if (!list?.some((message) => message.id === messageId && !message.pending)) return current
+      return {
+        ...current,
+        [threadId]: list.map((message) => {
+          if (message.id !== messageId) return message
+          const hearts = new Set(message.heartUserIds ?? [])
+          if (hearts.has(userId)) hearts.delete(userId)
+          else hearts.add(userId)
+          return { ...message, heartUserIds: [...hearts] }
+        }),
+      }
+    })
+    onlineClient.send({ type: 'chat_react', threadId, messageId })
+  }, [])
+
   const chatSendInvite = useCallback((threadId: string, gameId: string, settings?: RoomSettings) => {
     onlineClient.send({
       type: 'chat_send',
@@ -881,7 +945,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
-      loadThread, chatSend, chatSendInvite, refreshSocial,
+      loadThread, chatSend, chatReact, chatSendInvite, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
     }),
@@ -892,7 +956,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
-      loadThread, chatSend, chatSendInvite, refreshSocial,
+      loadThread, chatSend, chatReact, chatSendInvite, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],
   )

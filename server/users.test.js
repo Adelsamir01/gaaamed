@@ -37,3 +37,24 @@ test('retries a queued chat message without creating a duplicate', () => {
     store.close()
   }
 })
+
+test('message hearts toggle, persist, and are limited to thread members', () => {
+  const store = new UserStore(testRoot)
+  try {
+    const adel = store.identify({ deviceId: 'heart-device-adel', name: 'Adel', avatar: 'A' }).user
+    const mona = store.identify({ deviceId: 'heart-device-mona', name: 'Mona', avatar: 'M' }).user
+    const outsider = store.identify({ deviceId: 'heart-device-outsider', name: 'Noor', avatar: 'N' }).user
+    const { thread } = store.getOrCreateDm(adel.userId, mona.userId)
+    const { message } = store.postMessage(thread.id, adel.userId, { text: 'hello' })
+
+    store.toggleMessageHeart(thread.id, message.id, mona.userId)
+    assert.deepEqual(message.heartUserIds, [mona.userId])
+    assert.deepEqual(store.history(thread.id, adel.userId).messages[0].heartUserIds, [mona.userId])
+
+    store.toggleMessageHeart(thread.id, message.id, mona.userId)
+    assert.deepEqual(message.heartUserIds, [])
+    assert.throws(() => store.toggleMessageHeart(thread.id, message.id, outsider.userId), /المحادثة/)
+  } finally {
+    store.close()
+  }
+})

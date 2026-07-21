@@ -359,6 +359,7 @@ export class UserStore {
       text: String(text ?? '').slice(0, 1000),
       kind,
       invite,
+      heartUserIds: [],
       time: Date.now(),
     }
     thread.messages.push(message)
@@ -367,6 +368,23 @@ export class UserStore {
     }
     thread.updatedAt = message.time
     thread.reads[senderId] = message.time
+    this.chatsFile.scheduleSave()
+    return { thread, message }
+  }
+
+  toggleMessageHeart(threadId, messageId, userId) {
+    const thread = this.threadById(threadId)
+    if (!this.isMember(thread, userId)) throw new Error('المحادثة دي مش موجودة.')
+    const message = thread.messages.find((candidate) => candidate.id === messageId)
+    if (!message) throw new Error('الرسالة دي مش موجودة.')
+    const hearts = new Set(
+      Array.isArray(message.heartUserIds)
+        ? message.heartUserIds.filter((candidate) => thread.memberIds.includes(candidate))
+        : [],
+    )
+    if (hearts.has(userId)) hearts.delete(userId)
+    else hearts.add(userId)
+    message.heartUserIds = [...hearts]
     this.chatsFile.scheduleSave()
     return { thread, message }
   }
