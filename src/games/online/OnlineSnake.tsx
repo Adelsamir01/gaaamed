@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { ChevronRight, RefreshCw, Users, WifiOff } from 'lucide-react'
+import { ChevronRight, RefreshCw, Users, WifiOff, Zap } from 'lucide-react'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
 import { sounds } from '@/lib/sounds'
@@ -13,6 +13,8 @@ interface ArenaFood extends Point {
   id: number
   hue: number
   radius: number
+  value?: number
+  source?: 'arena' | 'remains'
 }
 
 interface ArenaPlayer {
@@ -22,6 +24,7 @@ interface ArenaPlayer {
   hue: number
   score: number
   alive: boolean
+  boosting: boolean
   angle: number
   trail: Point[]
 }
@@ -30,6 +33,7 @@ interface ArenaSnapshot {
   players: ArenaPlayer[]
   foods?: ArenaFood[]
   speed: number
+  boostMultiplier: number
 }
 
 interface RenderPlayer extends Omit<ArenaPlayer, 'trail'> {
@@ -47,6 +51,8 @@ interface Props {
 }
 
 type ArenaPhase = 'joining' | 'playing' | 'dead'
+
+type LeaderboardPlayer = Pick<ArenaPlayer, 'id' | 'name' | 'avatar' | 'score'> & { isMine: boolean }
 
 const DEFAULT_WORLD_SIZE = 4_800
 const BODY_WIDTH = 17
@@ -86,12 +92,14 @@ export default function OnlineSnake({ onExit }: Props) {
   const [score, setScore] = useState(0)
   const [playerCount, setPlayerCount] = useState(0)
   const [showGuide, setShowGuide] = useState(true)
+  const [boosting, setBoosting] = useState(false)
+  const [leaders, setLeaders] = useState<LeaderboardPlayer[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewportRef = useRef({ width: 0, height: 0 })
   const pixelRatioRef = useRef(1)
   const worldSizeRef = useRef(DEFAULT_WORLD_SIZE)
   const playerIdRef = useRef<string | null>(null)
-  const snapshotRef = useRef<ArenaSnapshot>({ players: [], foods: [], speed: 78 })
+  const snapshotRef = useRef<ArenaSnapshot>({ players: [], foods: [], speed: 90, boostMultiplier: 1.38 })
   const renderPlayersRef = useRef(new Map<string, RenderPlayer>())
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
   const cameraReadyRef = useRef(false)
@@ -101,6 +109,8 @@ export default function OnlineSnake({ onExit }: Props) {
   const scoreRef = useRef(0)
   const lifeRef = useRef(0)
   const rewardedLifeRef = useRef(0)
+  const boostingRef = useRef(false)
+  const leaderboardKeyRef = useRef('')
   const pointerRef = useRef<PointerState>({
     active: false,
     origin: { x: 0, y: 0 },
@@ -118,10 +128,10 @@ export default function OnlineSnake({ onExit }: Props) {
       bestCandidate: finalScore,
       coinsEarned: Math.min(60, 5 + finalScore * 3),
       xpEarned: Math.min(80, 15 + finalScore * 3),
-      summary: `جمعت ${finalScore} كرة في الساحة العامة 🐍`,
+      summary: `جمعت ${finalScore} نقطة في الساحة العامة 🐍`,
       detail: finalScore >= 8
         ? 'جولة قوية! تقدر تدخل فورًا لجولة جديدة وتنافس لاعبين مختلفين.'
-        : 'اسحب بإصبعك بهدوء، اجمع الكرات، وسيب مساحة كافية بينك وبين باقي الثعابين.',
+        : 'اسحب بإصبعك بهدوء، اجمع الأكل الكبير لنقط أكتر، وابعد عن جسم باقي الثعابين.',
     })
   }, [finishGame])
 
@@ -136,6 +146,8 @@ export default function OnlineSnake({ onExit }: Props) {
       setScore(0)
       lifeRef.current += 1
       cameraReadyRef.current = false
+      boostingRef.current = false
+      setBoosting(false)
       setShowGuide(true)
       setPhase('playing')
       return
@@ -145,6 +157,8 @@ export default function OnlineSnake({ onExit }: Props) {
       setScore(0)
       lifeRef.current += 1
       cameraReadyRef.current = false
+      boostingRef.current = false
+      setBoosting(false)
       setShowGuide(true)
       setPhase('playing')
       return
@@ -155,6 +169,8 @@ export default function OnlineSnake({ onExit }: Props) {
     }
     if (message.type === 'snake_public_dead') {
       const finalScore = Number(message.score) || scoreRef.current
+      boostingRef.current = false
+      setBoosting(false)
       setPhase('dead')
       finishRun(finalScore)
       return
@@ -168,14 +184,27 @@ export default function OnlineSnake({ onExit }: Props) {
       players: nextPlayers,
       foods: nextFoods,
       speed: Number(message.speed) || snapshotRef.current.speed,
+      boostMultiplier: Number(message.boostMultiplier) || snapshotRef.current.boostMultiplier,
     }
     setPlayerCount(nextPlayers.length)
+    const nextLeaders = nextPlayers
+      .filter((player) => player.alive)
+      .sort((first, second) => second.score - first.score || first.name.localeCompare(second.name))
+      .slice(0, 3)
+      .map(({ id, name, avatar, score }) => ({ id, name, avatar, score, isMine: id === playerIdRef.current }))
+    const leaderboardKey = nextLeaders.map((player) => `${player.id}:${player.score}`).join('|')
+    if (leaderboardKey !== leaderboardKeyRef.current) {
+      leaderboardKeyRef.current = leaderboardKey
+      setLeaders(nextLeaders)
+    }
     const mine = nextPlayers.find((player) => player.id === playerIdRef.current)
     if (!mine) return
     if (mine.score > scoreRef.current) sounds.correct()
     scoreRef.current = mine.score
     setScore(mine.score)
     if (!mine.alive) {
+      boostingRef.current = false
+      setBoosting(false)
       setPhase('dead')
       finishRun(mine.score)
     }
@@ -191,6 +220,7 @@ export default function OnlineSnake({ onExit }: Props) {
   }, [profile.avatar, profile.name, sendRaw, status])
 
   useEffect(() => () => {
+    if (boostingRef.current) sendRaw({ type: 'snake_public_boost', active: false })
     sendRaw({ type: 'snake_public_leave' })
   }, [sendRaw])
 
@@ -208,6 +238,30 @@ export default function OnlineSnake({ onExit }: Props) {
     lastSentAngleRef.current = angle
     sendRaw({ type: 'snake_public_steer', angle })
   }, [sendRaw])
+
+  const changeBoost = useCallback((active: boolean) => {
+    const nextActive = active && phase === 'playing'
+    if (boostingRef.current === nextActive) return
+    boostingRef.current = nextActive
+    setBoosting(nextActive)
+    if (nextActive) setShowGuide(false)
+    sendRaw({ type: 'snake_public_boost', active: nextActive })
+  }, [phase, sendRaw])
+
+  useEffect(() => {
+    const stopBoost = () => {
+      if (boostingRef.current) changeBoost(false)
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') stopBoost()
+    }
+    window.addEventListener('blur', stopBoost)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('blur', stopBoost)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [changeBoost])
 
   const updateRenderedPlayers = useCallback((elapsed: number) => {
     const targetPlayers = snapshotRef.current.players
@@ -300,12 +354,29 @@ export default function OnlineSnake({ onExit }: Props) {
       context.beginPath()
       context.arc(point.x, point.y, food.radius, 0, Math.PI * 2)
       context.fill()
+      if (food.source === 'remains') {
+        context.strokeStyle = 'rgba(255,255,255,0.68)'
+        context.lineWidth = 1.2
+        context.stroke()
+      }
+      if ((food.value ?? 1) >= 3) {
+        context.shadowBlur = 0
+        context.fillStyle = '#06251f'
+        context.font = '900 7px Cairo, sans-serif'
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.fillText(String(food.value), point.x, point.y + 0.5)
+      }
       context.restore()
     }
 
-    const players = [...renderPlayersRef.current.values()].sort((a, b) => Number(a.id === playerIdRef.current) - Number(b.id === playerIdRef.current))
+    const currentPlayers = [...renderPlayersRef.current.values()]
+    const leaderId = currentPlayers
+      .filter((player) => player.alive)
+      .sort((first, second) => second.score - first.score || first.name.localeCompare(second.name))[0]?.id
+    const players = currentPlayers.sort((a, b) => Number(a.id === playerIdRef.current) - Number(b.id === playerIdRef.current))
     for (const player of players) {
-      if (player.trail.length < 2) continue
+      if (!player.alive || player.trail.length < 2) continue
       const trail = player.trail.map((point) => screenPoint(point, camera, viewport.width, viewport.height, worldSize))
       const head = trail[0]
       const visible = trail.some((point) => point.x > -80 && point.y > -80 && point.x < viewport.width + 80 && point.y < viewport.height + 80)
@@ -321,8 +392,8 @@ export default function OnlineSnake({ onExit }: Props) {
       context.strokeStyle = 'rgba(1, 14, 13, 0.78)'
       context.lineWidth = BODY_WIDTH + 7
       context.stroke()
-      context.shadowColor = `hsla(${player.hue}, 88%, 58%, 0.58)`
-      context.shadowBlur = 13
+      context.shadowColor = `hsla(${player.hue}, 88%, 58%, ${player.boosting ? 0.92 : 0.58})`
+      context.shadowBlur = player.boosting ? 20 : 13
       context.strokeStyle = `hsl(${player.hue}, 78%, 52%)`
       context.lineWidth = BODY_WIDTH
       context.stroke()
@@ -354,13 +425,42 @@ export default function OnlineSnake({ onExit }: Props) {
         context.fill()
       }
 
+      if (player.alive && player.id === leaderId) {
+        const crownY = head.y - HEAD_RADIUS - 7
+        context.save()
+        context.translate(head.x, crownY)
+        context.shadowColor = 'rgba(250, 204, 21, 0.85)'
+        context.shadowBlur = 8
+        context.fillStyle = '#facc15'
+        context.strokeStyle = '#854d0e'
+        context.lineWidth = 1.25
+        context.beginPath()
+        context.moveTo(-10, 5)
+        context.lineTo(-9, -5)
+        context.lineTo(-4, 0)
+        context.lineTo(0, -8)
+        context.lineTo(4, 0)
+        context.lineTo(9, -5)
+        context.lineTo(10, 5)
+        context.closePath()
+        context.fill()
+        context.stroke()
+        context.fillStyle = '#fff7ae'
+        for (const jewelX of [-9, 0, 9]) {
+          context.beginPath()
+          context.arc(jewelX, jewelX === 0 ? -8 : -5, 1.7, 0, Math.PI * 2)
+          context.fill()
+        }
+        context.restore()
+      }
+
       context.globalAlpha = player.alive ? 0.96 : 0.42
       context.font = '800 11px Cairo, sans-serif'
       context.textAlign = 'center'
       context.fillStyle = '#f8fafc'
       context.shadowColor = 'rgba(0,0,0,0.95)'
       context.shadowBlur = 7
-      context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - 21)
+      context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - (player.id === leaderId ? 38 : 21))
       context.restore()
     }
 
@@ -421,6 +521,11 @@ export default function OnlineSnake({ onExit }: Props) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && phase === 'playing') {
+        event.preventDefault()
+        changeBoost(true)
+        return
+      }
       const angles: Partial<Record<string, number>> = {
         ArrowRight: 0,
         ArrowDown: Math.PI / 2,
@@ -433,9 +538,18 @@ export default function OnlineSnake({ onExit }: Props) {
       setShowGuide(false)
       sendSteering(angle, true)
     }
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      event.preventDefault()
+      changeBoost(false)
+    }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [phase, sendSteering])
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [changeBoost, phase, sendSteering])
 
   const pointerPosition = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -521,10 +635,56 @@ export default function OnlineSnake({ onExit }: Props) {
         </div>
       </div>
 
+      {leaders.length > 0 && (
+        <ol
+          className="pointer-events-none absolute left-3 top-12 z-10 w-[8.25rem] space-y-0.5 text-[10px] font-extrabold text-white drop-shadow-[0_2px_7px_rgba(0,0,0,0.98)]"
+          aria-label="أول ثلاثة لاعبين"
+          dir="rtl"
+        >
+          {leaders.map((leader, index) => (
+            <li key={leader.id} className={`flex h-4 min-w-0 items-center gap-1 ${leader.isMine ? 'text-lime-300' : 'text-white/90'}`}>
+              <span className="w-4 shrink-0 text-center" aria-hidden="true">{index === 0 ? '👑' : index + 1}</span>
+              <span className="min-w-0 flex-1 truncate">{leader.avatar} {leader.name}</span>
+              <bdi className="shrink-0 tabular-nums text-emerald-200">{leader.score}</bdi>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {phase === 'playing' && status === 'online' && (
+        <button
+          type="button"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            changeBoost(true)
+          }}
+          onPointerUp={(event) => {
+            event.preventDefault()
+            changeBoost(false)
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+          }}
+          onPointerCancel={() => changeBoost(false)}
+          onLostPointerCapture={() => changeBoost(false)}
+          onContextMenu={(event) => event.preventDefault()}
+          className={`absolute bottom-5 right-4 z-10 flex h-16 w-16 touch-none flex-col items-center justify-center rounded-full border-2 font-black shadow-xl shadow-black/35 transition duration-100 active:scale-95 ${
+            boosting
+              ? 'scale-105 border-yellow-100 bg-yellow-300 text-emerald-950 shadow-yellow-300/25'
+              : 'border-emerald-100/65 bg-emerald-400/80 text-emerald-950 backdrop-blur-sm'
+          }`}
+          aria-label="دوس مطولًا لزيادة السرعة"
+          aria-pressed={boosting}
+        >
+          <Zap className={`h-6 w-6 ${boosting ? 'fill-current' : ''}`} />
+          <span className="text-[10px] leading-none">سرعة</span>
+        </button>
+      )}
+
       {showGuide && phase === 'playing' && (
-        <p className="pointer-events-none absolute inset-x-8 bottom-[16%] z-10 text-center text-sm font-extrabold text-white/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
-          حط إصبعك واسحب في الاتجاه اللي عايزه
-        </p>
+        <div className="pointer-events-none absolute inset-x-20 bottom-[16%] z-10 text-center font-extrabold text-white/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+          <p className="text-sm">اسحب في الاتجاه اللي عايزه · دوس مطول على «سرعة»</p>
+          <p className="mt-1 text-[10px] text-emerald-100/85">الأكل الكبير بنقط أكتر</p>
+        </div>
       )}
 
       {phase === 'joining' && (
@@ -557,7 +717,7 @@ export default function OnlineSnake({ onExit }: Props) {
         <div className="absolute inset-0 z-20 grid place-items-center bg-[#031b18]/48 px-8 text-center text-white">
           <div className="drop-shadow-[0_3px_12px_rgba(0,0,0,0.95)]">
             <p className="text-3xl font-black">الجولة خلصت</p>
-            <p className="mt-2 font-extrabold text-emerald-100">جمعت <bdi className="tabular-nums">{score}</bdi> كرة</p>
+            <p className="mt-2 font-extrabold text-emerald-100">جمعت <bdi className="tabular-nums">{score}</bdi> نقطة</p>
             <button
               type="button"
               onClick={respawn}
