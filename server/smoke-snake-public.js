@@ -21,7 +21,9 @@ function wait(milliseconds) {
 
 const sockets = clients.map(() => new WebSocket(url))
 const received = clients.map(() => [])
+let timedOut = false
 const timeout = setTimeout(() => {
+  timedOut = true
   console.error('Snake public smoke test timed out.', received.map((messages) => messages.map((message) => message.type)))
   process.exitCode = 1
   for (const socket of sockets) socket.terminate()
@@ -36,7 +38,10 @@ try {
   sockets.forEach((socket, index) => socket.send(JSON.stringify({ type: 'snake_public_join', ...clients[index] })))
 
   let controlsSent = false
-  while (true) {
+  let controlsSentAt = 0
+  let startingHead = null
+  let verified = false
+  while (!timedOut) {
     const joined = received.map((messages) => messages.find((message) => message.type === 'snake_public_joined'))
     const sharedSnapshots = received.map((messages) => (
       messages.find((message) => message.type === 'snake_public_snapshot' && message.players?.length >= clients.length)
@@ -49,34 +54,54 @@ try {
       }
       const foodSnapshot = received[0].find((message) => message.foods?.length >= 260)
       const foodValues = new Set(foodSnapshot.foods.map((food) => food.value))
-      if (foodValues.size < 4 || Number(foodSnapshot.speed) <= 78) {
+      if (foodValues.size < 4 || Number(foodSnapshot.speed) < 120) {
         throw new Error('The upgraded speed or varied food values are missing from the live snapshot.')
       }
+      const worldSize = Number(foodSnapshot.worldSize)
+      const arenaRadius = Number(foodSnapshot.arenaRadius)
+      const center = worldSize / 2
+      if (!(arenaRadius > worldSize * 0.4 && arenaRadius <= worldSize / 2)) {
+        throw new Error('The massive circular arena dimensions are missing from the live snapshot.')
+      }
+      if (!foodSnapshot.foods.every((food) => Math.hypot(food.x - center, food.y - center) < arenaRadius)) {
+        throw new Error('Live food exists outside the circular arena.')
+      }
+      if (foodSnapshot.players?.some((player) => 'boosting' in player)) {
+        throw new Error('The removed boost state is still present in the live snapshot.')
+      }
       if (!controlsSent) {
+        startingHead = sharedSnapshots[0].players.find((player) => player.id === joined[0].playerId)?.trail?.[0]
+        controlsSentAt = received[0].length
         sockets[0].send(JSON.stringify({ type: 'snake_public_steer', angle: 0.6 }))
-        sockets[0].send(JSON.stringify({ type: 'snake_public_boost', active: true }))
         sockets[1].send(JSON.stringify({ type: 'snake_public_steer', angle: -0.8 }))
         controlsSent = true
       }
-      const boosted = received[0].some((message) => (
+      const movedSmoothly = startingHead && received[0].slice(controlsSentAt).some((message) => (
         message.type === 'snake_public_snapshot'
-        && message.players?.some((player) => player.id === joined[0].playerId && player.boosting === true)
+        && message.players?.some((player) => {
+          if (player.id !== joined[0].playerId || !player.alive || !player.trail?.[0]) return false
+          return Math.hypot(player.trail[0].x - startingHead.x, player.trail[0].y - startingHead.y) > 2
+        })
       ))
-      if (boosted) {
+      if (movedSmoothly) {
         console.log(JSON.stringify({
           ok: true,
           arenaId: joined[0].arenaId,
           players: clients.length,
           foodCount: foodSnapshot.foods.length,
           baseSpeed: foodSnapshot.speed,
-          boostVerified: true,
+          arenaRadius,
+          steeringVerified: true,
         }))
+        verified = true
         break
       }
     }
     await wait(50)
   }
 
+  if (!verified) throw new Error('Snake public smoke verification did not complete before the timeout.')
+  clearTimeout(timeout)
   if (holdMs > 0) await wait(holdMs)
 } finally {
   clearTimeout(timeout)

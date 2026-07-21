@@ -3,8 +3,8 @@ import test from 'node:test'
 import {
   SnakeArena,
   SnakeArenaManager,
+  SNAKE_ARENA_RADIUS,
   SNAKE_BASE_SPEED,
-  SNAKE_BOOST_MULTIPLIER,
   SNAKE_FOOD_COUNT,
   SNAKE_WORLD_SIZE,
 } from './snake-arena.js'
@@ -39,7 +39,7 @@ test('server owns movement and limits steering turn speed', () => {
   arena.tick(0.05)
 
   assert.notDeepEqual(player.trail[0], start)
-  assert.ok(Math.abs(player.angle - startAngle) <= 5.4 * 0.05 + 0.0001)
+  assert.ok(Math.abs(player.angle - startAngle) <= 6.2 * 0.05 + 0.0001)
   assert.equal(arena.steer('p1', Number.NaN), false)
 })
 
@@ -61,20 +61,32 @@ test('arena has more food with visibly different sizes and point values', () => 
   assert.equal(arena.foods.length, SNAKE_FOOD_COUNT)
   assert.ok(new Set(arena.foods.map((food) => food.radius)).size >= 5)
   assert.deepEqual([...new Set(arena.foods.map((food) => food.value))].sort(), [1, 2, 3, 5])
+  const center = { x: SNAKE_WORLD_SIZE / 2, y: SNAKE_WORLD_SIZE / 2 }
+  assert.ok(arena.foods.every((food) => Math.hypot(food.x - center.x, food.y - center.y) < SNAKE_ARENA_RADIUS))
 })
 
-test('boost is server-authoritative and moves the snake faster than normal speed', () => {
+test('the permanent movement speed is fast without a boost state', () => {
   const arena = new SnakeArena('test', { random: () => 0.5 })
   const player = arena.addPlayer({ id: 'p1', name: 'Player', avatar: '🎮', hue: 100 })
   arena.foods = []
   player.angle = 0
   player.targetAngle = 0
   const startX = player.trail[0].x
-  assert.equal(arena.boost('p1', true), true)
   arena.tick(0.05)
 
-  assert.equal(player.boosting, true)
-  assert.ok(Math.abs((player.trail[0].x - startX) - SNAKE_BASE_SPEED * SNAKE_BOOST_MULTIPLIER * 0.05) < 0.001)
+  assert.ok(SNAKE_BASE_SPEED >= 120)
+  assert.ok(Math.abs((player.trail[0].x - startX) - SNAKE_BASE_SPEED * 0.05) < 0.001)
+  assert.equal('boosting' in player, false)
+})
+
+test('fast snakes spawn deep enough inside the arena to react before reaching the wall', () => {
+  const arena = new SnakeArena('test', { random: sequenceRandom([0, 0.999_999]) })
+  const player = arena.addPlayer({ id: 'p1', name: 'Player', avatar: '🎮', hue: 100 })
+  const center = { x: SNAKE_WORLD_SIZE / 2, y: SNAKE_WORLD_SIZE / 2 }
+  const distanceFromWall = SNAKE_ARENA_RADIUS - Math.hypot(player.trail[0].x - center.x, player.trail[0].y - center.y)
+
+  assert.ok(distanceFromWall >= 719)
+  assert.ok(distanceFromWall / SNAKE_BASE_SPEED > 5.5)
 })
 
 test('a snake can cross its own body without dying', () => {
@@ -155,14 +167,19 @@ test('dead players can respawn and leaving removes them from the arena', () => {
   assert.equal(manager.arenas.size, 0)
 })
 
-test('world positions wrap without exposing a visible arena border', () => {
+test('the massive circular arena has a lethal outer boundary instead of wrapping', () => {
   const arena = new SnakeArena('test', { random: () => 0.5 })
   const player = arena.addPlayer({ id: 'p1', name: 'Player', avatar: '🎮', hue: 100 })
-  player.trail = [{ x: SNAKE_WORLD_SIZE - 1, y: 500 }, { x: SNAKE_WORLD_SIZE - 5, y: 500 }]
+  const center = SNAKE_WORLD_SIZE / 2
+  player.trail = [
+    { x: center + SNAKE_ARENA_RADIUS - 12, y: center },
+    { x: center + SNAKE_ARENA_RADIUS - 17, y: center },
+  ]
   player.angle = 0
   player.targetAngle = 0
-  arena.tick(0.05)
+  const deaths = arena.tick(0.05)
 
-  assert.ok(player.trail[0].x < 10)
-  assert.equal(player.alive, true)
+  assert.deepEqual(deaths.map((death) => death.id), ['p1'])
+  assert.equal(player.alive, false)
+  assert.ok(player.trail[0].x > center + SNAKE_ARENA_RADIUS - 12)
 })

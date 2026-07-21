@@ -5,6 +5,7 @@ import type { Difficulty } from '@/types'
 import { sounds } from '@/lib/sounds'
 
 type Status = 'running' | 'paused' | 'over'
+type DeathReason = 'body' | 'wall'
 
 interface Point {
   x: number
@@ -29,24 +30,25 @@ interface PointerState {
 }
 
 const SPEED: Record<Difficulty, number> = {
-  easy: 54,
-  medium: 68,
-  hard: 86,
+  easy: 104,
+  medium: 124,
+  hard: 144,
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
-  easy: 'سهل وهادي',
-  medium: 'متوسط',
-  hard: 'سريع',
+  easy: 'سريع',
+  medium: 'أسرع',
+  hard: 'صاروخ',
 }
 
 const FOOD_HUES = [38, 52, 94, 162, 188, 280, 332]
-const FOOD_COUNT = 20
+const FOOD_COUNT = 110
 const BODY_WIDTH = 17
 const HEAD_RADIUS = 11
 const START_LENGTH = 112
 const GROWTH_PER_ORB = 20
 const TURN_RATE = 8.5
+const OFFLINE_ARENA_RADIUS = 1_800
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
@@ -58,6 +60,17 @@ function clamp(value: number, min: number, max: number): number {
 
 function angleDifference(from: number, to: number): number {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
+}
+
+function traceSmoothTrail(context: CanvasRenderingContext2D, points: Point[]): void {
+  if (points.length === 0) return
+  context.moveTo(points[0].x, points[0].y)
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const point = points[index]
+    const next = points[index + 1]
+    context.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2)
+  }
+  if (points.length > 1) context.lineTo(points.at(-1)!.x, points.at(-1)!.y)
 }
 
 function trimTrail(points: Point[], maxLength: number): Point[] {
@@ -85,17 +98,15 @@ function trimTrail(points: Point[], maxLength: number): Point[] {
   return trimmed
 }
 
-function createFood(center: Point, viewport: WorldSize, snake: Point[], existing: FoodOrb[], id: number): FoodOrb {
-  const minimumRadius = 70
-  const maximumRadius = Math.max(viewport.width, viewport.height) * 0.78
-  let point: Point = { x: center.x, y: center.y - minimumRadius }
+function createFood(snake: Point[], existing: FoodOrb[], id: number): FoodOrb {
+  let point: Point = { x: 0, y: 80 }
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const angle = Math.random() * Math.PI * 2
-    const radius = minimumRadius + Math.random() * Math.max(1, maximumRadius - minimumRadius)
+    const radius = Math.sqrt(Math.random()) * (OFFLINE_ARENA_RADIUS - 55)
     point = {
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius,
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
     }
     const awayFromSnake = snake.every((part) => distance(part, point) > 34)
     const awayFromFood = existing.every((orb) => distance(orb, point) > 38)
@@ -121,8 +132,10 @@ function initialTrail(): Point[] {
 export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
   const [score, setScore] = useState(0)
   const [status, setStatus] = useState<Status>('running')
+  const [deathReason, setDeathReason] = useState<DeathReason>('body')
   const [hasSteered, setHasSteered] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const minimapRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<WorldSize>({ width: 0, height: 0 })
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
   const pixelRatioRef = useRef(1)
@@ -144,10 +157,11 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
     current: { x: 0, y: 0 },
   })
 
-  const finishGame = useCallback((finalScore: number) => {
+  const finishGame = useCallback((finalScore: number, reason: DeathReason) => {
     if (finishedRef.current) return
     finishedRef.current = true
     statusRef.current = 'over'
+    setDeathReason(reason)
     setStatus('over')
     sounds.lose()
     finishTimerRef.current = setTimeout(() => {
@@ -161,10 +175,81 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
         summary: `جمعت ${finalScore} كرة ووصل طول الثعبان إلى ${finalScore + 3} 🐍`,
         detail: finalScore >= 8
           ? 'تحكم ممتاز! جرّب مستوى أسرع وسجّل رقمًا جديدًا.'
-          : 'اسحب بإصبعك باستمرار وخد اللفة بهدوء من غير ما تلف على جسمك.',
+          : 'اسحب بإصبعك باستمرار، راقب الخريطة، وابعد عن جسمك وعن سور الساحة.',
       })
     }, 900)
   }, [onFinish])
+
+  const renderMinimap = useCallback(() => {
+    const canvas = minimapRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const ratio = Math.min(window.devicePixelRatio || 1, 2)
+    const width = rect.width
+    const height = rect.height
+    const targetWidth = Math.round(width * ratio)
+    const targetHeight = Math.round(height * ratio)
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth
+      canvas.height = targetHeight
+    }
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.setTransform(ratio, 0, 0, ratio, 0, 0)
+    context.clearRect(0, 0, width, height)
+    const center = { x: width / 2, y: height / 2 }
+    const mapRadius = Math.min(width, height) / 2 - 5
+
+    context.save()
+    context.beginPath()
+    context.arc(center.x, center.y, mapRadius, 0, Math.PI * 2)
+    context.clip()
+    const background = context.createRadialGradient(center.x, center.y, 2, center.x, center.y, mapRadius)
+    background.addColorStop(0, 'rgba(13, 60, 54, 0.96)')
+    background.addColorStop(1, 'rgba(2, 20, 24, 0.98)')
+    context.fillStyle = background
+    context.fillRect(0, 0, width, height)
+
+    context.fillStyle = 'rgba(253, 224, 71, 0.38)'
+    for (const orb of foodRef.current) {
+      context.beginPath()
+      context.arc(
+        center.x + (orb.x / OFFLINE_ARENA_RADIUS) * mapRadius,
+        center.y + (orb.y / OFFLINE_ARENA_RADIUS) * mapRadius,
+        0.8,
+        0,
+        Math.PI * 2,
+      )
+      context.fill()
+    }
+
+    const head = snakeRef.current[0]
+    if (head) {
+      const x = center.x + (head.x / OFFLINE_ARENA_RADIUS) * mapRadius
+      const y = center.y + (head.y / OFFLINE_ARENA_RADIUS) * mapRadius
+      context.shadowColor = '#ffffff'
+      context.shadowBlur = 8
+      context.fillStyle = '#f8fafc'
+      context.beginPath()
+      context.arc(x, y, 4, 0, Math.PI * 2)
+      context.fill()
+      context.shadowBlur = 0
+      context.strokeStyle = '#34d399'
+      context.lineWidth = 2
+      context.beginPath()
+      context.arc(x, y, 6, 0, Math.PI * 2)
+      context.stroke()
+    }
+    context.restore()
+    context.strokeStyle = 'rgba(167, 243, 208, 0.8)'
+    context.lineWidth = 2
+    context.shadowColor = 'rgba(52, 211, 153, 0.55)'
+    context.shadowBlur = 8
+    context.beginPath()
+    context.arc(center.x, center.y, mapRadius, 0, Math.PI * 2)
+    context.stroke()
+  }, [])
 
   const renderScene = useCallback(() => {
     const canvas = canvasRef.current
@@ -196,6 +281,32 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
         context.fill()
       }
     }
+
+    const arenaCenter = {
+      x: world.width / 2 - camera.x,
+      y: world.height / 2 - camera.y,
+    }
+    context.save()
+    context.fillStyle = 'rgba(2, 8, 18, 0.82)'
+    context.beginPath()
+    context.rect(0, 0, world.width, world.height)
+    context.arc(arenaCenter.x, arenaCenter.y, OFFLINE_ARENA_RADIUS, 0, Math.PI * 2, true)
+    context.fill('evenodd')
+    context.shadowColor = 'rgba(251, 113, 133, 0.8)'
+    context.shadowBlur = 18
+    context.strokeStyle = 'rgba(251, 113, 133, 0.72)'
+    context.lineWidth = 18
+    context.beginPath()
+    context.arc(arenaCenter.x, arenaCenter.y, OFFLINE_ARENA_RADIUS, 0, Math.PI * 2)
+    context.stroke()
+    context.shadowBlur = 0
+    context.setLineDash([11, 9])
+    context.strokeStyle = 'rgba(254, 240, 138, 0.9)'
+    context.lineWidth = 2.5
+    context.beginPath()
+    context.arc(arenaCenter.x, arenaCenter.y, OFFLINE_ARENA_RADIUS - 8, 0, Math.PI * 2)
+    context.stroke()
+    context.restore()
 
     context.save()
     context.translate(world.width / 2 - camera.x, world.height / 2 - camera.y)
@@ -234,10 +345,7 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       context.lineCap = 'round'
       context.lineJoin = 'round'
       context.beginPath()
-      context.moveTo(snake[0].x, snake[0].y)
-      for (let index = 1; index < snake.length; index += 1) {
-        context.lineTo(snake[index].x, snake[index].y)
-      }
+      traceSmoothTrail(context, snake)
       context.strokeStyle = 'rgba(1, 14, 13, 0.72)'
       context.lineWidth = BODY_WIDTH + 7
       context.stroke()
@@ -303,7 +411,8 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       context.fill()
       context.restore()
     }
-  }, [])
+    renderMinimap()
+  }, [renderMinimap])
 
   const updateWorld = useCallback((timestamp: number) => {
     const previous = lastFrameRef.current || timestamp
@@ -313,7 +422,6 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
 
     const snake = snakeRef.current
     const head = snake[0]
-    const world = worldRef.current
     if (!head) return
 
     const turn = clamp(angleDifference(angleRef.current, targetAngleRef.current), -TURN_RATE * elapsed, TURN_RATE * elapsed)
@@ -335,8 +443,9 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       }
     }
 
-    if (hitBody) {
-      finishGame(scoreRef.current)
+    const hitWall = distance(nextHead, { x: 0, y: 0 }) >= OFFLINE_ARENA_RADIUS - HEAD_RADIUS
+    if (hitBody || hitWall) {
+      finishGame(scoreRef.current, hitWall ? 'wall' : 'body')
       return
     }
 
@@ -349,19 +458,6 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       y: cameraRef.current.y + (nextHead.y - cameraRef.current.y) * cameraCatchUp,
     }
 
-    const recycleDistance = Math.max(world.width, world.height) * 0.95
-    const recycledFood: FoodOrb[] = []
-    for (const orb of foodRef.current) {
-      if (distance(nextHead, orb) <= recycleDistance) {
-        recycledFood.push(orb)
-        continue
-      }
-      const id = foodIdRef.current
-      foodIdRef.current += 1
-      recycledFood.push(createFood(nextHead, world, nextSnake, recycledFood, id))
-    }
-    foodRef.current = recycledFood
-
     const eatenIndex = foodRef.current.findIndex((orb) => distance(nextHead, orb) < HEAD_RADIUS + orb.radius + 2)
     if (eatenIndex >= 0) {
       scoreRef.current += 1
@@ -369,7 +465,7 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       const nextFood = [...foodRef.current]
       const id = foodIdRef.current
       foodIdRef.current += 1
-      nextFood[eatenIndex] = createFood(nextHead, world, nextSnake, nextFood.filter((_, index) => index !== eatenIndex), id)
+      nextFood[eatenIndex] = createFood(nextSnake, nextFood.filter((_, index) => index !== eatenIndex), id)
       foodRef.current = nextFood
       setScore(scoreRef.current)
       sounds.correct()
@@ -396,7 +492,7 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
         cameraRef.current = head
         foodRef.current = []
         for (let id = 0; id < FOOD_COUNT; id += 1) {
-          foodRef.current.push(createFood(head, next, snakeRef.current, foodRef.current, id))
+          foodRef.current.push(createFood(snakeRef.current, foodRef.current, id))
         }
         initializedRef.current = true
         lastFrameRef.current = performance.now()
@@ -522,7 +618,7 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
         onContextMenu={(event) => event.preventDefault()}
-        aria-label="عالم لعبة الثعبان المفتوح — اسحب بإصبعك في الاتجاه المطلوب"
+        aria-label="ساحة لعبة الثعبان الدائرية — اسحب بإصبعك في الاتجاه المطلوب"
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between px-4 pt-3" dir="rtl">
@@ -558,11 +654,20 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
         </button>
       </div>
 
+      <div className="pointer-events-none absolute right-3 top-[4.25rem] z-10 h-24 w-24 rounded-full border border-emerald-100/35 bg-[#031b18]/90 p-1 shadow-[0_10px_30px_rgba(0,0,0,0.38),0_0_18px_rgba(52,211,153,0.12)] backdrop-blur-md">
+        <canvas
+          ref={minimapRef}
+          className="block h-full w-full rounded-full"
+          aria-label="خريطة الساحة الدائرية وموقع الثعبان"
+        />
+        <span className="absolute inset-x-0 -bottom-4 text-center text-[8px] font-black tracking-wide text-emerald-100/75 drop-shadow-lg">الخريطة</span>
+      </div>
+
       {!hasSteered && status === 'running' && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[13%] z-10 flex flex-col items-center gap-3 text-center drop-shadow-[0_3px_10px_rgba(0,0,0,0.95)]">
           <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-emerald-100/65 text-3xl">☝️</div>
           <p className="px-5 text-sm font-extrabold text-white">
-            حط صباعك واسحب — العالم هيتحرك معاك
+            اسحب ووجّه بسرعة — راقب الخريطة وابعد عن السور
           </p>
         </div>
       )}
@@ -583,7 +688,7 @@ export default function SnakeGame({ config, onFinish, onExit }: GameProps) {
       {status === 'over' && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/62 backdrop-blur-sm">
           <span className="text-6xl">💥</span>
-          <span className="mt-3 text-2xl font-black">لفّيت على نفسك!</span>
+          <span className="mt-3 text-2xl font-black">{deathReason === 'wall' ? 'خبطت في سور الساحة!' : 'لفّيت على نفسك!'}</span>
           <span className="text-sm font-bold text-emerald-100">نتيجتك: {score}</span>
         </div>
       )}

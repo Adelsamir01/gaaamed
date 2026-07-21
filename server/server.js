@@ -803,11 +803,6 @@ wss.on('connection', (ws, request) => {
         break
       }
 
-      case 'snake_public_boost': {
-        snakeManager.boost(ws, msg.active)
-        break
-      }
-
       case 'snake_public_respawn': {
         snakeManager.respawn(ws)
         break

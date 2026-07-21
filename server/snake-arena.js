@@ -1,14 +1,15 @@
 const TAU = Math.PI * 2
 
-export const SNAKE_WORLD_SIZE = 4_800
+export const SNAKE_WORLD_SIZE = 5_600
+export const SNAKE_ARENA_RADIUS = 2_720
 export const SNAKE_MAX_PLAYERS = 18
 export const SNAKE_TICK_MS = 50
 export const SNAKE_SNAPSHOT_MS = 100
 
-export const SNAKE_BASE_SPEED = 90
-export const SNAKE_BOOST_MULTIPLIER = 1.38
-const TURN_RATE = 5.4
+export const SNAKE_BASE_SPEED = 124
+const TURN_RATE = 6.2
 const START_LENGTH = 128
+const SPAWN_EDGE_MARGIN = 720
 const GROWTH_PER_POINT = 9
 const HEAD_RADIUS = 11
 const BODY_RADIUS = 8.5
@@ -32,19 +33,8 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
 
-function wrap(value, size = SNAKE_WORLD_SIZE) {
-  return ((value % size) + size) % size
-}
-
-function wrappedDelta(from, to, size = SNAKE_WORLD_SIZE) {
-  let delta = to - from
-  if (delta > size / 2) delta -= size
-  if (delta < -size / 2) delta += size
-  return delta
-}
-
-function wrappedDistance(a, b, size = SNAKE_WORLD_SIZE) {
-  return Math.hypot(wrappedDelta(a.x, b.x, size), wrappedDelta(a.y, b.y, size))
+function distance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
 function angleDifference(from, to) {
@@ -56,11 +46,32 @@ function cleanText(value, fallback, maxLength) {
   return clean || fallback
 }
 
-function randomPoint(random, size) {
-  return { x: random() * size, y: random() * size }
+function normaliseHue(value) {
+  return ((value % 360) + 360) % 360
 }
 
-function trimTrail(points, maxLength, size) {
+function randomPoint(random, size, radius, margin = 0) {
+  const availableRadius = Math.max(0, radius - margin)
+  const angle = random() * TAU
+  const distanceFromCenter = Math.sqrt(random()) * availableRadius
+  return {
+    x: size / 2 + Math.cos(angle) * distanceFromCenter,
+    y: size / 2 + Math.sin(angle) * distanceFromCenter,
+  }
+}
+
+function projectInsideArena(point, size, radius, margin = 0) {
+  const center = size / 2
+  const dx = point.x - center
+  const dy = point.y - center
+  const currentDistance = Math.hypot(dx, dy)
+  const maximumDistance = Math.max(0, radius - margin)
+  if (currentDistance <= maximumDistance || currentDistance === 0) return point
+  const scale = maximumDistance / currentDistance
+  return { x: center + dx * scale, y: center + dy * scale }
+}
+
+function trimTrail(points, maxLength) {
   if (points.length < 2) return points
   const trimmed = [points[0]]
   let travelled = 0
@@ -68,13 +79,13 @@ function trimTrail(points, maxLength, size) {
   for (let index = 1; index < points.length; index += 1) {
     const previous = points[index - 1]
     const current = points[index]
-    const dx = wrappedDelta(previous.x, current.x, size)
-    const dy = wrappedDelta(previous.y, current.y, size)
+    const dx = current.x - previous.x
+    const dy = current.y - previous.y
     const segmentLength = Math.hypot(dx, dy)
     if (travelled + segmentLength >= maxLength) {
       const remaining = maxLength - travelled
       const ratio = segmentLength > 0 ? remaining / segmentLength : 0
-      trimmed.push({ x: wrap(previous.x + dx * ratio, size), y: wrap(previous.y + dy * ratio, size) })
+      trimmed.push({ x: previous.x + dx * ratio, y: previous.y + dy * ratio })
       break
     }
     travelled += segmentLength
@@ -85,10 +96,11 @@ function trimTrail(points, maxLength, size) {
 }
 
 export class SnakeArena {
-  constructor(id, { random = Math.random, size = SNAKE_WORLD_SIZE, maxPlayers = SNAKE_MAX_PLAYERS } = {}) {
+  constructor(id, { random = Math.random, size = SNAKE_WORLD_SIZE, radius = SNAKE_ARENA_RADIUS, maxPlayers = SNAKE_MAX_PLAYERS } = {}) {
     this.id = id
     this.random = random
     this.size = size
+    this.radius = Math.min(radius, size / 2 - HEAD_RADIUS)
     this.maxPlayers = maxPlayers
     this.players = new Map()
     this.foodVersion = 0
@@ -98,7 +110,7 @@ export class SnakeArena {
   }
 
   createFood(id) {
-    const point = randomPoint(this.random, this.size)
+    const point = randomPoint(this.random, this.size, this.radius, 24)
     const variant = FOOD_VARIANTS[id % FOOD_VARIANTS.length]
     return {
       id,
@@ -124,10 +136,14 @@ export class SnakeArena {
       )
       const point = player.trail[trailIndex]
       const value = 1 + (index % 3)
+      const dropped = projectInsideArena({
+        x: point.x + (this.random() - 0.5) * 7,
+        y: point.y + (this.random() - 0.5) * 7,
+      }, this.size, this.radius, 18)
       this.foods.push({
         id: this.nextFoodId,
-        x: Math.round(wrap(point.x + (this.random() - 0.5) * 7, this.size) * 10) / 10,
-        y: Math.round(wrap(point.y + (this.random() - 0.5) * 7, this.size) * 10) / 10,
+        x: Math.round(dropped.x * 10) / 10,
+        y: Math.round(dropped.y * 10) / 10,
         hue: Math.round(player.hue),
         radius: 5.5 + value * 1.15,
         value,
@@ -140,11 +156,11 @@ export class SnakeArena {
   }
 
   findSpawn() {
-    let candidate = randomPoint(this.random, this.size)
+    let candidate = randomPoint(this.random, this.size, this.radius, SPAWN_EDGE_MARGIN)
     for (let attempt = 0; attempt < 80; attempt += 1) {
-      candidate = randomPoint(this.random, this.size)
+      candidate = randomPoint(this.random, this.size, this.radius, SPAWN_EDGE_MARGIN)
       const safe = [...this.players.values()].every((player) => (
-        !player.alive || wrappedDistance(candidate, player.trail[0], this.size) > 340
+        !player.alive || distance(candidate, player.trail[0]) > 340
       ))
       if (safe) break
     }
@@ -155,8 +171,8 @@ export class SnakeArena {
     const head = this.findSpawn()
     const angle = this.random() * TAU
     const trail = Array.from({ length: Math.ceil(START_LENGTH / 4) + 1 }, (_, index) => ({
-      x: wrap(head.x - Math.cos(angle) * index * 4, this.size),
-      y: wrap(head.y - Math.sin(angle) * index * 4, this.size),
+      x: head.x - Math.cos(angle) * index * 4,
+      y: head.y - Math.sin(angle) * index * 4,
     }))
     player.alive = true
     player.score = 0
@@ -164,7 +180,6 @@ export class SnakeArena {
     player.angle = angle
     player.targetAngle = angle
     player.trail = trail
-    player.boosting = false
     player.deathNotified = false
     return player
   }
@@ -175,7 +190,7 @@ export class SnakeArena {
       id,
       name: cleanText(name, 'لاعب', 24),
       avatar: cleanText(avatar, '🎮', 8),
-      hue: Number.isFinite(hue) ? wrap(hue, 360) : Math.round(this.random() * 360),
+      hue: Number.isFinite(hue) ? normaliseHue(hue) : Math.round(this.random() * 360),
     })
     this.players.set(id, player)
     return player
@@ -192,13 +207,6 @@ export class SnakeArena {
     return true
   }
 
-  boost(id, active) {
-    const player = this.players.get(id)
-    if (!player?.alive) return false
-    player.boosting = active === true
-    return true
-  }
-
   respawn(id) {
     const player = this.players.get(id)
     if (!player || player.alive) return null
@@ -209,19 +217,26 @@ export class SnakeArena {
     const dt = clamp(Number(dtSeconds) || 0, 0, 0.1)
     if (dt <= 0) return []
 
+    const boundaryDeaths = new Set()
+    const center = { x: this.size / 2, y: this.size / 2 }
     for (const player of this.players.values()) {
       if (!player.alive) continue
       const turn = clamp(angleDifference(player.angle, player.targetAngle), -TURN_RATE * dt, TURN_RATE * dt)
       player.angle += turn
       const head = player.trail[0]
-      const speed = SNAKE_BASE_SPEED * (player.boosting ? SNAKE_BOOST_MULTIPLIER : 1)
+      const speed = SNAKE_BASE_SPEED
       const nextHead = {
-        x: wrap(head.x + Math.cos(player.angle) * speed * dt, this.size),
-        y: wrap(head.y + Math.sin(player.angle) * speed * dt, this.size),
+        x: head.x + Math.cos(player.angle) * speed * dt,
+        y: head.y + Math.sin(player.angle) * speed * dt,
       }
-      player.trail = trimTrail([nextHead, ...player.trail], player.length, this.size)
+      player.trail = trimTrail([nextHead, ...player.trail], player.length)
 
-      const eatenIndex = this.foods.findIndex((food) => wrappedDistance(nextHead, food, this.size) < HEAD_RADIUS + food.radius + 2)
+      if (distance(nextHead, center) >= this.radius - HEAD_RADIUS) {
+        boundaryDeaths.add(player.id)
+        continue
+      }
+
+      const eatenIndex = this.foods.findIndex((food) => distance(nextHead, food) < HEAD_RADIUS + food.radius + 2)
       if (eatenIndex >= 0) {
         const [eaten] = this.foods.splice(eatenIndex, 1)
         const value = clamp(Math.round(Number(eaten.value) || 1), 1, 5)
@@ -235,7 +250,7 @@ export class SnakeArena {
       }
     }
 
-    const deathIds = new Set()
+    const deathIds = new Set(boundaryDeaths)
     for (const player of this.players.values()) {
       if (!player.alive) continue
       const head = player.trail[0]
@@ -244,7 +259,7 @@ export class SnakeArena {
       for (const other of this.players.values()) {
         if (!other.alive || other.id === player.id) continue
         for (let index = 1; index < other.trail.length; index += 1) {
-          if (wrappedDistance(head, other.trail[index], this.size) < HEAD_RADIUS + BODY_RADIUS - 2) {
+          if (distance(head, other.trail[index]) < HEAD_RADIUS + BODY_RADIUS - 2) {
             collided = true
             break
           }
@@ -262,7 +277,6 @@ export class SnakeArena {
       const player = this.players.get(id)
       if (!player?.alive) continue
       player.alive = false
-      player.boosting = false
       this.dropPlayerFood(player)
       deaths.push({ id: player.id, score: player.score })
     }
@@ -275,7 +289,8 @@ export class SnakeArena {
       arenaId: this.id,
       serverTime: now,
       speed: SNAKE_BASE_SPEED,
-      boostMultiplier: SNAKE_BOOST_MULTIPLIER,
+      worldSize: this.size,
+      arenaRadius: this.radius,
       players: [...this.players.values()].map((player) => ({
         id: player.id,
         name: player.name,
@@ -283,7 +298,6 @@ export class SnakeArena {
         hue: Math.round(player.hue),
         score: player.score,
         alive: player.alive,
-        boosting: player.boosting,
         angle: Math.round(player.angle * 10_000) / 10_000,
         trail: player.trail.map((point) => ({
           x: Math.round(point.x * 10) / 10,
@@ -334,6 +348,7 @@ export class SnakeArenaManager {
       arenaId: arena.id,
       playerId,
       worldSize: arena.size,
+      arenaRadius: arena.radius,
       playerCount: arena.players.size,
     })
     this.send(socket, arena.snapshot(this.now()))
@@ -345,12 +360,6 @@ export class SnakeArenaManager {
     const membership = this.memberships.get(socket)
     if (!membership) return false
     return this.arenas.get(membership.arenaId)?.steer(membership.playerId, Number(angle)) ?? false
-  }
-
-  boost(socket, active) {
-    const membership = this.memberships.get(socket)
-    if (!membership) return false
-    return this.arenas.get(membership.arenaId)?.boost(membership.playerId, active === true) ?? false
   }
 
   respawn(socket) {
