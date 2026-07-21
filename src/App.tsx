@@ -193,6 +193,24 @@ function Shell() {
   if (view.kind === 'playing') {
     const game = getGame(view.gameId)!
     const GameComp = game.component
+    if (view.gameId === 'bank-el7az') {
+      return (
+        <div className="h-dvh overflow-hidden">
+          <motion.div
+            key={view.gameId + JSON.stringify(view.config)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="h-full"
+          >
+            <GameComp
+              config={view.config}
+              onFinish={(r) => handleFinish(r, view.config)}
+              onExit={() => setView({ kind: 'lobby', gameId: view.gameId })}
+            />
+          </motion.div>
+        </div>
+      )
+    }
     if (view.gameId === 'snake') {
       return (
         <div className="mx-auto h-dvh max-w-[420px] overflow-hidden safe-top">

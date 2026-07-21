@@ -29,7 +29,6 @@ import {
   Hourglass,
   Landmark,
   LogOut,
-  Maximize2,
   Menu,
   Play,
   PlugZap,
@@ -52,6 +51,7 @@ import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useGameSocket } from "./useGameSocket.js";
+import { enterBrowserLandscape, useBankDisplayMode } from "./displayMode.js";
 import { useApp } from "@/store/AppContext";
 import { useOnline } from "@/online/OnlineContext";
 import { getServerUrl } from "@/online/client";
@@ -137,6 +137,7 @@ function GameApp({
   onFinishGame?: (result: GameResult) => void;
   onExitGame?: () => void;
 } = {}) {
+  useBankDisplayMode();
   const game = useGameSocket({ name: playerName });
   const { fromQuickMatch, leaveRoom: leaveDedosMatch } = useOnline();
   const [selectedTileId, setSelectedTileId] = useState<number | null>(null);
@@ -183,7 +184,7 @@ function GameApp({
     const timer = window.setTimeout(() => {
       if (autoStartFiredRef.current) return;
       autoStartFiredRef.current = true;
-      void enterImmersiveMode();
+      void enterBrowserLandscape();
       startGameRef.current();
     }, 600);
     return () => window.clearTimeout(timer);
@@ -233,8 +234,7 @@ function GameApp({
   }
 
   return (
-    <>
-      <GameScreen
+      <BankGameScreen
         state={state}
         playerId={game.playerId}
         selectedTile={selectedTile}
@@ -252,8 +252,6 @@ function GameApp({
         payBail={game.payBail}
         leaveRoom={exitGame}
       />
-      <LandscapeGate />
-    </>
   );
 }
 
@@ -741,7 +739,7 @@ function LobbyScreen({
   const canStart = isHost && state.players.length >= 2;
 
   function startImmersiveGame() {
-    void enterImmersiveMode();
+    void enterBrowserLandscape();
     startGame();
   }
 
@@ -807,7 +805,7 @@ function LobbyScreen({
   );
 }
 
-function GameScreen({
+export function BankGameScreen({
   state,
   playerId,
   selectedTile,
@@ -823,7 +821,9 @@ function GameScreen({
   buildProperty,
   sellProperty,
   payBail,
-  leaveRoom
+  leaveRoom,
+  sessionLabel = "مباراة أونلاين",
+  showNetworkInfo = true
 }: {
   state: GameState;
   playerId: string | null;
@@ -841,6 +841,8 @@ function GameScreen({
   sellProperty: (tileId: number) => void;
   payBail: () => void;
   leaveRoom: () => void;
+  sessionLabel?: string;
+  showNetworkInfo?: boolean;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const currentPlayer = state.players.find((player) => player.id === state.currentPlayerId) ?? null;
@@ -879,6 +881,7 @@ function GameScreen({
             isActionLocked={isActionLocked}
             buildProperty={buildProperty}
             sellProperty={sellProperty}
+            onClose={() => setSelectedTileId(selectedTile.id)}
           />
         </div>
       )}
@@ -902,7 +905,7 @@ function GameScreen({
         <div className="menu-head">
           <div>
             <strong>بنك الحظ</strong>
-            <span>مباراة أونلاين</span>
+            <span>{sessionLabel}</span>
           </div>
           <button className="icon-button" onClick={() => setIsMenuOpen(false)} aria-label="اقفل القائمة">
             <X size={20} />
@@ -923,10 +926,17 @@ function GameScreen({
           )}
         </div>
 
-        <div className="sync-pill">
-          <PlugZap size={16} />
-          تأخير الشبكة {formatNumber(latencyMs)} مللي
-        </div>
+        {showNetworkInfo ? (
+          <div className="sync-pill">
+            <PlugZap size={16} />
+            تأخير الشبكة {formatNumber(latencyMs)} مللي
+          </div>
+        ) : (
+          <div className="sync-pill local-sync-pill">
+            <House size={16} />
+            شغالة من الموبايل — من غير إنترنت
+          </div>
+        )}
 
         <button className="leave-room-button" onClick={leaveRoom}>
           <LogOut size={18} />
@@ -1605,7 +1615,8 @@ function TilePanel({
   playerId,
   isActionLocked,
   buildProperty,
-  sellProperty
+  sellProperty,
+  onClose
 }: {
   state: GameState;
   tile: BoardTile;
@@ -1613,6 +1624,7 @@ function TilePanel({
   isActionLocked: boolean;
   buildProperty: (tileId: number) => void;
   sellProperty: (tileId: number) => void;
+  onClose: () => void;
 }) {
   const owner = state.players.find((player) => player.properties.includes(tile.id));
   const me = state.players.find((player) => player.id === playerId) ?? null;
@@ -1641,6 +1653,9 @@ function TilePanel({
       <h2>
         <CircleDollarSign size={17} />
         {tile.shortName}
+        <button className="tile-panel-close" type="button" onClick={onClose} aria-label="اقفل معلومات المحافظة">
+          <X size={17} />
+        </button>
       </h2>
       {flagSrc && <img className="tile-panel-flag" src={flagSrc} alt={`علم ${tile.name}`} draggable={false} decoding="async" />}
       <p>{tile.description}</p>
@@ -1898,27 +1913,6 @@ function IphoneInstallGate() {
   );
 }
 
-function LandscapeGate() {
-  const showInstallHelp = isAppleMobile() && !isStandaloneMode();
-
-  return (
-    <div className="landscape-gate">
-      <div className="landscape-card">
-        <span className="brand-mark">حظ</span>
-        <h2>لف الموبايل بالعرض</h2>
-        <p>اللعبة معمولة شاشة كاملة بالعرض عشان اللوحة والأزرار يبقوا واضحين.</p>
-        {showInstallHelp && (
-          <p className="install-inline">عشان تخفي شريط سفاري خالص، ثبت اللعبة على الشاشة الرئيسية وافتحها من الأيقونة.</p>
-        )}
-        <button onClick={() => void enterImmersiveMode()}>
-          <Maximize2 size={18} />
-          افتح ملء الشاشة
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function tilePosition(id: number): Record<string, number> {
   if (id <= 10) {
     return { gridRow: 10, gridColumn: 11 - id };
@@ -2023,23 +2017,4 @@ function isStandaloneMode(): boolean {
 // انحراف موثّق: رابط الإحصائيات يُشتق من عنوان خادم ديدوس (ws → http)
 function getStatsHttpUrl(): string {
   return `${getServerUrl().replace(/^ws/, "http")}/api/stats`;
-}
-
-async function enterImmersiveMode(): Promise<void> {
-  try {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen?.();
-    }
-  } catch {
-    // Some mobile browsers only allow fullscreen when installed as an app.
-  }
-
-  try {
-    const orientation = screen.orientation as ScreenOrientation & {
-      lock?: (orientation: "landscape") => Promise<void>;
-    };
-    await orientation.lock?.("landscape");
-  } catch {
-    // iOS Safari does not expose orientation lock for normal web pages.
-  }
 }

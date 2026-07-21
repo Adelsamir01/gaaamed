@@ -2924,3 +2924,262 @@
     transform: scale(1.08);
   }
 }
+
+/* ===== Unified native/local board: three clear zones with floating controls ===== */
+.bank-el7az-root .board-first-shell {
+  --board-tile-width: calc(100% / 11);
+  --board-tile-height: calc(100% / 10);
+  --board-side-zone: 31%;
+}
+
+.bank-el7az-root .board-first-shell .board-center {
+  padding: clamp(0.45rem, 1.2vmin, 0.8rem)
+    calc(var(--board-side-zone) + clamp(0.42rem, 1.3vmin, 0.85rem));
+}
+
+.bank-el7az-root .board-center-heading {
+  max-width: 100%;
+  animation: bankHeadingIn 420ms cubic-bezier(0.18, 0.85, 0.25, 1.15) both;
+}
+
+.bank-el7az-root .board-event-stage .board-toast {
+  width: 100%;
+  max-width: 100%;
+}
+
+.bank-el7az-root .board-info-dock {
+  top: calc(var(--board-tile-height) + var(--board-inner-gap));
+  bottom: calc(var(--board-tile-height) + var(--board-inner-gap));
+  left: calc(var(--board-tile-width) + var(--board-inner-gap));
+  width: calc((100% - (var(--board-tile-width) * 2) - (var(--board-inner-gap) * 2)) * 0.31);
+  max-height: none;
+}
+
+.bank-el7az-root .board-info-dock .panel {
+  height: 100%;
+  max-height: 100%;
+  border-radius: clamp(12px, 2.2vmin, 20px);
+  animation: bankInfoIn 280ms cubic-bezier(0.18, 0.82, 0.24, 1.08) both;
+}
+
+.bank-el7az-root .board-info-dock .panel h2 {
+  position: sticky;
+  top: -0.62rem;
+  z-index: 2;
+  padding-block: 0.34rem;
+  background: linear-gradient(180deg, rgba(13, 20, 36, 0.98) 76%, transparent);
+}
+
+.bank-el7az-root .tile-panel-close {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  margin-inline-start: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.bank-el7az-root .tile-panel-close:hover:not(:disabled) {
+  border: 0;
+  background: rgba(248, 113, 113, 0.22);
+}
+
+.bank-el7az-root .board-action-dock {
+  right: calc(var(--board-tile-width) + var(--board-inner-gap));
+  bottom: calc(var(--board-tile-height) + var(--board-inner-gap));
+  width: calc((100% - (var(--board-tile-width) * 2) - (var(--board-inner-gap) * 2)) * 0.31);
+}
+
+.bank-el7az-root .board-action-dock .action-bar {
+  gap: 0.48rem;
+  padding: 0.15rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  animation: bankActionsIn 320ms cubic-bezier(0.18, 0.82, 0.24, 1.08) both;
+}
+
+.bank-el7az-root .board-action-dock .action-status {
+  gap: 0.12rem;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+}
+
+.bank-el7az-root .board-action-dock .action-buttons button {
+  min-height: clamp(42px, 10dvh, 54px);
+  border-width: 2px;
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.bank-el7az-root .board-action-dock .action-buttons button:active:not(:disabled) {
+  transform: translateY(2px) scale(0.97);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32);
+}
+
+.bank-el7az-root .local-sync-pill {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(16, 185, 129, 0.09);
+}
+
+@keyframes bankInfoIn {
+  from {
+    opacity: 0;
+    transform: translateX(-18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes bankActionsIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bankHeadingIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .bank-el7az-root .board-first-shell {
+    --board-inner-gap: 0.28rem;
+    --board-side-zone: 32%;
+  }
+
+  .bank-el7az-root .board-first-shell .board-center {
+    gap: 0.22rem;
+    padding: 0.28rem calc(var(--board-side-zone) + 0.28rem);
+  }
+
+  .bank-el7az-root .board-center-heading {
+    min-height: 30px;
+    padding: 0.2rem 0.55rem;
+  }
+
+  .bank-el7az-root .board-center-heading span {
+    font-size: clamp(0.72rem, 2.1vmin, 0.92rem);
+  }
+
+  .bank-el7az-root .board-center-heading small {
+    font-size: clamp(0.54rem, 1.55vmin, 0.67rem);
+  }
+
+  .bank-el7az-root .board-event-stage .board-toast > strong,
+  .bank-el7az-root .board-event-stage .board-toast.money-toast > strong {
+    font-size: clamp(0.7rem, 2vmin, 0.88rem);
+    line-height: 1.2;
+  }
+
+  .bank-el7az-root .board-info-dock {
+    width: calc((100% - (var(--board-tile-width) * 2) - (var(--board-inner-gap) * 2)) * 0.32);
+    max-height: none;
+  }
+
+  .bank-el7az-root .board-info-dock .panel {
+    padding: 0.46rem;
+  }
+
+  .bank-el7az-root .board-info-dock .panel h2 {
+    top: -0.46rem;
+    margin-bottom: 0.22rem;
+    font-size: clamp(0.72rem, 2vmin, 0.86rem);
+  }
+
+  .bank-el7az-root .tile-panel-close {
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .bank-el7az-root .board-info-dock .tile-panel-flag {
+    display: block;
+    max-height: clamp(32px, 11dvh, 52px);
+    margin-bottom: 0.22rem;
+  }
+
+  .bank-el7az-root .board-info-dock .tile-panel p {
+    display: -webkit-box;
+    margin: 0.16rem 0 0.3rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: clamp(0.64rem, 1.72vmin, 0.74rem);
+    line-height: 1.25;
+  }
+
+  .bank-el7az-root .board-info-dock dt {
+    font-size: clamp(0.55rem, 1.5vmin, 0.64rem);
+  }
+
+  .bank-el7az-root .board-info-dock dd {
+    font-size: clamp(0.64rem, 1.75vmin, 0.74rem);
+  }
+
+  .bank-el7az-root .board-action-dock {
+    width: calc((100% - (var(--board-tile-width) * 2) - (var(--board-inner-gap) * 2)) * 0.32);
+  }
+
+  .bank-el7az-root .board-action-dock .action-bar {
+    padding: 0.08rem;
+  }
+
+  .bank-el7az-root .board-action-dock .action-status strong {
+    font-size: clamp(0.72rem, 2vmin, 0.84rem);
+  }
+
+  .bank-el7az-root .board-action-dock .wallet-line {
+    font-size: clamp(0.61rem, 1.65vmin, 0.72rem);
+  }
+
+  .bank-el7az-root .board-action-dock .action-buttons button {
+    min-height: clamp(39px, 11dvh, 48px);
+    padding: 0.38rem 0.45rem;
+    font-size: clamp(0.73rem, 2vmin, 0.86rem);
+  }
+
+  .bank-el7az-root .board-first-shell .property-band {
+    height: 8px;
+  }
+
+  .bank-el7az-root .board-first-shell .tile-name {
+    top: 8px;
+    min-height: 17px;
+    padding: 0.05rem 0.1rem;
+    font-size: clamp(0.68rem, 1.9vmin, 0.84rem);
+    line-height: 1.05;
+  }
+
+  .bank-el7az-root .board-first-shell .tile-flag {
+    width: min(72%, 40px);
+    height: clamp(14px, 4.3dvh, 22px);
+  }
+
+  .bank-el7az-root .board-first-shell .token.mini.car-token {
+    width: clamp(23px, 5vmin, 34px);
+    height: clamp(17px, 3.8vmin, 25px);
+  }
+}

@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, Building2, Coins, Dice5, ShoppingCart, Users } from 'lucide-react'
 import type { GameProps } from '@/games'
 import type { Difficulty } from '@/types'
+import { useApp } from '@/store/AppContext'
 import { BOARD_TILES, PENALTY_BAIL, STARTING_CASH, START_BONUS } from '@/games/online/bankel7az/shared/board'
-import { calculateRent, canAddBuilding, findOwner, getBuildingCost, isOwnableTile, isPropertyTile } from '@/games/online/bankel7az/shared/rules'
-import type { BuildingsByTile, DiceRoll, Player } from '@/games/online/bankel7az/shared/types'
+import {
+  calculateRent,
+  canAddBuilding,
+  findOwner,
+  getBuildingCost,
+  getPropertySellValue,
+  isOwnableTile,
+  isPropertyTile,
+} from '@/games/online/bankel7az/shared/rules'
+import type {
+  BuildingsByTile,
+  DiceRoll,
+  GameLogEntry,
+  GameState,
+  Player,
+} from '@/games/online/bankel7az/shared/types'
+import { BankGameScreen } from '@/games/online/bankel7az/App'
+import { useBankDisplayMode } from '@/games/online/bankel7az/displayMode'
 import { sounds } from '@/lib/sounds'
-import { cn } from '@/lib/utils'
 
 const MAX_TURNS = 24
 
 interface Decision {
-  kind: 'buy' | 'build'
   tileId: number
   price: number
 }
@@ -20,11 +34,12 @@ type Phase = 'ready' | 'moving' | 'decision' | 'over'
 
 const BOT_BUY_BUFFER: Record<Difficulty, number> = { easy: 500, medium: 300, hard: 160 }
 const BOT_BUY_CHANCE: Record<Difficulty, number> = { easy: 0.45, medium: 0.75, hard: 0.94 }
+const BOT_BUILD_CHANCE: Record<Difficulty, number> = { easy: 0.2, medium: 0.55, hard: 0.82 }
 
-function createPlayers(againstBot: boolean): Player[] {
+function createPlayers(againstBot: boolean, playerName: string): Player[] {
   return [
     {
-      id: 'p1', name: 'اللاعب ١', color: 'red', position: 0, cash: STARTING_CASH, properties: [],
+      id: 'p1', name: playerName || 'اللاعب ١', color: 'red', position: 0, cash: STARTING_CASH, properties: [],
       connected: true, bankrupt: false, inPenalty: false, penaltyTurns: 0, skipTurns: 0,
     },
     {
@@ -32,13 +47,6 @@ function createPlayers(againstBot: boolean): Player[] {
       connected: true, bankrupt: false, inPenalty: false, penaltyTurns: 0, skipTurns: 0,
     },
   ]
-}
-
-function tilePlacement(id: number): { gridColumn: number; gridRow: number } {
-  if (id <= 10) return { gridColumn: id + 1, gridRow: 1 }
-  if (id <= 18) return { gridColumn: 11, gridRow: id - 9 }
-  if (id <= 29) return { gridColumn: 30 - id, gridRow: 10 }
-  return { gridColumn: 1, gridRow: 39 - id }
 }
 
 function propertyValue(player: Player, buildings: BuildingsByTile): number {
@@ -54,16 +62,26 @@ function playerWealth(player: Player, buildings: BuildingsByTile): number {
   return player.cash + propertyValue(player, buildings)
 }
 
-export default function BankEl7azLocal({ config, onFinish }: GameProps) {
+export default function BankEl7azLocal({ config, onFinish, onExit }: GameProps) {
+  useBankDisplayMode()
+  const { profile } = useApp()
   const againstBot = config.mode === 'bot'
-  const [players, setPlayers] = useState<Player[]>(() => createPlayers(againstBot))
+  const startedAtRef = useRef(Date.now())
+  const logSequenceRef = useRef(1)
+  const [players, setPlayers] = useState<Player[]>(() => createPlayers(againstBot, profile.name))
   const [turnIndex, setTurnIndex] = useState(0)
   const [turnsPlayed, setTurnsPlayed] = useState(0)
   const [phase, setPhase] = useState<Phase>('ready')
   const [lastRoll, setLastRoll] = useState<DiceRoll | null>(null)
   const [decision, setDecision] = useState<Decision | null>(null)
   const [buildings, setBuildings] = useState<BuildingsByTile>({})
-  const [message, setMessage] = useState('ابدأ وارمِ الزهر')
+  const [winnerId, setWinnerId] = useState<string | null>(null)
+  const [selectedTileId, setSelectedTileId] = useState<number | null>(null)
+  const [log, setLog] = useState<GameLogEntry[]>(() => [{
+    id: 'local-0',
+    message: 'ابدأ وارمِ الزهر',
+    createdAt: startedAtRef.current,
+  }])
   const finishedRef = useRef(false)
   const timersRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
   const playersRef = useRef(players)
@@ -72,8 +90,14 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
   buildingsRef.current = buildings
 
   const currentPlayer = players[turnIndex] ?? players[0]!
-  const currentTile = BOARD_TILES[currentPlayer.position] ?? BOARD_TILES[0]!
   const humanTurn = !againstBot || turnIndex === 0
+  const latestTimestamp = log[0]?.createdAt ?? startedAtRef.current
+
+  const announce = useCallback((message: string) => {
+    const createdAt = Date.now()
+    const id = `local-${createdAt}-${logSequenceRef.current++}`
+    setLog((current) => [{ id, message, createdAt }, ...current].slice(0, 12))
+  }, [])
 
   const queue = useCallback((callback: () => void, delay: number) => {
     const timer = setTimeout(callback, delay)
@@ -87,9 +111,11 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     const first = playerWealth(finalPlayers[0]!, finalBuildings)
     const second = playerWealth(finalPlayers[1]!, finalBuildings)
     const outcome = first === second ? 'draw' : first > second ? 'win' : 'loss'
+    const finalWinnerId = first === second ? null : first > second ? finalPlayers[0]!.id : finalPlayers[1]!.id
+    setWinnerId(finalWinnerId)
     if (outcome === 'win') sounds.win()
     else if (outcome === 'loss') sounds.lose()
-    setMessage(outcome === 'draw' ? 'تعادل في الثروة! 🤝' : first > second ? 'اللاعب ١ هو أغنى لاعب! 🏆' : `${againstBot ? 'الكمبيوتر' : 'اللاعب ٢'} كسب المباراة!`)
+    announce(outcome === 'draw' ? 'تعادل في الثروة! 🤝' : first > second ? `${finalPlayers[0]!.name} أغنى لاعب! 🏆` : `${finalPlayers[1]!.name} كسب المباراة! 🏆`)
     queue(() => {
       onFinish({
         gameId: 'bank-el7az',
@@ -99,10 +125,10 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
         coinsEarned: outcome === 'win' ? 55 : outcome === 'draw' ? 22 : 10,
         xpEarned: outcome === 'win' ? 75 : outcome === 'draw' ? 35 : 18,
         summary: `ثروتك النهائية ${first} جنيه مقابل ${second} جنيه 🏦`,
-        detail: 'المباراة المحلية حُسبت بالنقد وقيمة المحافظات والمباني.',
+        detail: 'المباراة المحلية اتحسبت بالنقد وقيمة المحافظات والمباني.',
       })
     }, 1_450)
-  }, [againstBot, onFinish, queue])
+  }, [announce, onFinish, queue])
 
   const finishTurn = useCallback((nextPlayers = playersRef.current) => {
     setPlayers(nextPlayers)
@@ -118,8 +144,8 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     setTurnIndex(nextIndex)
     setLastRoll(null)
     setPhase('ready')
-    setMessage(`دور ${nextPlayers[nextIndex]?.name ?? 'اللاعب التالي'}`)
-  }, [finishGame, turnIndex, turnsPlayed])
+    announce(`الدور على ${nextPlayers[nextIndex]?.name ?? 'اللاعب التالي'}`)
+  }, [announce, finishGame, turnIndex, turnsPlayed])
 
   const applyPayment = useCallback((source: Player[], payerIndex: number, amount: number, receiverIndex?: number): Player[] => {
     const next = source.map((player) => ({ ...player, properties: [...player.properties] }))
@@ -139,7 +165,7 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
 
     if (tile.kind === 'tax') {
       const charged = applyPayment(movedPlayers, playerIndex, tile.amount)
-      setMessage(`${tile.name}: دفعت ${Math.min(player.cash, tile.amount)} جنيه`)
+      announce(`${tile.name}: دفعت ${Math.min(player.cash, tile.amount)} جنيه`)
       setPlayers(charged)
       queue(() => finishTurn(charged), 900)
       return
@@ -156,7 +182,7 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
       let updated = movedPlayers.map((item) => ({ ...item, properties: [...item.properties] }))
       if (card.amount >= 0) updated[playerIndex]!.cash += card.amount
       else updated = applyPayment(updated, playerIndex, Math.abs(card.amount))
-      setMessage(card.text)
+      announce(card.text)
       setPlayers(updated)
       queue(() => finishTurn(updated), 1_050)
       return
@@ -165,7 +191,7 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     if (tile.kind === 'goToPenalty') {
       const updated = applyPayment(movedPlayers, playerIndex, PENALTY_BAIL)
       updated[playerIndex]!.position = 12
-      setMessage(`روحت القسم ودفعت ${PENALTY_BAIL} جنيه`)
+      announce(`روحت القسم ودفعت ${PENALTY_BAIL} جنيه`)
       setPlayers(updated)
       queue(() => finishTurn(updated), 1_050)
       return
@@ -174,8 +200,9 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     if (isOwnableTile(tile)) {
       if (!owner && player.cash >= tile.price) {
         setPlayers(movedPlayers)
-        setDecision({ kind: 'buy', tileId: tile.id, price: tile.price })
-        setMessage(`${tile.name} متاحة بـ ${tile.price} جنيه`)
+        setDecision({ tileId: tile.id, price: tile.price })
+        setSelectedTileId(tile.id)
+        announce(`${tile.name} متاحة بـ ${tile.price} جنيه`)
         setPhase('decision')
         return
       }
@@ -184,28 +211,35 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
         const ownerIndex = movedPlayers.findIndex((item) => item.id === owner.id)
         const rent = calculateRent(tile, owner, diceTotal, buildingsRef.current)
         const paidPlayers = applyPayment(movedPlayers, playerIndex, rent, ownerIndex)
-        setMessage(`دفعت ${Math.min(player.cash, rent)} جنيه إيجار لـ ${owner.name}`)
+        announce(`دفعت ${Math.min(player.cash, rent)} جنيه إيجار لـ ${owner.name}`)
         setPlayers(paidPlayers)
         queue(() => finishTurn(paidPlayers), 1_050)
         return
       }
 
-      if (owner?.id === player.id && isPropertyTile(tile) && canAddBuilding(tile, player, buildingsRef.current)) {
+      if (
+        againstBot && playerIndex === 1 && owner?.id === player.id && isPropertyTile(tile)
+        && canAddBuilding(tile, player, buildingsRef.current)
+      ) {
         const price = getBuildingCost(tile)
-        if (player.cash >= price) {
-          setPlayers(movedPlayers)
-          setDecision({ kind: 'build', tileId: tile.id, price })
-          setMessage(`تقدر تبني في ${tile.name} بـ ${price} جنيه`)
-          setPhase('decision')
+        if (player.cash - price >= BOT_BUY_BUFFER[config.difficulty] && Math.random() <= BOT_BUILD_CHANCE[config.difficulty]) {
+          const updated = movedPlayers.map((item) => ({ ...item, properties: [...item.properties] }))
+          updated[playerIndex]!.cash -= price
+          const nextBuildings = { ...buildingsRef.current, [tile.id]: (buildingsRef.current[tile.id] ?? 0) + 1 }
+          buildingsRef.current = nextBuildings
+          setBuildings(nextBuildings)
+          setPlayers(updated)
+          announce(`${player.name} بنى في ${tile.name} 🏠`)
+          queue(() => finishTurn(updated), 900)
           return
         }
       }
     }
 
     setPlayers(movedPlayers)
-    setMessage(tile.kind === 'start' ? 'نورت البداية!' : tile.kind === 'freeRest' ? 'استراحة على القهوة ☕' : `وقفت في ${tile.name}`)
+    announce(tile.kind === 'start' ? 'نورت البداية!' : tile.kind === 'freeRest' ? 'استراحة على القهوة ☕' : `وقفت في ${tile.name}`)
     queue(() => finishTurn(movedPlayers), 850)
-  }, [applyPayment, finishTurn, queue])
+  }, [againstBot, announce, applyPayment, config.difficulty, finishTurn, queue])
 
   const rollDice = useCallback(() => {
     if (phase !== 'ready' || finishedRef.current) return
@@ -220,10 +254,10 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     const passedStart = player.position + roll.total >= BOARD_TILES.length
     player.position = (player.position + roll.total) % BOARD_TILES.length
     if (passedStart) player.cash += START_BONUS
-    setMessage(`${player.name} رمى ${roll.total}${passedStart ? ` وعدّى البداية +${START_BONUS}` : ''}`)
+    announce(`${player.name} رمى ${roll.total}${passedStart ? ` وعدّى البداية +${START_BONUS}` : ''}`)
     setPlayers(nextPlayers)
     queue(() => resolveLanding(nextPlayers, turnIndex, roll.total), 700)
-  }, [phase, players, queue, resolveLanding, turnIndex])
+  }, [announce, phase, players, queue, resolveLanding, turnIndex])
 
   const handleDecision = useCallback((accept: boolean) => {
     if (!decision || phase !== 'decision') return
@@ -232,25 +266,51 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
     const tile = BOARD_TILES[decision.tileId]
     if (accept && tile && player.cash >= decision.price) {
       player.cash -= decision.price
-      if (decision.kind === 'buy') {
-        player.properties.push(decision.tileId)
-        setMessage(`${player.name} اشترى ${tile.name} 🎉`)
-        sounds.correct()
-      } else {
-        const nextBuildings = { ...buildingsRef.current, [decision.tileId]: (buildingsRef.current[decision.tileId] ?? 0) + 1 }
-        buildingsRef.current = nextBuildings
-        setBuildings(nextBuildings)
-        setMessage(`${player.name} بنى في ${tile.name} 🏠`)
-        sounds.correct()
-      }
+      player.properties.push(decision.tileId)
+      announce(`${player.name} اشترى ${tile.name} 🎉`)
+      sounds.correct()
     } else {
-      setMessage(`${player.name} قرر يحتفظ بفلوسه`)
+      announce(`${player.name} قرر يحتفظ بفلوسه`)
     }
     setPlayers(nextPlayers)
     setDecision(null)
     setPhase('moving')
     queue(() => finishTurn(nextPlayers), 650)
-  }, [decision, finishTurn, phase, players, queue, turnIndex])
+  }, [announce, decision, finishTurn, phase, players, queue, turnIndex])
+
+  const buildProperty = useCallback((tileId: number) => {
+    if (phase !== 'ready' || finishedRef.current) return
+    const tile = BOARD_TILES[tileId]
+    const player = players[turnIndex]
+    if (!tile || !player || !isPropertyTile(tile) || !player.properties.includes(tileId)) return
+    const price = getBuildingCost(tile)
+    if (!canAddBuilding(tile, player, buildingsRef.current) || player.cash < price) return
+    const updated = players.map((item) => ({ ...item, properties: [...item.properties] }))
+    updated[turnIndex]!.cash -= price
+    const nextBuildings = { ...buildingsRef.current, [tileId]: (buildingsRef.current[tileId] ?? 0) + 1 }
+    buildingsRef.current = nextBuildings
+    setBuildings(nextBuildings)
+    setPlayers(updated)
+    announce(`${player.name} بنى في ${tile.name} 🏠`)
+    sounds.correct()
+  }, [announce, phase, players, turnIndex])
+
+  const sellProperty = useCallback((tileId: number) => {
+    if (phase !== 'ready' || finishedRef.current) return
+    const tile = BOARD_TILES[tileId]
+    const player = players[turnIndex]
+    if (!tile || !player || !isOwnableTile(tile) || !player.properties.includes(tileId)) return
+    const saleValue = getPropertySellValue(tile, buildingsRef.current)
+    const updated = players.map((item) => ({ ...item, properties: [...item.properties] }))
+    updated[turnIndex]!.properties = updated[turnIndex]!.properties.filter((propertyId) => propertyId !== tileId)
+    updated[turnIndex]!.cash += saleValue
+    const nextBuildings = { ...buildingsRef.current }
+    delete nextBuildings[tileId]
+    buildingsRef.current = nextBuildings
+    setBuildings(nextBuildings)
+    setPlayers(updated)
+    announce(`${player.name} باع ${tile.name} للبنك بـ ${saleValue} جنيه`)
+  }, [announce, phase, players, turnIndex])
 
   useEffect(() => {
     if (!againstBot || turnIndex !== 1 || phase !== 'ready') return
@@ -261,105 +321,56 @@ export default function BankEl7azLocal({ config, onFinish }: GameProps) {
   useEffect(() => {
     if (!againstBot || turnIndex !== 1 || phase !== 'decision' || !decision) return
     const bot = players[1]!
-    const accept = bot.cash - decision.price >= BOT_BUY_BUFFER[config.difficulty] && Math.random() <= BOT_BUY_CHANCE[config.difficulty]
+    const accept = bot.cash - decision.price >= BOT_BUY_BUFFER[config.difficulty]
+      && Math.random() <= BOT_BUY_CHANCE[config.difficulty]
     const timer = setTimeout(() => handleDecision(accept), 650)
     return () => clearTimeout(timer)
   }, [againstBot, config.difficulty, decision, handleDecision, phase, players, turnIndex])
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), [])
 
-  const ownership = useMemo(() => new Map(players.flatMap((player, index) => player.properties.map((tileId) => [tileId, index] as const))), [players])
+  const state = useMemo<GameState>(() => ({
+    roomCode: 'LOCAL',
+    hostId: 'p1',
+    status: phase === 'over' ? 'finished' : 'playing',
+    players,
+    currentPlayerId: phase === 'over' ? null : currentPlayer.id,
+    turnPhase: phase === 'ready' ? 'roll' : phase === 'decision' ? 'buy' : 'end',
+    pendingPurchase: decision ? { playerId: currentPlayer.id, tileId: decision.tileId, price: decision.price } : null,
+    buildingsByTile: buildings,
+    lastRoll,
+    winnerId,
+    createdAt: startedAtRef.current,
+    updatedAt: latestTimestamp,
+    actionAvailableAt: phase === 'moving' ? latestTimestamp + 700 : latestTimestamp,
+    log,
+  }), [buildings, currentPlayer.id, decision, lastRoll, latestTimestamp, log, phase, players, winnerId])
+
+  const activePlayerId = phase === 'over' ? 'p1' : humanTurn ? currentPlayer.id : null
+  const selectedTile = selectedTileId === null ? null : BOARD_TILES[selectedTileId] ?? null
 
   return (
-    <div className="flex flex-col items-center gap-3 py-2">
-      <div className="w-full grid grid-cols-2 gap-2">
-        {players.map((player, index) => (
-          <div key={player.id} className={cn('glass rounded-2xl p-2.5 border transition-all', turnIndex === index && phase !== 'over' ? index === 0 ? 'border-red-400/60' : 'border-sky-400/60' : 'border-white/10', player.bankrupt && 'opacity-50')}>
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{index === 0 ? '🚗' : againstBot ? '🤖' : '🚙'}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-black truncate">{player.name}</p>
-                <p className="text-[10px] text-muted-foreground">{player.properties.length} محافظة · {player.bankrupt ? 'أفلس' : `${player.cash} جنيه`}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="relative w-full max-w-[370px] aspect-[11/10] grid gap-[2px] rounded-3xl overflow-hidden border border-white/10 bg-slate-950/70 p-1" style={{ gridTemplateColumns: 'repeat(11, minmax(0, 1fr))', gridTemplateRows: 'repeat(10, minmax(0, 1fr))' }}>
-        {BOARD_TILES.map((tile) => {
-          const ownerIndex = ownership.get(tile.id)
-          const buildingCount = buildings[tile.id] ?? 0
-          const playersHere = players.map((player, index) => ({ player, index })).filter(({ player }) => player.position === tile.id && !player.bankrupt)
-          return (
-            <div
-              key={tile.id}
-              className={cn('relative min-w-0 rounded-[5px] border flex flex-col items-center justify-center overflow-hidden px-px text-center', currentPlayer.position === tile.id && 'ring-1 ring-emerald-300 z-10', ownerIndex === 0 ? 'border-red-400/70 bg-red-500/15' : ownerIndex === 1 ? 'border-sky-400/70 bg-sky-500/15' : 'border-white/10 bg-slate-800/90')}
-              style={{ ...tilePlacement(tile.id), borderTopColor: tile.kind === 'property' ? tile.color : undefined }}
-              title={tile.name}
-            >
-              <span className="text-[6px] leading-tight font-bold line-clamp-2">{tile.shortName}</span>
-              {tile.kind === 'property' && <span className="text-[5px] text-amber-200">{tile.price}</span>}
-              {buildingCount > 0 && <span className="absolute top-0 end-0 text-[6px]">{'🏠'.repeat(buildingCount)}</span>}
-              <span className="absolute bottom-0 flex text-[7px] leading-none">
-                {playersHere.map(({ index }) => <span key={index}>{index === 0 ? '🔴' : '🔵'}</span>)}
-              </span>
-            </div>
-          )
-        })}
-
-        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-emerald-950/70 border border-emerald-400/20 p-2 flex flex-col items-center justify-center text-center gap-1.5" style={{ gridColumn: '2 / 11', gridRow: '2 / 10' }}>
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            {againstBot ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-            دور {turnsPlayed + 1} من {MAX_TURNS}
-          </div>
-          <p className="font-black text-sm line-clamp-2">{message}</p>
-          <div className="min-h-10 flex items-center justify-center gap-2">
-            {lastRoll ? (
-              <>
-                <DiceFace value={lastRoll.dieA} />
-                <DiceFace value={lastRoll.dieB} />
-                <bdi className="font-black text-amber-300 bidi-number">= {lastRoll.total}</bdi>
-              </>
-            ) : <Dice5 className="w-8 h-8 text-emerald-300" />}
-          </div>
-          <div className="text-[9px] text-slate-300 flex items-center gap-1">
-            <span>{currentTile.name}</span>
-            {isOwnableTile(currentTile) && <><Coins className="w-3 h-3 text-amber-300" /><span>{currentTile.price}</span></>}
-          </div>
-
-          {phase === 'ready' && humanTurn && (
-            <button type="button" onClick={rollDice} className="min-h-11 px-6 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 font-black flex items-center gap-2 glow-emerald">
-              <Dice5 className="w-5 h-5" /> ارمِ الزهر
-            </button>
-          )}
-          {phase === 'ready' && !humanTurn && <p className="text-xs text-sky-300 animate-pulse">الكمبيوتر بيفكر…</p>}
-          {phase === 'moving' && <p className="text-xs text-amber-300 animate-pulse">جاري تنفيذ الحركة…</p>}
-          {phase === 'decision' && decision && humanTurn && (
-            <div className="flex gap-2">
-              <button type="button" onClick={() => handleDecision(true)} className="min-h-10 px-3 rounded-xl bg-emerald-500 font-black text-xs flex items-center gap-1">
-                {decision.kind === 'buy' ? <ShoppingCart className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                {decision.kind === 'buy' ? 'اشتري' : 'ابني'} {decision.price}
-              </button>
-              <button type="button" onClick={() => handleDecision(false)} className="min-h-10 px-3 rounded-xl bg-white/10 font-bold text-xs">عدّي</button>
-            </div>
-          )}
-          {phase === 'decision' && !humanTurn && <p className="text-xs text-sky-300 animate-pulse">الكمبيوتر بيقرر…</p>}
-        </div>
-      </div>
-
-      <div className="w-full grid grid-cols-2 gap-2 text-xs">
-        {players.map((player) => (
-          <div key={player.id} className="glass rounded-2xl px-3 py-2 flex items-center justify-between">
-            <span className="font-bold truncate">ثروة {player.name}</span>
-            <bdi className="bidi-number tabular-nums font-black text-amber-300">{playerWealth(player, buildings)}</bdi>
-          </div>
-        ))}
-      </div>
+    <div className="bank-el7az-root" dir="rtl">
+      <BankGameScreen
+        state={state}
+        playerId={activePlayerId}
+        selectedTile={selectedTile}
+        selectedTileId={selectedTileId}
+        setSelectedTileId={(tileId) => setSelectedTileId((current) => current === tileId ? null : tileId)}
+        status="local"
+        error={null}
+        clockOffsetMs={0}
+        latencyMs={0}
+        rollDice={rollDice}
+        buyProperty={() => handleDecision(true)}
+        passProperty={() => handleDecision(false)}
+        buildProperty={buildProperty}
+        sellProperty={sellProperty}
+        payBail={() => undefined}
+        leaveRoom={() => onExit?.()}
+        sessionLabel={againstBot ? 'ضد الكمبيوتر — داخل الموبايل' : 'لاعبان على نفس الموبايل'}
+        showNetworkInfo={false}
+      />
     </div>
   )
-}
-
-function DiceFace({ value }: { value: number }) {
-  return <span className="w-9 h-9 rounded-xl bg-white text-slate-950 grid place-items-center text-lg font-black shadow-lg">{value}</span>
 }
