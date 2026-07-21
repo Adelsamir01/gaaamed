@@ -1,4 +1,6 @@
-/** Server-authoritative state machines for the two competitive games. */
+/** Server-authoritative state machines for the competitive games. */
+
+import { applyMatch3Swap, createMatch3Game } from '../src/games/match3/engine.js'
 
 export const MEMORY_EMOJIS = Object.freeze(['🐪', '🌴', '🕌', '☕', '🌙', '⭐', '🏺', '🐎'])
 
@@ -12,6 +14,8 @@ export const TRIVIA_ANSWER_KEY = Object.freeze([
 export const TRIVIA_ROUND_COUNT = 10
 export const TRIVIA_DURATION_MS = 15_000
 export const TRIVIA_LEAD_IN_MS = 800
+export const MATCH3_DURATION_MS = 75_000
+export const MATCH3_LEAD_IN_MS = 1_200
 
 function shuffled(values, random = Math.random) {
   const result = [...values]
@@ -90,6 +94,60 @@ export function memoryWinner(game) {
   const first = game.scores.get(1) || 0
   const second = game.scores.get(2) || 0
   return first === second ? 0 : first > second ? 1 : 2
+}
+
+export function createMatch3Battle(now = Date.now, random = Math.random) {
+  const seed = Math.floor(random() * 0xffff_ffff) >>> 0
+  const startAt = now() + MATCH3_LEAD_IN_MS
+  return {
+    seed,
+    startAt,
+    endAt: startAt + MATCH3_DURATION_MS,
+    states: new Map([
+      [1, createMatch3Game(seed, { moves: null })],
+      [2, createMatch3Game(seed, { moves: null })],
+    ]),
+    ended: false,
+    result: null,
+  }
+}
+
+export function match3Snapshot(game, slot, now = Date.now()) {
+  return {
+    state: game.states.get(slot) ?? null,
+    scores: {
+      1: game.states.get(1)?.score ?? 0,
+      2: game.states.get(2)?.score ?? 0,
+    },
+    startAt: game.startAt,
+    endAt: game.endAt,
+    serverTime: now,
+    ended: game.ended,
+  }
+}
+
+export function submitMatch3Swap(game, slot, first, second, at = Date.now()) {
+  if (game.ended) return { accepted: false, reason: 'ended' }
+  if (at < game.startAt) return { accepted: false, reason: 'not_started' }
+  if (at >= game.endAt) return { accepted: false, reason: 'time_up' }
+  const state = game.states.get(slot)
+  if (!state) return { accepted: false, reason: 'unknown_player' }
+  const result = applyMatch3Swap(state, first, second)
+  if (!result.accepted) return { accepted: false, reason: 'invalid_swap' }
+  game.states.set(slot, result.state)
+  return result
+}
+
+export function finishMatch3Battle(game) {
+  if (game.result) return game.result
+  game.ended = true
+  const scores = {
+    1: game.states.get(1)?.score ?? 0,
+    2: game.states.get(2)?.score ?? 0,
+  }
+  const winnerSlot = scores[1] === scores[2] ? 0 : scores[1] > scores[2] ? 1 : 2
+  game.result = { winnerSlot, scores, durationMs: MATCH3_DURATION_MS }
+  return game.result
 }
 
 export function createTriviaGame(now = Date.now, random = Math.random) {

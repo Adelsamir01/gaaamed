@@ -16,7 +16,7 @@ export default function Games({ openGame }: { openGame: (id: string) => void }) 
     () =>
       GAMES.filter(
         (g) =>
-          (category === 'الكل' || g.category === category) &&
+          (category === 'الكل' || (category === 'أونلاين' ? g.online : g.category === category)) &&
           (query.trim() === '' || g.name.includes(query.trim()) || g.description.includes(query.trim())),
       ),
     [query, category],

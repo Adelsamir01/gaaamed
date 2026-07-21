@@ -5,13 +5,18 @@ import {
   TRIVIA_ANSWER_KEY,
   applyMemoryFlip,
   createMemoryGame,
+  createMatch3Battle,
   createTriviaGame,
+  finishMatch3Battle,
   finishTriviaGame,
+  match3Snapshot,
   memorySnapshot,
   resolveTriviaQuestion,
   settleMemoryMiss,
+  submitMatch3Swap,
   submitTriviaAnswer,
 } from './competitive-games.js'
+import { findMatch3Move } from '../src/games/match3/engine.js'
 
 test('server trivia answer key stays aligned with the client question bank', () => {
   const source = fs.readFileSync(new URL('../src/data/trivia.ts', import.meta.url), 'utf8')
@@ -77,4 +82,25 @@ test('trivia overall tie is broken by cumulative correct-answer time', () => {
   const end = finishTriviaGame(game)
   assert.equal(end.winnerSlot, 1)
   assert.equal(end.tieBreak, 'time')
+})
+
+test('match-three battle gives both players the same fair board and validates timing server-side', () => {
+  const now = 10_000
+  const game = createMatch3Battle(() => now, () => 0.4242)
+  const firstState = game.states.get(1)
+  const secondState = game.states.get(2)
+  assert.deepEqual(firstState, secondState)
+  assert.equal(match3Snapshot(game, 1, now).state, firstState)
+  assert.equal(submitMatch3Swap(game, 1, 0, 1, game.startAt - 1).reason, 'not_started')
+
+  const move = findMatch3Move(firstState.board)
+  assert.ok(move)
+  const result = submitMatch3Swap(game, 1, move[0], move[1], game.startAt + 20)
+  assert.equal(result.accepted, true)
+  assert.ok(game.states.get(1).score > 0)
+  assert.equal(game.states.get(2).score, 0, 'one player cannot mutate the opponent board')
+
+  const end = finishMatch3Battle(game)
+  assert.equal(end.winnerSlot, 1)
+  assert.equal(submitMatch3Swap(game, 2, move[0], move[1], game.startAt + 40).reason, 'ended')
 })

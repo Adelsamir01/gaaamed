@@ -13,7 +13,7 @@
     "server:backup": "node tools/backup-server.mjs",
     "server:verify-backup": "node tools/verify-backup.mjs",
     "smoke:reliability": "node server/smoke-reliability.js",
-    "test:server": "node --test server/competitive-games.test.js server/database.test.js server/snake-arena.test.js server/users.test.js",
+    "test:server": "node --test server/competitive-games.test.js server/database.test.js server/match3-engine.test.js server/snake-arena.test.js server/users.test.js",
     "test:competitive": "node --test server/competitive-games.test.js",
     "smoke:competitive": "node server/smoke-competitive.js",
     "smoke:snake": "node server/smoke-snake-public.js"

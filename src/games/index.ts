@@ -10,6 +10,8 @@ const RpsGame = lazy(() => import('./rps/RpsGame'))
 const ReactionGame = lazy(() => import('./reaction/ReactionGame'))
 const SnakeGame = lazy(() => import('./snake/SnakeGame'))
 const MinesweeperGame = lazy(() => import('./minesweeper/MinesweeperGame'))
+const Match3Game = lazy(() => import('./match3/Match3Game'))
+const OnlineMatch3 = lazy(() => import('./match3/OnlineMatch3'))
 const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
 const ConnectFourLocal = lazy(() => import('./connect4/ConnectFourLocal'))
 const OnlineConnectFour = lazy(() => import('./online/ConnectFour'))
@@ -106,6 +108,26 @@ export const GAMES: GameDef[] = [
     online: true,
     onlineComponent: OnlineTrivia,
     component: TriviaGame,
+  },
+  {
+    id: 'match3',
+    name: 'حلاوة',
+    description: 'بدّل الحلويات، اصنع كومبوهات وصواريخ، وكمّل طلب الحلواني قبل ما تخلص الحركات',
+    emoji: '🍬',
+    category: 'ذكاء',
+    howToPlay: [
+      'اسحب أي قطعتين متجاورتين لتكوين صف أو عمود من ٣ حلويات متشابهة أو أكثر',
+      'اجمع ٤ قطع لصناعة صاروخ، وشكل T أو L لقنبلة سكر، و٥ قطع لدوامة ألوان قوية',
+      'في اللعب الفردي: حقق هدف النقاط واجمع طلب الحلواني قبل انتهاء الحركات',
+      'أونلاين: تبدأ أنت وخصمك بنفس اللوحة؛ اصنع أعلى نقاط خلال ٧٥ ثانية لتفوز',
+    ],
+    supportsBot: false,
+    supportsTwoPlayer: false,
+    singlePlayer: true,
+    difficulties: true,
+    online: true,
+    onlineComponent: OnlineMatch3,
+    component: Match3Game,
   },
   {
     id: 'rps',

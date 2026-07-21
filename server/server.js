@@ -25,11 +25,15 @@ import {
   createMemoryGame,
   createTriviaGame,
   finishTriviaGame,
+  createMatch3Battle,
+  finishMatch3Battle,
+  match3Snapshot,
   memorySnapshot,
   memoryWinner,
   resolveTriviaQuestion,
   settleMemoryMiss,
   submitTriviaAnswer,
+  submitMatch3Swap,
   triviaQuestionSnapshot,
 } from './competitive-games.js'
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
@@ -68,6 +72,7 @@ const INVITE_GAMES = {
   memory: { name: 'لعبة الذاكرة', emoji: '🧠' },
   trivia: { name: 'أسئلة ثقافية', emoji: '📚' },
   shakhbata: { name: 'شخبطة', emoji: '🎨' },
+  match3: { name: 'حلاوة', emoji: '🍬' },
   'bank-el7az': { name: 'بنك الحظ', emoji: '🏦' },
 }
 
@@ -402,8 +407,10 @@ function broadcast(room, obj) {
 function clearCompetitiveTimers(room) {
   if (room.memoryTimer) clearTimeout(room.memoryTimer)
   if (room.triviaTimer) clearTimeout(room.triviaTimer)
+  if (room.match3Timer) clearTimeout(room.match3Timer)
   room.memoryTimer = null
   room.triviaTimer = null
+  room.match3Timer = null
 }
 
 function memoryEndPayload(room) {
@@ -423,6 +430,7 @@ function broadcastMemoryState(room, effect = 'sync') {
 function startMemoryGame(room) {
   clearCompetitiveTimers(room)
   room.trivia = null
+  room.match3 = null
   room.memory = createMemoryGame()
   broadcastMemoryState(room, 'start')
 }
@@ -463,21 +471,56 @@ function finishTriviaQuestion(room, game) {
 function startTriviaGame(room) {
   clearCompetitiveTimers(room)
   room.memory = null
+  room.match3 = null
   room.trivia = createTriviaGame()
   broadcastTriviaQuestion(room)
   scheduleTriviaDeadline(room, room.trivia)
+}
+
+function sendMatch3State(ws, room, effect = 'sync', move = null) {
+  if (!room.match3) return
+  send(ws, { type: 'match3_state', ...match3Snapshot(room.match3, ws._slot), effect, move })
+}
+
+function broadcastMatch3Scores(room) {
+  if (!room.match3) return
+  const snapshot = match3Snapshot(room.match3, 1)
+  broadcast(room, { type: 'match3_scores', scores: snapshot.scores, endAt: snapshot.endAt, serverTime: snapshot.serverTime })
+}
+
+function finishMatch3Room(room, game) {
+  if (room.match3 !== game || game.ended) return
+  if (room.match3Timer) clearTimeout(room.match3Timer)
+  room.match3Timer = null
+  broadcast(room, { type: 'match3_end', ...finishMatch3Battle(game) })
+}
+
+function startMatch3Game(room) {
+  clearCompetitiveTimers(room)
+  room.memory = null
+  room.trivia = null
+  room.match3 = createMatch3Battle()
+  for (const ws of room.players.values()) sendMatch3State(ws, room, 'start')
+  const game = room.match3
+  room.match3Timer = setTimeout(() => finishMatch3Room(room, game), Math.max(0, game.endAt - Date.now() + 40))
 }
 
 function startCompetitiveGame(room) {
   room.rematchVotes.clear()
   if (room.gameId === 'memory') startMemoryGame(room)
   else if (room.gameId === 'trivia') startTriviaGame(room)
+  else if (room.gameId === 'match3') startMatch3Game(room)
 }
 
 function sendCompetitiveSync(ws, room) {
   if (room.gameId === 'memory' && room.memory) {
     send(ws, { type: 'memory_state', state: memorySnapshot(room.memory), effect: 'sync' })
     if (room.memory.ended) send(ws, memoryEndPayload(room))
+    return
+  }
+  if (room.gameId === 'match3' && room.match3) {
+    sendMatch3State(ws, room)
+    if (room.match3.ended) send(ws, { type: 'match3_end', ...finishMatch3Battle(room.match3) })
     return
   }
   if (room.gameId !== 'trivia' || !room.trivia) return
@@ -599,6 +642,8 @@ function createRoomRecord(gameId, drawTime, settings) {
     memoryTimer: null,
     trivia: null,
     triviaTimer: null,
+    match3: null,
+    match3Timer: null,
     shak: null,
     settings: normalizeSettings(settings),
     // غرف دعوات المحادثات الفردية تبدأ تلقائيًا عند اكتمال لاعبَين (الجروبات تنتظر المضيف)
@@ -867,10 +912,10 @@ wss.on('connection', (ws, request) => {
       case 'action': {
         const room = rooms.get(ws._room)
         if (!room) return
-        if (msg.action?.kind === 'start' && (room.gameId === 'memory' || room.gameId === 'trivia')) {
+        if (msg.action?.kind === 'start' && (room.gameId === 'memory' || room.gameId === 'trivia' || room.gameId === 'match3')) {
           if (ws._slot !== 1 || room.players.size < 2) return
           // start قد يتكرر بسبب إعادة إرسال الشبكة؛ المباراة النشطة لا تُصفّر أبدًا.
-          if ((room.memory && !room.memory.ended) || (room.trivia && !room.trivia.ended)) return
+          if ((room.memory && !room.memory.ended) || (room.trivia && !room.trivia.ended) || (room.match3 && !room.match3.ended)) return
           startCompetitiveGame(room)
         }
         const other = room.players.get(otherSlot(ws._slot))
@@ -911,6 +956,29 @@ wss.on('connection', (ws, request) => {
         if (!submitTriviaAnswer(game, ws._slot, msg.questionIndex, msg.option)) return
         if (game.answers.size === 2) finishTriviaQuestion(room, game)
         else broadcastTriviaQuestion(room)
+        break
+      }
+
+      case 'match3_swap': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'match3' || !room.match3 || room.players.size < 2) return
+        if (Date.now() >= room.match3.endAt) {
+          finishMatch3Room(room, room.match3)
+          return
+        }
+        const result = submitMatch3Swap(room.match3, ws._slot, msg.first, msg.second)
+        if (!result.accepted) {
+          send(ws, { type: 'match3_rejected', reason: result.reason })
+          return
+        }
+        sendMatch3State(ws, room, 'move', {
+          scoreDelta: result.scoreDelta,
+          cleared: result.cleared,
+          cascades: result.cascades,
+          createdSpecial: result.createdSpecial,
+          reshuffled: result.reshuffled,
+        })
+        broadcastMatch3Scores(room)
         break
       }
 
@@ -964,6 +1032,7 @@ wss.on('connection', (ws, request) => {
         if (!room) return
         if (room.gameId === 'memory' && room.memory && !room.memory.ended) return
         if (room.gameId === 'trivia' && room.trivia && !room.trivia.ended) return
+        if (room.gameId === 'match3' && room.match3 && !room.match3.ended) return
         room.rematchVotes.add(ws._slot)
         const other = room.players.get(otherSlot(ws._slot))
         send(other, { type: 'rematch', from: ws._slot })

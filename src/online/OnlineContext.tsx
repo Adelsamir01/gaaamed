@@ -28,6 +28,7 @@ export type GameEvent =
   | { kind: 'react_series_end'; winnerSlot: number; wins: Record<number, number>; rounds: number }
   | { kind: 'memory'; msg: ServerMessage }
   | { kind: 'trivia'; msg: ServerMessage }
+  | { kind: 'match3'; msg: ServerMessage }
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
   | { kind: 'snake'; msg: ServerMessage }
@@ -330,6 +331,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'trivia_result':
         case 'trivia_end':
           gameHandlersRef.current.forEach((h) => h({ kind: 'trivia', msg }))
+          break
+        case 'match3_state':
+        case 'match3_scores':
+        case 'match3_rejected':
+        case 'match3_end':
+          gameHandlersRef.current.forEach((h) => h({ kind: 'match3', msg }))
           break
         case 'rematch': {
           rematchRef.current.theirs = true

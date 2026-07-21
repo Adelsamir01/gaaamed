@@ -1,6 +1,7 @@
-/* End-to-end smoke test for server-authoritative Memory and Trivia rooms. */
+/* End-to-end smoke test for server-authoritative Memory, Trivia, and Match-Three rooms. */
 import WebSocket from 'ws'
 import { TRIVIA_ANSWER_KEY } from './competitive-games.js'
+import { findMatch3Move } from '../src/games/match3/engine.js'
 
 const URL = process.env.TEST_WS_URL || 'ws://localhost:8787'
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -82,6 +83,31 @@ async function testTrivia() {
   guest.close()
 }
 
+async function testMatch3() {
+  const { host, guest } = await createPair('match3')
+  send(host, { type: 'action', action: { kind: 'start' } })
+  send(host, { type: 'action', action: { kind: 'start' } })
+  const hostState = await next(host, 'match3_state')
+  const guestState = await next(guest, 'match3_state')
+  if (JSON.stringify(hostState.state) !== JSON.stringify(guestState.state)) throw new Error('Match-three starting boards were not equal')
+  await wait(80)
+  if (host.inbox.filter((message) => message.type === 'match3_state' && message.effect === 'start').length !== 1) throw new Error('Match-three accepted a duplicate start')
+
+  const move = findMatch3Move(hostState.state.board)
+  if (!move) throw new Error('Match-three board had no legal move')
+  await wait(Math.max(0, hostState.startAt - Date.now() + 30))
+  const afterHost = host.inbox.length
+  const afterGuest = guest.inbox.length
+  send(host, { type: 'match3_swap', first: move[0], second: move[1] })
+  const moved = await next(host, 'match3_state', afterHost)
+  const scores = await next(guest, 'match3_scores', afterGuest)
+  if (moved.effect !== 'move' || moved.state.score <= 0) throw new Error('Match-three move was not authoritatively resolved')
+  if (scores.scores['1'] !== moved.state.score) throw new Error('Match-three rival score was not synchronized')
+  host.close()
+  guest.close()
+}
+
 await testMemory()
 await testTrivia()
+await testMatch3()
 console.log('✓ competitive multiplayer smoke test passed')
