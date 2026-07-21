@@ -2927,9 +2927,31 @@
 
 /* ===== Unified native/local board: three clear zones with floating controls ===== */
 .bank-el7az-root .board-first-shell {
-  --board-tile-width: calc(100% / 11);
-  --board-tile-height: calc(100% / 10);
+  --board-tile-width: calc(100% * 1.1 / 11.2);
+  --board-tile-height: calc(100% * 1.12 / 10.24);
   --board-side-zone: 31%;
+}
+
+.bank-el7az-root .board-first-shell .board {
+  grid-template-columns: 1.1fr repeat(9, minmax(0, 1fr)) 1.1fr;
+  grid-template-rows: 1.12fr repeat(8, minmax(0, 1fr)) 1.12fr;
+}
+
+.bank-el7az-root .board-first-shell .tile-flag {
+  inset: auto 5px 3px;
+  width: calc(100% - 10px);
+  height: clamp(18px, 5.6dvh, 30px);
+  padding: 1px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 4px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.96);
+  opacity: 1;
+  filter: saturate(1.16) contrast(1.06) drop-shadow(0 1px 2px rgba(15, 23, 42, 0.24));
+}
+
+.bank-el7az-root .board-first-shell .board-tile.owned .tile-flag {
+  opacity: 1;
 }
 
 .bank-el7az-root .board-first-shell .board-center {
@@ -3162,20 +3184,25 @@
   }
 
   .bank-el7az-root .board-first-shell .property-band {
-    height: 8px;
+    height: 7px;
   }
 
   .bank-el7az-root .board-first-shell .tile-name {
-    top: 8px;
-    min-height: 17px;
+    top: 7px;
+    min-height: 16px;
     padding: 0.05rem 0.1rem;
     font-size: clamp(0.68rem, 1.9vmin, 0.84rem);
     line-height: 1.05;
   }
 
   .bank-el7az-root .board-first-shell .tile-flag {
-    width: min(72%, 40px);
-    height: clamp(14px, 4.3dvh, 22px);
+    inset: auto 4px 2px;
+    width: calc(100% - 8px);
+    height: clamp(18px, 5.5dvh, 24px);
+    padding: 1px;
+    border-radius: 3px;
+    object-fit: contain;
+    opacity: 1;
   }
 
   .bank-el7az-root .board-first-shell .token.mini.car-token {
