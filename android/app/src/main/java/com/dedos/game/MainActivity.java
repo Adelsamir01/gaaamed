@@ -1,6 +1,11 @@
 package com.dedos.game;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.pm.ActivityInfo;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.activity.OnBackPressedCallback;
@@ -30,7 +35,32 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
+        createSocialNotificationChannel();
         applySystemBarAppearance();
+    }
+
+    private void createSocialNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationChannel channel = new NotificationChannel(
+            "dedos-social",
+            "رسائل ودعوات ديدوس",
+            NotificationManager.IMPORTANCE_HIGH
+        );
+        channel.setDescription("رسائل الأصدقاء ودعوات اللعب");
+        channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+        channel.enableVibration(true);
+        channel.enableLights(true);
+        channel.setLightColor(0xFF10B981);
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .build();
+        channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), audioAttributes);
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(channel);
     }
 
     @Override

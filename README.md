@@ -44,6 +44,7 @@ All online games support three ways to play from one unified game card: **غرف
 - Server-side identity with no signup: device-bound account, editable `@handle`, searchable by friends
 - Real friends system: search by handle, send/accept/reject/cancel requests, remove friends, online presence dots, persisted on the server
 - Real chat: DMs + group chats (3+ friends), unread badges, history persisted server-side
+- Native Android push notifications for messages and game invites, with lock-screen/heads-up delivery and one-tap opening of the exact chat
 - Game invites inside chat: tap 🎮 in any DM/group → friend taps **انضم الآن** → both land in the room (no codes)
 - Quick match (مباراة سريعة ⚡): one tap pairs two waiting players into a game
 - Unified game cards: 🤖 كمبيوتر / 👥 لاعبَين / 🌐 أونلاين modes on a single card
@@ -59,7 +60,8 @@ All online games support three ways to play from one unified game card: **غرف
 | Layer | Tech |
 |---|---|
 | Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 3.4, shadcn/ui, framer-motion |
-| Realtime server | Node.js + `ws` (rooms, relay + شخبطة authoritative engine) |
+| Realtime server | Node.js + `ws` (rooms, relay + authoritative game engines) |
+| Notifications | Firebase Cloud Messaging via Capacitor Push Notifications |
 | Android | Capacitor 8 → native APK (min API 24, target API 36) |
 | Build | AGP 9 + Gradle (JDK 21), Android SDK platform 36, R8 shrinking/optimization |
 
@@ -111,6 +113,19 @@ npm run server       # ws://0.0.0.0:8787
 - **Production (default)**: the Android app connects to the public server at `wss://dedos.adelsamir.com` — a Cloudflare Tunnel in front of this machine's local server (`HTTP → localhost:8787`). Any phone with the APK can play from anywhere.
 - Web preview connects to `ws://localhost:8787` automatically.
 - Override anytime in **Profile → إعدادات الخادم** (e.g. `ws://192.168.1.20:8787` for LAN play, or `ws://10.0.2.2:8787` for emulator-to-localhost dev).
+
+#### Push notification setup
+
+Push notifications require one Firebase project with the Android app ID `com.dedos.game`:
+
+1. Download the Android client configuration as `android/app/google-services.json`. This file is packaged into Android builds.
+2. Give the server Firebase Admin credentials using one of these options:
+   - place the service-account JSON at `server/firebase-service-account.json` (gitignored), or
+   - set `FIREBASE_SERVICE_ACCOUNT_FILE`, `FIREBASE_SERVICE_ACCOUNT_JSON`, or `FIREBASE_SERVICE_ACCOUNT_BASE64`, or
+   - configure Application Default Credentials with `GOOGLE_APPLICATION_CREDENTIALS`.
+3. Restart the server, install a freshly built Android app, and accept the notification permission prompt.
+
+Never commit the Firebase service-account JSON. `/health` reports `push.configured` and the number of registered devices so deployment can be verified without exposing credentials.
 
 ### Protocol tests
 

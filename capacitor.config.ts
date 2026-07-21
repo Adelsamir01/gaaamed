@@ -14,6 +14,9 @@ const config: CapacitorConfig = {
       style: KeyboardStyle.Dark,
       resizeOnFullScreen: true,
     },
+    PushNotifications: {
+      presentationOptions: ['sound', 'alert', 'banner', 'list'],
+    },
   },
 };
 

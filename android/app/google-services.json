@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "614095672596",
+    "project_id": "dedos-a0916",
+    "storage_bucket": "dedos-a0916.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:614095672596:android:908e09d9dac92aa3985e01",
+        "android_client_info": {
+          "package_name": "com.dedos.game"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD36hAc0hNWCfkfc6K1bwk6Qo7eSSHeVY0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -37,6 +37,7 @@ import {
   triviaQuestionSnapshot,
 } from './competitive-games.js'
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
+import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -62,6 +63,13 @@ const bankManager = new RoomManager(bankStats)
 
 // الهوية والأصدقاء والدردشات (ملفات JSON دائمة)
 const userStore = new UserStore(dataDir, database)
+let firebaseMessaging = null
+try {
+  firebaseMessaging = createFirebaseMessaging()
+} catch (error) {
+  log('error', 'push_firebase_initialization_failed', { message: error.message })
+}
+const pushNotifications = new PushNotificationService({ tokenStore: userStore, messaging: firebaseMessaging, logger: log })
 
 // معلومات الألعاب لدعوات الدردشة
 const INVITE_GAMES = {
@@ -126,6 +134,10 @@ function serviceHealth() {
     rooms: rooms?.size ?? 0,
     snakeArenas: snakeManager.arenas.size,
     snakePlayers,
+    push: {
+      configured: pushNotifications.configured,
+      registeredDevices: userStore.pushRegistrationCount(),
+    },
     storage,
     time: Date.now(),
   }
@@ -154,6 +166,12 @@ function serviceMetrics() {
     '# HELP dedos_snake_arena_players Players currently in public snake arenas.',
     '# TYPE dedos_snake_arena_players gauge',
     `dedos_snake_arena_players ${snakePlayers}`,
+    '# HELP dedos_push_configured Whether Firebase Cloud Messaging credentials are configured.',
+    '# TYPE dedos_push_configured gauge',
+    `dedos_push_configured ${pushNotifications.configured ? 1 : 0}`,
+    '# HELP dedos_push_registered_devices Number of registered Android push destinations.',
+    '# TYPE dedos_push_registered_devices gauge',
+    `dedos_push_registered_devices ${userStore.pushRegistrationCount()}`,
     '',
   ].join('\n')
 }
@@ -1128,6 +1146,17 @@ wss.on('connection', (ws, request) => {
         break
       }
 
+      case 'push_register': {
+        if (!ws._userId) return
+        try {
+          const registration = userStore.registerPushToken(ws._userId, msg.token, msg.platform)
+          send(ws, { type: 'push_registered', platform: registration.platform, configured: pushNotifications.configured })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
       case 'friend_accept': {
         if (!ws._userId) return
         try {
@@ -1273,7 +1302,7 @@ wss.on('connection', (ws, request) => {
             console.log(`INVITE_ROOM ${room.code} ${gameId} rounds=${room.settings.rounds}${room.autoStart ? ' autoStart' : ''}`)
           }
           const clientId = typeof msg.clientId === 'string' ? msg.clientId : null
-          const { thread, message } = userStore.postMessage(threadId, ws._userId, { text, kind, invite, clientId })
+          const { thread, message, created } = userStore.postMessage(threadId, ws._userId, { text, kind, invite, clientId })
           for (const memberId of thread.memberIds) {
             pushToUser(memberId, {
               type: 'chat_message',
@@ -1282,6 +1311,7 @@ wss.on('connection', (ws, request) => {
               thread: userStore.threadSummary(thread, memberId),
             })
           }
+          if (created) void pushNotifications.sendChatNotification({ thread, message, senderId: ws._userId })
         } catch (error) {
           send(ws, { type: 'error', message: error.message })
         }

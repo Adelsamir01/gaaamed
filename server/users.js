@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { DocumentDatabase, resolveDatabasePath } from './database.js'
 
 export const HANDLE_RE = /^[a-z0-9_]{3,15}$/
+export const PUSH_TOKEN_RE = /^[A-Za-z0-9_:.-]{32,4096}$/
 // معرّفات الرسائل المتفائلة: يولّدها العميل ويصدّها الخادم كما هي ليتعرف العميل على الصدى ويزيل التكرار
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{6,64}$/
 const MAX_MESSAGES_PER_THREAD = 200
@@ -68,6 +69,8 @@ export class UserStore {
       this.friendsFile.scheduleSave()
     }
     this.chatsFile = new JsonDocument(this.database, 'chats', join(dir, 'chats.json'), { version: 1, threads: {}, dmByPair: {} })
+    this.pushTokensFile = new JsonDocument(this.database, 'push-tokens', join(dir, 'push-tokens.json'), { version: 1, byUser: {} })
+    this.pushTokensFile.data.byUser ??= {}
     this.privacyRequestsFile = new JsonDocument(this.database, 'privacy-requests', join(dir, 'privacy-requests.json'), { version: 1, requests: [] })
     this.privacyRequestsFile.data.requests ??= []
   }
@@ -169,6 +172,69 @@ export class UserStore {
 
   areFriends(a, b) {
     return this.friendsOf(a).includes(b)
+  }
+
+  // ---------------- إشعارات الهاتف ----------------
+  registerPushToken(userId, rawToken, platform = 'android') {
+    if (!this.byId(userId)) throw new Error('الحساب غير موجود.')
+    const token = String(rawToken || '').trim()
+    if (!PUSH_TOKEN_RE.test(token)) throw new Error('رمز إشعارات الهاتف غير صالح.')
+    const byUser = this.pushTokensFile.data.byUser
+
+    // The same Firebase token must never target two accounts after a logout,
+    // reinstall, or identity recovery on the same phone.
+    for (const [ownerId, registrations] of Object.entries(byUser)) {
+      byUser[ownerId] = registrations.filter((registration) => registration.token !== token)
+      if (byUser[ownerId].length === 0) delete byUser[ownerId]
+    }
+
+    const registrations = byUser[userId] ?? []
+    registrations.push({ token, platform: platform === 'android' ? 'android' : 'unknown', updatedAt: Date.now() })
+    byUser[userId] = registrations.slice(-5)
+    this.pushTokensFile.saveSync()
+    return { token, platform: platform === 'android' ? 'android' : 'unknown' }
+  }
+
+  registrationsForUsers(userIds) {
+    const seen = new Set()
+    const registrations = []
+    for (const userId of userIds) {
+      for (const registration of this.pushTokensFile.data.byUser[userId] ?? []) {
+        if (seen.has(registration.token)) continue
+        seen.add(registration.token)
+        registrations.push({ userId, ...registration })
+      }
+    }
+    return registrations
+  }
+
+  removePushTokens(tokens) {
+    const removing = new Set(tokens)
+    if (removing.size === 0) return 0
+    let removed = 0
+    const byUser = this.pushTokensFile.data.byUser
+    for (const [userId, registrations] of Object.entries(byUser)) {
+      const next = registrations.filter((registration) => {
+        if (!removing.has(registration.token)) return true
+        removed += 1
+        return false
+      })
+      if (next.length > 0) byUser[userId] = next
+      else delete byUser[userId]
+    }
+    if (removed > 0) this.pushTokensFile.saveSync()
+    return removed
+  }
+
+  deletePushTokensForUser(userId) {
+    const registrations = this.pushTokensFile.data.byUser[userId] ?? []
+    delete this.pushTokensFile.data.byUser[userId]
+    if (registrations.length > 0) this.pushTokensFile.saveSync()
+    return registrations.length
+  }
+
+  pushRegistrationCount() {
+    return Object.values(this.pushTokensFile.data.byUser).reduce((total, registrations) => total + registrations.length, 0)
   }
 
   incomingFriendRequests(userId) {
@@ -342,7 +408,7 @@ export class UserStore {
     // إعادة إرسال نفس الرسالة بعد انقطاع الشبكة يجب أن تكون آمنة تمامًا.
     const validClientId = typeof clientId === 'string' && CLIENT_ID_RE.test(clientId)
     const existing = validClientId ? thread.messages.find((message) => message.id === clientId) : null
-    if (existing?.senderId === senderId) return { thread, message: existing }
+    if (existing?.senderId === senderId) return { thread, message: existing, created: false }
     // صدّ معرّف العميل إن كان صالحًا (يسمح للعميل باستبدال النسخة المعلّقة).
     let id = `m_${Date.now().toString(36)}_${randomBytes(3).toString('hex')}`
     if (
@@ -369,7 +435,7 @@ export class UserStore {
     thread.updatedAt = message.time
     thread.reads[senderId] = message.time
     this.chatsFile.scheduleSave()
-    return { thread, message }
+    return { thread, message, created: true }
   }
 
   toggleMessageHeart(threadId, messageId, userId) {
@@ -430,6 +496,7 @@ export class UserStore {
     }
 
     const userId = user.userId
+    this.deletePushTokensForUser(userId)
     const users = this.usersFile.data
     delete users.users[userId]
     if (user.handle) delete users.handles[user.handle]
@@ -472,6 +539,7 @@ export class UserStore {
     this.usersFile.saveSync()
     this.friendsFile.saveSync()
     this.chatsFile.saveSync()
+    this.pushTokensFile.saveSync()
     this.privacyRequestsFile.saveSync()
     return { ...request, userId }
   }
@@ -481,6 +549,7 @@ export class UserStore {
     this.usersFile.saveSync()
     this.friendsFile.saveSync()
     this.chatsFile.saveSync()
+    this.pushTokensFile.saveSync()
     this.privacyRequestsFile.saveSync()
   }
 

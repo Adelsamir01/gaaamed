@@ -4,6 +4,7 @@ import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineCl
 import { useApp } from '@/store/AppContext'
 import type { PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
+import { getCurrentPushToken, initializePushNotifications, onPushToken } from '@/lib/pushNotifications'
 
 export interface Opponent {
   name: string
@@ -230,6 +231,17 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const sentOutboxIdsRef = useRef(new Set<string>())
   const initialProfileUserIdRef = useRef(app.profile.userId)
 
+  useEffect(() => {
+    if (!app.onboarded) return
+    const sendToken = (token: string) => {
+      if (!meRef.current || onlineClient.status !== 'online') return
+      onlineClient.send({ type: 'push_register', token, platform: 'android' })
+    }
+    const unsubscribe = onPushToken(sendToken)
+    void initializePushNotifications()
+    return unsubscribe
+  }, [app.onboarded])
+
   const upsertThread = useCallback((thread: ServerThread) => {
     setThreads((list) => {
       const next = list.filter((t) => t.id !== thread.id)
@@ -394,6 +406,8 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           app.setIdentity(user.userId, user.handle)
           onlineClient.send({ type: 'friends_list' })
           onlineClient.send({ type: 'chat_list' })
+          const pushToken = getCurrentPushToken()
+          if (pushToken) onlineClient.send({ type: 'push_register', token: pushToken, platform: 'android' })
           break
         }
         case 'handle_set': {

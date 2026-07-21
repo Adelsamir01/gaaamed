@@ -8,6 +8,7 @@ import type { GameConfig, GameResult } from '@/types'
 import { getGame } from '@/games'
 import { TabBar, type TabId } from '@/sections/TabBar'
 import { sounds } from '@/lib/sounds'
+import { consumePendingNotificationThread, OPEN_NOTIFICATION_CHAT_EVENT } from '@/lib/pushNotifications'
 
 // Only the shell and active screen are needed at startup. The rest are fetched
 // from the local app bundle on demand, reducing parse time and peak JS memory.
@@ -68,6 +69,24 @@ function Shell() {
   }, [])
 
   const changeTab = useCallback((nextTab: TabId) => activateTab(nextTab), [activateTab])
+
+  const openChat = useCallback((id: string) => {
+    activateTab('chat')
+    setChatRoomId(id)
+    setView({ kind: 'tabs' })
+  }, [activateTab])
+
+  useEffect(() => {
+    if (!onboarded) return
+    const handleNotificationChat = (event: Event) => {
+      const threadId = (event as CustomEvent<{ threadId?: string }>).detail?.threadId
+      if (threadId) openChat(threadId)
+    }
+    window.addEventListener(OPEN_NOTIFICATION_CHAT_EVENT, handleNotificationChat)
+    const pendingThreadId = consumePendingNotificationThread()
+    if (pendingThreadId) openChat(pendingThreadId)
+    return () => window.removeEventListener(OPEN_NOTIFICATION_CHAT_EVENT, handleNotificationChat)
+  }, [onboarded, openChat])
 
   const unreadChats = useMemo(() => online.threads.reduce((a, t) => a + t.unread, 0), [online.threads])
 
@@ -136,12 +155,6 @@ function Shell() {
   const openGame = (id: string) => {
     sounds.click()
     setView({ kind: 'lobby', gameId: id })
-  }
-
-  const openChat = (id: string) => {
-    changeTab('chat')
-    setChatRoomId(id)
-    setView({ kind: 'tabs' })
   }
 
   // قبول تحدٍ من دعوة دردشة

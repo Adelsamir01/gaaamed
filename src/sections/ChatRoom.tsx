@@ -187,7 +187,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
 const EMPTY_MESSAGES: ChatMessage[] = []
 
 export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
-  const { me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatReact, chatSendInvite } = useOnline()
+  const { status, me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatReact, chatSendInvite } = useOnline()
   const thread = threads.find((t) => t.id === threadId)
   const msgs: ChatMessage[] = messages[threadId] ?? EMPTY_MESSAGES
   const [draft, setDraft] = useState('')
@@ -218,13 +218,18 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
     chatReact(threadId, messageId)
   }, [chatReact, threadId])
 
-  // عند الفتح: حمّل التاريخ وعلّم كمقروء — وعند الخروج أغلق المؤشر
+  // علّم المحادثة كمفتوحة طوال وجود الشاشة حتى لا يظهر تنبيه داخل التطبيق لها.
   useEffect(() => {
     setOpenThreadId(threadId)
-    loadThread(threadId)
     return () => setOpenThreadId(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId])
+
+  // قد يفتح إشعار التطبيق قبل اكتمال WebSocket في التشغيل البارد. حمّل التاريخ
+  // عند الاتصال، وأعد تحميله بعد أي إعادة اتصال كي يظل الرابط العميق موثوقًا.
+  useEffect(() => {
+    if (status === 'online') loadThread(threadId)
+  }, [loadThread, status, threadId])
 
   const scrollToBottom = useCallback(() => {
     const scroller = scrollRef.current

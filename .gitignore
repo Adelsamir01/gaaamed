@@ -37,6 +37,7 @@ template-info.md
 runtime/
 server/data/
 server/backups/
+server/firebase-service-account*.json
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
