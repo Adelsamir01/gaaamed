@@ -28,6 +28,13 @@ test('a valid move resolves cascades without mutating the supplied state', () =>
   assert.ok(result.scoreDelta >= 270)
   assert.ok(result.cleared >= 3)
   assert.equal(findMatch3Groups(result.state.board).length, 0)
+  assert.equal(result.frames[0].phase, 'swap')
+  const clearFrame = result.frames.find((frame) => frame.phase === 'clear')
+  const burstFrame = result.frames.find((frame) => frame.phase === 'burst')
+  assert.ok(clearFrame?.cleared.length >= 3)
+  assert.ok(clearFrame.cleared.every((index) => clearFrame.state.board[index] !== null))
+  assert.ok(clearFrame.cleared.every((index) => burstFrame.state.board[index] === null))
+  assert.deepEqual(result.frames.at(-1).state, result.state)
   assert.deepEqual(game, original)
 })
 

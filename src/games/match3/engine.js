@@ -283,6 +283,7 @@ export function applyMatch3Swap(currentState, rawFirst, rawSecond) {
   let totalCleared = 0
   let cascades = 0
   let createdSpecial = null
+  const frames = [{ phase: 'swap', state: cloneState(state), cleared: [], cascade: 0, scoreDelta: 0 }]
 
   while ((groups.length > 0 || directClear) && cascades < 14) {
     cascades += 1
@@ -298,26 +299,58 @@ export function applyMatch3Swap(currentState, rawFirst, rawSecond) {
     }
 
     expandSpecials(state.board, clear)
+    const cleared = [...clear].filter((index) => state.board[index])
     const collectedThisCascade = Array(MATCH3_TYPES).fill(0)
-    let clearedThisCascade = 0
-    for (const index of clear) {
+    const clearedThisCascade = cleared.length
+    const specialBonus = created
+      ? created.special === 'rainbow'
+        ? 600
+        : created.special === 'bomb'
+          ? 450
+          : 300
+      : 0
+    const cascadeScore = clearedThisCascade * 90 * cascades + specialBonus
+    frames.push({
+      phase: 'clear',
+      state: cloneState(state),
+      cleared,
+      cascade: cascades,
+      scoreDelta: cascadeScore,
+    })
+
+    for (const index of cleared) {
       const cell = state.board[index]
       if (!cell) continue
       if (cell.type >= 0 && cell.type < MATCH3_TYPES) collectedThisCascade[cell.type] += 1
       state.board[index] = null
-      clearedThisCascade += 1
     }
     for (let type = 0; type < MATCH3_TYPES; type += 1) state.collected[type] += collectedThisCascade[type]
     totalCleared += clearedThisCascade
-    scoreDelta += clearedThisCascade * 90 * cascades
-    if (created) scoreDelta += created.special === 'rainbow' ? 600 : created.special === 'bomb' ? 450 : 300
+    scoreDelta += cascadeScore
+    state.score += cascadeScore
+    state.totalCleared += clearedThisCascade
+    frames.push({
+      phase: 'burst',
+      state: cloneState(state),
+      cleared,
+      cascade: cascades,
+      scoreDelta: cascadeScore,
+    })
     collapseAndFill(state)
+    frames.push({
+      phase: 'fall',
+      state: cloneState(state),
+      cleared: [],
+      cascade: cascades,
+      scoreDelta: cascadeScore,
+    })
     directClear = null
     groups = findMatch3Groups(state.board)
   }
 
-  state.score += scoreDelta
-  state.totalCleared += totalCleared
   const reshuffled = rebuildIfStuck(state)
-  return { accepted: true, state, scoreDelta, cleared: totalCleared, cascades, createdSpecial, reshuffled }
+  if (reshuffled) {
+    frames.push({ phase: 'shuffle', state: cloneState(state), cleared: [], cascade: cascades, scoreDelta: 0 })
+  }
+  return { accepted: true, state, scoreDelta, cleared: totalCleared, cascades, createdSpecial, reshuffled, frames }
 }

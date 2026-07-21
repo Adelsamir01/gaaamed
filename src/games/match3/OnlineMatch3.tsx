@@ -7,9 +7,12 @@ import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
 import { AvatarCircle } from '@/sections/components'
 import Match3Board from './Match3Board'
-import type { Match3Special, Match3State } from './engine.js'
+import { applyMatch3Swap, type Match3Special, type Match3State } from './engine.js'
+import { useMatch3Animator } from './useMatch3Animator'
 
 interface Match3MoveEffect {
+  first: number
+  second: number
   scoreDelta: number
   cleared: number
   cascades: number
@@ -60,7 +63,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   const { profile } = useApp()
   const mySlot = slot ?? 1
   const theirSlot = mySlot === 1 ? 2 : 1
-  const [game, setGame] = useState<Match3State | null>(null)
+  const { state: game, visual, animating, playFrames, syncState } = useMatch3Animator<Match3State | null>(null)
   const [scores, setScores] = useState<Record<number, number>>({ 1: 0, 2: 0 })
   const [startAt, setStartAt] = useState(0)
   const [endAt, setEndAt] = useState(0)
@@ -70,6 +73,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   const [scorePop, setScorePop] = useState<ScorePop | null>(null)
   const [ending, setEnding] = useState<'win' | 'draw' | 'loss' | null>(null)
   const finishedRef = useRef(false)
+  const gameRef = useRef<Match3State | null>(null)
   const scorePopIdRef = useRef(0)
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -109,13 +113,15 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
       if (event.kind !== 'match3') return
       if (event.msg.type === 'match3_state') {
         const incoming = event.msg as unknown as Match3StateMessage
-        setGame(incoming.state)
+        const animation = incoming.effect === 'move' && incoming.move && gameRef.current
+          ? applyMatch3Swap(gameRef.current, incoming.move.first, incoming.move.second)
+          : null
+        gameRef.current = incoming.state
         setScores(incoming.scores)
         setStartAt(incoming.startAt)
         setEndAt(incoming.endAt)
         setClockOffset(incoming.serverTime - Date.now())
         setNow(Date.now())
-        setPending(false)
         if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
         if (incoming.effect === 'move' && incoming.move) {
           scorePopIdRef.current += 1
@@ -123,7 +129,16 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
           if (incoming.move.createdSpecial === 'rainbow') sounds.win()
           else if (incoming.move.cascades >= 2 || incoming.move.createdSpecial) sounds.correct()
           else sounds.pop()
-          window.setTimeout(() => setScorePop(null), 850)
+          void playFrames(animation?.accepted ? animation.frames : undefined, incoming.state, (frame) => {
+            if (frame.phase === 'burst' && frame.cascade > 1) sounds.pop()
+          }).then((played) => {
+            if (!played) return
+            setPending(false)
+            window.setTimeout(() => setScorePop(null), 260)
+          })
+        } else {
+          syncState(incoming.state)
+          setPending(false)
         }
       } else if (event.msg.type === 'match3_scores') {
         const incoming = event.msg as unknown as Match3ScoresMessage
@@ -144,7 +159,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
       if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
       if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
     }
-  }, [finish, requestGameSync, subscribe])
+  }, [finish, playFrames, requestGameSync, subscribe, syncState])
 
   useEffect(() => {
     if (!game || ending) return
@@ -173,14 +188,14 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   }, [ending, mine, started, theirs])
 
   const swap = useCallback((first: number, second: number) => {
-    if (!game || pending || !started || remainingMs <= 0 || ending) return
+    if (!game || pending || animating || !started || remainingMs <= 0 || ending) return
     setPending(true)
     sendRaw({ type: 'match3_swap', first, second })
     pendingTimerRef.current = setTimeout(() => {
       setPending(false)
       requestGameSync()
     }, 2_000)
-  }, [ending, game, pending, remainingMs, requestGameSync, sendRaw, started])
+  }, [animating, ending, game, pending, remainingMs, requestGameSync, sendRaw, started])
 
   if (!game) {
     return (
@@ -255,7 +270,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
           )}
         </AnimatePresence>
 
-        <Match3Board state={game} disabled={pending || !started || remainingMs <= 0 || !!ending} onSwap={swap} celebration={ending === 'win'} />
+        <Match3Board state={game} disabled={pending || animating || !started || remainingMs <= 0 || !!ending} onSwap={swap} celebration={ending === 'win'} visual={visual} />
 
         <AnimatePresence>
           {!started && !ending && (

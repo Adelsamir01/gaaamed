@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { findMatch3Move, MATCH3_SIZE, type Match3Cell, type Match3State } from './engine.js'
+import type { Match3VisualEffect } from './useMatch3Animator'
 import './match3.css'
 
 export const SWEET_NAMES = ['ملبن ورد', 'برتقالة', 'فستقية', 'توتة', 'نعناية', 'ليمونة'] as const
@@ -11,6 +12,7 @@ interface Match3BoardProps {
   disabled?: boolean
   onSwap: (first: number, second: number) => void
   celebration?: boolean
+  visual?: Match3VisualEffect | null
 }
 
 interface PointerStart {
@@ -67,7 +69,7 @@ export function CandyPiece({ cell, mini = false }: { cell: Match3Cell; mini?: bo
   )
 }
 
-export default function Match3Board({ state, disabled = false, onSwap, celebration = false }: Match3BoardProps) {
+export default function Match3Board({ state, disabled = false, onSwap, celebration = false, visual = null }: Match3BoardProps) {
   const [selection, setSelection] = useState<{ index: number; boardKey: string } | null>(null)
   const [hint, setHint] = useState<{ pair: [number, number]; boardKey: string } | null>(null)
   const [interaction, setInteraction] = useState(0)
@@ -131,7 +133,12 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
   }
 
   return (
-    <div className={cn('match3-board-wrap', celebration && 'match3-board-celebration')}>
+    <div className={cn(
+      'match3-board-wrap',
+      celebration && 'match3-board-celebration',
+      visual?.phase === 'burst' && 'match3-board-bursting',
+      visual?.phase === 'burst' && visual.cascade >= 2 && 'match3-board-impact',
+    )}>
       <div className="match3-board" role="grid" aria-label="لوحة الحلوى ٨ في ٨">
         <div className="match3-board-cells" aria-hidden="true">
           {Array.from({ length: MATCH3_SIZE * MATCH3_SIZE }, (_, index) => <span key={index} />)}
@@ -142,6 +149,7 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
             const row = Math.floor(index / MATCH3_SIZE)
             const col = index % MATCH3_SIZE
             const hinted = visibleHint?.includes(index) ?? false
+            const clearing = visual?.phase === 'clear' && visual.indices.includes(index)
             return (
               <motion.button
                 key={cell.id}
@@ -151,12 +159,22 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
                 animate={{
                   left: `${col * 12.5}%`,
                   top: `${row * 12.5}%`,
-                  scale: selected === index ? 1.12 : 1,
+                  scale: clearing ? [1, 1.2, 1.08] : selected === index ? 1.12 : 1,
                   opacity: 1,
                   y: 0,
+                  rotate: clearing ? [0, -4, 4, 0] : 0,
                 }}
-                exit={{ scale: 0.15, opacity: 0, rotate: 24 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.7 }}
+                exit={{ scale: [1.08, 1.3, 0.1], opacity: [1, 1, 0], rotate: [0, 8, 26] }}
+                transition={clearing
+                  ? { duration: 0.21, ease: 'easeOut' }
+                  : {
+                      left: { type: 'spring', stiffness: 390, damping: 27, mass: 0.72 },
+                      top: { type: 'spring', stiffness: 390, damping: 27, mass: 0.72 },
+                      scale: { type: 'spring', stiffness: 420, damping: 27 },
+                      y: { type: 'spring', stiffness: 390, damping: 27 },
+                      opacity: { duration: 0.14 },
+                      rotate: { duration: 0.17 },
+                    }}
                 whileTap={disabled ? undefined : { scale: 0.88 }}
                 onPointerDown={(event) => pointerDown(event, index)}
                 onPointerUp={(event) => pointerUp(event, index)}
@@ -168,12 +186,44 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
                   'match3-piece-button',
                   selected === index && 'match3-piece-selected',
                   hinted && 'match3-piece-hint',
+                  clearing && 'match3-piece-clearing',
                 )}
                 style={{ touchAction: 'none' }}
                 aria-label={`${SWEET_NAMES[cell.type] ?? 'حلوى'}${cell.special !== 'none' ? ' مميزة' : ''}، الصف ${row + 1} العمود ${col + 1}`}
               >
                 <CandyPiece cell={cell} />
               </motion.button>
+            )
+          })}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {visual?.phase === 'burst' && visual.indices.map((index) => {
+            const row = Math.floor(index / MATCH3_SIZE)
+            const col = index % MATCH3_SIZE
+            return (
+              <motion.span
+                key={`${visual.key}-${index}`}
+                className="match3-burst"
+                style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%` }}
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: [0, 1, 1, 0], scale: [0.5, 1.08, 1.32] }}
+                transition={{ duration: 0.34, ease: 'easeOut' }}
+                aria-hidden="true"
+              >
+                <span className="match3-burst-flash" />
+                <span className="match3-burst-ring" />
+                {Array.from({ length: 8 }, (_, particle) => (
+                  <span
+                    key={particle}
+                    className={`match3-burst-particle match3-burst-particle-${particle % 4}`}
+                    style={{
+                      '--particle-angle': `${particle * 45}deg`,
+                      '--particle-distance': `${24 + (particle % 3) * 5}px`,
+                    } as CSSProperties}
+                  />
+                ))}
+              </motion.span>
             )
           })}
         </AnimatePresence>

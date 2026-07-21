@@ -972,6 +972,8 @@ wss.on('connection', (ws, request) => {
           return
         }
         sendMatch3State(ws, room, 'move', {
+          first: Number(msg.first),
+          second: Number(msg.second),
           scoreDelta: result.scoreDelta,
           cleared: result.cleared,
           cascades: result.cascades,

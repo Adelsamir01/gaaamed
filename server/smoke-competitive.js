@@ -1,7 +1,7 @@
 /* End-to-end smoke test for server-authoritative Memory, Trivia, and Match-Three rooms. */
 import WebSocket from 'ws'
 import { TRIVIA_ANSWER_KEY } from './competitive-games.js'
-import { findMatch3Move } from '../src/games/match3/engine.js'
+import { applyMatch3Swap, findMatch3Move } from '../src/games/match3/engine.js'
 
 const URL = process.env.TEST_WS_URL || 'ws://localhost:8787'
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -102,6 +102,9 @@ async function testMatch3() {
   const moved = await next(host, 'match3_state', afterHost)
   const scores = await next(guest, 'match3_scores', afterGuest)
   if (moved.effect !== 'move' || moved.state.score <= 0) throw new Error('Match-three move was not authoritatively resolved')
+  if (moved.move?.first !== move[0] || moved.move?.second !== move[1]) throw new Error('Match-three animation coordinates were not synchronized')
+  const replay = applyMatch3Swap(hostState.state, moved.move.first, moved.move.second)
+  if (!replay.accepted || JSON.stringify(replay.state) !== JSON.stringify(moved.state)) throw new Error('Match-three client animation replay diverged from the server')
   if (scores.scores['1'] !== moved.state.score) throw new Error('Match-three rival score was not synchronized')
   host.close()
   guest.close()

@@ -32,6 +32,17 @@ export interface Match3SwapResult {
   cascades: number
   createdSpecial: Match3Special | null
   reshuffled: boolean
+  frames?: Match3AnimationFrame[]
+}
+
+export type Match3AnimationPhase = 'swap' | 'clear' | 'burst' | 'fall' | 'shuffle'
+
+export interface Match3AnimationFrame {
+  phase: Match3AnimationPhase
+  state: Match3State
+  cleared: number[]
+  cascade: number
+  scoreDelta: number
 }
 
 export function createMatch3Game(seed?: number, options?: { moves?: number | null }): Match3State

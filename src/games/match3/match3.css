@@ -61,6 +61,21 @@
   opacity: 0.55;
 }
 
+.match3-board-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  z-index: 8;
+  border-radius: 22px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at center, rgba(255, 250, 213, 0.32), rgba(255, 125, 184, 0.08) 42%, transparent 72%);
+}
+
+.match3-board-bursting::after {
+  animation: match3-board-flash 0.32s ease-out forwards;
+}
+
 .match3-board {
   position: relative;
   width: 100%;
@@ -111,6 +126,32 @@
 }
 
 .match3-piece-hint { animation: match3-hint 0.78s ease-in-out infinite alternate; }
+
+.match3-piece-clearing {
+  z-index: 7;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.34), rgba(255, 214, 97, 0.09) 58%, transparent 72%);
+  box-shadow: 0 0 0 2px rgba(255, 248, 196, 0.78), 0 0 24px rgba(255, 181, 72, 0.9);
+}
+
+.match3-piece-clearing::before,
+.match3-piece-clearing::after {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  animation: match3-clear-ring 0.22s ease-out forwards;
+}
+
+.match3-piece-clearing::after {
+  inset: 18%;
+  border-color: rgba(255, 223, 107, 0.9);
+  animation-delay: 0.04s;
+}
+
+.match3-piece-clearing .match3-candy {
+  filter: brightness(1.42) saturate(1.2) drop-shadow(0 0 9px rgba(255, 248, 196, 0.95));
+}
 
 .match3-candy {
   position: relative;
@@ -233,6 +274,54 @@
 }
 
 .match3-board-celebration { animation: match3-celebrate 0.55s ease-in-out infinite alternate; }
+.match3-board-impact { animation: match3-board-impact 0.24s cubic-bezier(0.2, 0.8, 0.3, 1); }
+
+.match3-burst {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.match3-burst-flash {
+  width: 48%;
+  height: 48%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 18%, #fff4a8 24% 44%, rgba(255, 129, 177, 0.5) 62%, transparent 74%);
+  box-shadow: 0 0 16px #fff7b0, 0 0 28px rgba(255, 106, 174, 0.78);
+  animation: match3-burst-flash 0.3s ease-out forwards;
+}
+
+.match3-burst-ring {
+  position: absolute;
+  inset: 13%;
+  border: 3px solid rgba(255, 247, 182, 0.92);
+  border-radius: 50%;
+  box-shadow: 0 0 9px rgba(255, 153, 203, 0.9);
+  animation: match3-burst-ring 0.32s ease-out forwards;
+}
+
+.match3-burst-particle {
+  --particle-angle: 0deg;
+  --particle-distance: 18px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px 80% 50% 80%;
+  background: #fff4a3;
+  box-shadow: 0 0 4px #fff, 0 0 10px currentColor;
+  animation: match3-particle-fly 0.36s cubic-bezier(0.16, 0.78, 0.2, 1) forwards;
+}
+
+.match3-burst-particle-1 { color: #ff6fa5; background: #ff83b3; }
+.match3-burst-particle-2 { color: #72e8d3; background: #8af3df; }
+.match3-burst-particle-3 { color: #bd8aff; background: #cfa5ff; }
 
 .match3-score-pop {
   animation: match3-score-pop 0.65s cubic-bezier(0.22, 1.4, 0.36, 1);
@@ -246,6 +335,35 @@
 @keyframes match3-rainbow { to { transform: rotate(360deg); } }
 @keyframes match3-bomb-pulse { to { filter: drop-shadow(0 0 9px rgba(255, 236, 120, 0.95)); } }
 @keyframes match3-celebrate { to { transform: scale(1.012) rotate(0.35deg); filter: brightness(1.1); } }
+@keyframes match3-clear-ring {
+  from { opacity: 0; transform: scale(0.45); }
+  45% { opacity: 1; }
+  to { opacity: 0; transform: scale(1.42); }
+}
+@keyframes match3-burst-flash {
+  from { opacity: 1; transform: scale(0.35) rotate(0deg); }
+  55% { opacity: 1; transform: scale(1.35) rotate(25deg); }
+  to { opacity: 0; transform: scale(0.72) rotate(55deg); }
+}
+@keyframes match3-burst-ring {
+  from { opacity: 1; transform: scale(0.2); }
+  to { opacity: 0; transform: scale(1.75); border-width: 1px; }
+}
+@keyframes match3-particle-fly {
+  from { opacity: 1; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(1px) scale(1); }
+  70% { opacity: 1; }
+  to { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(var(--particle-distance)) scale(0.2); }
+}
+@keyframes match3-board-impact {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  30% { transform: translate3d(-2px, 1px, 0) scale(1.003); }
+  60% { transform: translate3d(2px, -1px, 0) scale(1.003); }
+}
+@keyframes match3-board-flash {
+  0% { opacity: 0; }
+  24% { opacity: 1; }
+  100% { opacity: 0; }
+}
 @keyframes match3-score-pop {
   0% { opacity: 0; transform: translateY(8px) scale(0.7); }
   45% { opacity: 1; transform: translateY(-5px) scale(1.13); }
@@ -262,5 +380,12 @@
   .match3-candy-rainbow,
   .match3-special-bomb,
   .match3-board-celebration,
+  .match3-board-impact,
+  .match3-board-bursting::after,
+  .match3-piece-clearing::before,
+  .match3-piece-clearing::after,
+  .match3-burst-flash,
+  .match3-burst-ring,
+  .match3-burst-particle,
   .match3-score-pop { animation: none; }
 }

@@ -5,7 +5,8 @@ import { Move, Sparkles, Star, Target } from 'lucide-react'
 import type { GameProps } from '@/games'
 import { sounds } from '@/lib/sounds'
 import Match3Board, { CandyPiece, SWEET_NAMES } from './Match3Board'
-import { applyMatch3Swap, createMatch3Game, type Match3Cell, type Match3State } from './engine.js'
+import { applyMatch3Swap, createMatch3Game, type Match3Cell } from './engine.js'
+import { useMatch3Animator } from './useMatch3Animator'
 
 const LEVELS = {
   easy: { moves: 34, target: 5_500, orders: [12, 10] },
@@ -35,12 +36,11 @@ function orderCell(type: number): Match3Cell {
 export default function Match3Game({ config, onFinish }: GameProps) {
   const level = LEVELS[config.difficulty]
   const [seed] = useState(takeLocalSeed)
-  const [game, setGame] = useState<Match3State>(() => createMatch3Game(seed, { moves: level.moves }))
-  const [locked, setLocked] = useState(false)
+  const [initialGame] = useState(() => createMatch3Game(seed, { moves: level.moves }))
+  const { state: game, visual, animating, playFrames } = useMatch3Animator(initialGame)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const feedbackIdRef = useRef(0)
   const finishedRef = useRef(false)
-  const unlockTimerRef = useRef<number | null>(null)
 
   const objectives = useMemo(() => ORDER_TYPES.map((type, index) => ({
     type,
@@ -50,15 +50,13 @@ export default function Match3Game({ config, onFinish }: GameProps) {
   const ordersDone = objectives.every((objective) => objective.current >= objective.target)
   const scoreDone = game.score >= level.target
   const progress = Math.min(100, (game.score / level.target) * 100)
-  const ending: 'win' | 'loss' | null = scoreDone && ordersDone
-    ? 'win'
-    : game.movesRemaining === 0
-      ? 'loss'
-      : null
-
-  useEffect(() => () => {
-    if (unlockTimerRef.current !== null) window.clearTimeout(unlockTimerRef.current)
-  }, [])
+  const ending: 'win' | 'loss' | null = animating
+    ? null
+    : scoreDone && ordersDone
+      ? 'win'
+      : game.movesRemaining === 0
+        ? 'loss'
+        : null
 
   useEffect(() => {
     if (finishedRef.current || !ending) return
@@ -89,7 +87,7 @@ export default function Match3Game({ config, onFinish }: GameProps) {
   }, [ending, game.movesRemaining, game.score, game.totalCleared, level.moves, onFinish])
 
   const trySwap = useCallback((first: number, second: number) => {
-    if (locked || finishedRef.current) return
+    if (animating || finishedRef.current) return
     const result = applyMatch3Swap(game, first, second)
     feedbackIdRef.current += 1
     if (!result.accepted) {
@@ -99,8 +97,6 @@ export default function Match3Game({ config, onFinish }: GameProps) {
       return
     }
 
-    setLocked(true)
-    setGame(result.state)
     if (result.createdSpecial === 'rainbow') sounds.win()
     else if (result.cascades >= 2 || result.createdSpecial) sounds.correct()
     else sounds.pop()
@@ -116,11 +112,12 @@ export default function Match3Game({ config, onFinish }: GameProps) {
               ? 'كومبو جميل!'
               : 'حلو!'
     setFeedback({ id: feedbackIdRef.current, text: comboText, score: result.scoreDelta, good: true })
-    unlockTimerRef.current = window.setTimeout(() => {
-      setLocked(false)
-      setFeedback(null)
-    }, Math.min(900, 360 + result.cascades * 90))
-  }, [game, locked])
+    void playFrames(result.frames, result.state, (frame) => {
+      if (frame.phase === 'burst' && frame.cascade > 1) sounds.pop()
+    }).then((played) => {
+      if (played) setFeedback(null)
+    })
+  }, [animating, game, playFrames])
 
   return (
     <div className="match3-game flex flex-col items-center gap-2.5 py-2 min-h-[calc(100dvh-76px)]" dir="rtl">
@@ -181,7 +178,7 @@ export default function Match3Game({ config, onFinish }: GameProps) {
             </motion.div>
           )}
         </AnimatePresence>
-        <Match3Board state={game} disabled={locked || !!ending} onSwap={trySwap} celebration={ending === 'win'} />
+        <Match3Board state={game} disabled={animating || !!ending} onSwap={trySwap} celebration={ending === 'win'} visual={visual} />
       </div>
 
       <section className="match3-panel w-full rounded-2xl px-3 py-2">
