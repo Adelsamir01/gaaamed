@@ -46,6 +46,7 @@ type View =
 function Shell() {
   const { onboarded, profile, startGame, finishGame } = useApp()
   const online = useOnline()
+  const { sendRaw: sendOnline, status: onlineStatus } = online
   const [tab, setTab] = useState<TabId>('home')
   const [view, setView] = useState<View>({ kind: 'tabs' })
   const [chatRoomId, setChatRoomId] = useState<string | null>(null)
@@ -69,6 +70,20 @@ function Shell() {
   }, [])
 
   const changeTab = useCallback((nextTab: TabId) => activateTab(nextTab), [activateTab])
+
+  // Online rooms are server-owned; local games report only while this app is in the foreground.
+  const localActivityGameId = view.kind === 'playing' ? view.gameId : null
+  useEffect(() => {
+    const syncActivity = () => {
+      sendOnline({
+        type: 'activity',
+        gameId: document.visibilityState === 'visible' ? localActivityGameId : null,
+      })
+    }
+    if (onlineStatus === 'online') syncActivity()
+    document.addEventListener('visibilitychange', syncActivity)
+    return () => document.removeEventListener('visibilitychange', syncActivity)
+  }, [localActivityGameId, onlineStatus, sendOnline])
 
   const openChat = useCallback((id: string) => {
     activateTab('chat')

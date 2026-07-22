@@ -4,7 +4,7 @@ import { Check, ChevronLeft, Clock3, Search, Trash2, UserPlus, X } from 'lucide-
 import { toast } from 'sonner'
 import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle, StatusDot } from './components'
-import { statusLabel } from '@/data/friends'
+import { friendStatusLabel } from '@/data/friends'
 import { sounds } from '@/lib/sounds'
 import type { PublicUserCard } from '@/types'
 
@@ -12,7 +12,7 @@ const HANDLE_RE = /^[a-z0-9_]{3,15}$/
 
 export default function Friends({ openChat }: { openChat: (threadId: string) => void }) {
   const {
-    friends, incomingFriendRequests, outgoingFriendRequests, me, searchUser,
+    status, friends, incomingFriendRequests, outgoingFriendRequests, me, searchUser,
     friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove,
     createDm,
   } = useOnline()
@@ -212,7 +212,13 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
 
       {/* قائمة الأصدقاء */}
       <div className="flex flex-col gap-2.5">
-        {friends.map((f, i) => (
+        {friends.map((f, i) => {
+          const presence = status === 'online' ? f.presence : 'offline'
+          const liveGame = status === 'online' ? f.activeGame : null
+          const label = status === 'online'
+            ? friendStatusLabel(f)
+            : status === 'connecting' ? 'جاري تحديث الحالة…' : 'غير متصل'
+          return (
           <motion.div
             key={f.userId}
             initial={{ opacity: 0, y: 12 }}
@@ -230,13 +236,15 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
               <div className="relative shrink-0">
                 <AvatarCircle emoji={f.avatar} />
                 <span className="absolute -bottom-0.5 -end-0.5">
-                  <StatusDot status={f.presence} />
+                  <StatusDot status={presence} />
                 </span>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-extrabold">{f.name}</p>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px]">
-                  <span className="shrink-0 font-bold text-muted-foreground">{statusLabel[f.presence]}</span>
+                  <span className={liveGame ? 'shrink-0 font-bold text-amber-300' : 'shrink-0 font-bold text-muted-foreground'}>
+                    {label}
+                  </span>
                   <span className="truncate font-bold text-emerald-300" dir="ltr">@{f.handle}</span>
                 </div>
               </div>
@@ -255,7 +263,8 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </motion.div>
-        ))}
+          )
+        })}
         {friends.length === 0 && (
           <div className="glass rounded-3xl p-8 text-center text-muted-foreground">
             <div className="text-4xl mb-2">🫂</div>

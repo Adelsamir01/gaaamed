@@ -41,3 +41,15 @@ export function activeInviteForUser(onlineUsers, rooms, userId, canSee = () => t
   }
   return null
 }
+
+/** Resolve the first valid game being played across any of a user's sockets. */
+export function activeGameForUser(onlineUsers, userId, gameIdForSocket, games) {
+  const sockets = onlineUsers.get(userId)
+  if (!sockets) return null
+  for (const socket of sockets) {
+    const gameId = gameIdForSocket(socket)
+    const game = Object.hasOwn(games, gameId) ? games[gameId] : null
+    if (game) return { gameId, name: game.name, emoji: game.emoji }
+  }
+  return null
+}

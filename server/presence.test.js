@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
+import { activeGameForUser, activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
 
 test('multiple sockets for one user count as one online user', () => {
   const users = new Map()
@@ -64,4 +64,20 @@ test('stale room pointers are never advertised as active invites', () => {
   }]])
 
   assert.equal(activeInviteForUser(users, rooms, 'user-1'), null)
+})
+
+test('active game presence resolves a valid game across multiple sockets', () => {
+  const users = new Map()
+  const idleSocket = { gameId: null }
+  const playingSocket = { gameId: 'chess' }
+  trackPresence(users, 'user-1', idleSocket)
+  trackPresence(users, 'user-1', playingSocket)
+
+  assert.deepEqual(
+    activeGameForUser(users, 'user-1', (socket) => socket.gameId, {
+      chess: { name: 'شطرنج', emoji: '♟️' },
+    }),
+    { gameId: 'chess', name: 'شطرنج', emoji: '♟️' },
+  )
+  assert.equal(activeGameForUser(users, 'missing-user', () => 'chess', {}), null)
 })

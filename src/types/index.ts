@@ -23,6 +23,12 @@ export interface ServerFriend {
   avatar: string
   xp: number
   presence: Presence
+  /** The game this friend is currently playing, whether local or online. */
+  activeGame?: {
+    gameId: string
+    name: string
+    emoji: string
+  } | null
   /** The exact pending chat invitation this friend currently has open. */
   activeInvite?: {
     threadId: string

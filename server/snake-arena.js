@@ -505,6 +505,10 @@ export class SnakeArenaManager {
     return true
   }
 
+  has(socket) {
+    return this.memberships.has(socket)
+  }
+
   tick(dtSeconds = SNAKE_TICK_MS / 1000) {
     for (const arena of this.arenas.values()) {
       const deaths = arena.tick(dtSeconds)

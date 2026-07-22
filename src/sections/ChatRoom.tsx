@@ -391,7 +391,14 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-extrabold text-sm truncate">{thread?.name ?? 'محادثة'}</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-extrabold">{thread?.name ?? 'محادثة'}</p>
+            {status === 'online' && dmFriend?.presence === 'playing' && dmFriend.activeGame && (
+              <span className="max-w-[52%] shrink truncate rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-extrabold text-amber-200">
+                {dmFriend.activeGame.emoji} {dmFriend.activeGame.name}
+              </span>
+            )}
+          </div>
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
             {thread?.kind === 'group'
               ? `${thread.memberIds.length} أعضاء`

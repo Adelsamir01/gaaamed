@@ -39,7 +39,7 @@ import {
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
 import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
-import { activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
+import { activeGameForUser, activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -85,6 +85,13 @@ const INVITE_GAMES = {
   shakhbata: { name: 'شخبطة', emoji: '🎨' },
   match3: { name: 'حلاوة', emoji: '🍬' },
   'bank-el7az': { name: 'بنك الحظ', emoji: '🏦' },
+}
+
+// Includes offline games reported by the foreground app as well as every server-owned game.
+const ACTIVITY_GAMES = {
+  ...INVITE_GAMES,
+  snake: { name: 'الثعبان', emoji: '🐍' },
+  minesweeper: { name: 'كاسحة الألغام', emoji: '💣' },
 }
 
 // userId -> Set<ws> (حضور حقيقي عبر السوكيتات المتصلة)
@@ -655,13 +662,21 @@ function broadcastOnlineUserCount() {
   for (const client of wss.clients) send(client, message)
 }
 
-function presenceOf(userId) {
+function gameIdForSocket(ws) {
+  const room = rooms.get(ws._room)
+  if (room?.players.get(ws._slot) === ws && Object.hasOwn(ACTIVITY_GAMES, room.gameId)) return room.gameId
+  if (snakeManager.has(ws)) return 'snake'
+  return Object.hasOwn(ACTIVITY_GAMES, ws._activityGameId) ? ws._activityGameId : null
+}
+
+function activeGameOf(userId) {
+  return activeGameForUser(onlineUsers, userId, gameIdForSocket, ACTIVITY_GAMES)
+}
+
+function presenceOf(userId, activeGame = activeGameOf(userId)) {
   const sockets = onlineUsers.get(userId)
   if (!sockets || sockets.size === 0) return 'offline'
-  for (const ws of sockets) {
-    if (ws._room) return 'playing'
-  }
-  return 'online'
+  return activeGame ? 'playing' : 'online'
 }
 
 function activeInviteOf(userId, viewerUserId) {
@@ -676,10 +691,12 @@ function friendsListFor(userId) {
     .map((id) => userStore.byId(id))
     .filter(Boolean)
     .map((u) => {
+      const activeGame = activeGameOf(u.userId)
       const activeInvite = activeInviteOf(u.userId, userId)
       return {
         ...publicCard(u),
-        presence: presenceOf(u.userId),
+        presence: presenceOf(u.userId, activeGame),
+        ...(activeGame ? { activeGame } : {}),
         ...(activeInvite ? { activeInvite } : {}),
       }
     })
@@ -836,6 +853,9 @@ function tryMatch(gameId, queueKey = gameId) {
       })
     })
     broadcastPlayers(room)
+    for (const userId of new Set(pair.map((entry) => entry.userId).filter(Boolean))) {
+      broadcastFriendsUpdate(userId)
+    }
     console.log(`QUICK_MATCH ${room.code} ${gameId} ${first.name} vs ${second.name}`)
   }
   if (alive.length === 0) matchQueues.delete(queueKey)
@@ -896,6 +916,7 @@ wss.on('connection', (ws, request) => {
   ws.isAlive = true
   ws._room = null
   ws._slot = null
+  ws._activityGameId = null
   ws._ip = request.socket.remoteAddress || 'unknown'
   ws._messageRate = { startedAt: Date.now(), count: 0, violations: 0 }
   snakeManager.track(ws)
@@ -929,6 +950,7 @@ wss.on('connection', (ws, request) => {
         handleLeave(ws)
         removeFromQueues(ws)
         snakeManager.join(ws, { name: msg.name, avatar: msg.avatar })
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
         break
       }
 
@@ -943,7 +965,8 @@ wss.on('connection', (ws, request) => {
       }
 
       case 'snake_public_leave': {
-        snakeManager.leave(ws)
+        const leftSnake = snakeManager.leave(ws)
+        if (leftSnake && ws._userId) broadcastFriendsUpdate(ws._userId)
         break
       }
 
@@ -1324,6 +1347,15 @@ wss.on('connection', (ws, request) => {
         break
       }
 
+      case 'activity': {
+        const requestedGameId = String(msg.gameId || '')
+        const nextGameId = Object.hasOwn(ACTIVITY_GAMES, requestedGameId) ? requestedGameId : null
+        if (ws._activityGameId === nextGameId) return
+        ws._activityGameId = nextGameId
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
+        break
+      }
+
       case 'push_register': {
         if (!ws._userId) return
         try {
@@ -1586,6 +1618,7 @@ wss.on('connection', (ws, request) => {
         })
         matchQueues.set(queueKey, queue)
         send(ws, { type: 'quick_match_waiting', gameId })
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
         tryMatch(gameId, queueKey)
         break
       }

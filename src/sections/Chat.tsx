@@ -31,7 +31,7 @@ function preview(t: ServerThread) {
 }
 
 export default function Chat({ openChat }: { openChat: (id: string) => void }) {
-  const { threads, friends, createGroup } = useOnline()
+  const { status, threads, friends, createGroup } = useOnline()
   const [query, setQuery] = useState('')
   const [groupOpen, setGroupOpen] = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -113,7 +113,7 @@ export default function Chat({ openChat }: { openChat: (id: string) => void }) {
                 <AvatarCircle emoji={t.avatar} />
                 {t.kind === 'dm' && df && (
                   <span className="absolute -bottom-0.5 -end-0.5">
-                    <StatusDot status={df.presence} />
+                    <StatusDot status={status === 'online' ? df.presence : 'offline'} />
                   </span>
                 )}
                 {t.kind === 'group' && (
@@ -124,7 +124,14 @@ export default function Chat({ openChat }: { openChat: (id: string) => void }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-extrabold text-sm truncate">{t.name}</span>
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-sm font-extrabold">{t.name}</span>
+                    {status === 'online' && df?.presence === 'playing' && df.activeGame && (
+                      <span className="max-w-[45%] shrink truncate rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-extrabold text-amber-200">
+                        {df.activeGame.emoji} {df.activeGame.name}
+                      </span>
+                    )}
+                  </div>
                   {t.lastMessage && (
                     <span className="text-[10px] text-muted-foreground shrink-0">
                       {fmtTime(t.lastMessage.invite?.result?.completedAt ?? t.lastMessage.time)}
@@ -194,7 +201,7 @@ export default function Chat({ openChat }: { openChat: (id: string) => void }) {
                   <div className="flex-1 min-w-0">
                     <p className="font-extrabold text-sm truncate">{f.name}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      <span dir="ltr">@{f.handle}</span> · {statusLabel[f.presence]}
+                      <span dir="ltr">@{f.handle}</span> · {status === 'online' ? statusLabel[f.presence] : 'الحالة غير متاحة'}
                     </p>
                   </div>
                   {on && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
