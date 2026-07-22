@@ -3,6 +3,15 @@ import { ChevronRight, RefreshCw, Users, WifiOff } from 'lucide-react'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
 import { sounds } from '@/lib/sounds'
+import {
+  advanceTrail,
+  angleDifference,
+  bodyRadiusForLength,
+  cameraZoomForLength,
+  headRadiusForLength,
+  reconcileTrail,
+  trailLength,
+} from './snakeMotion'
 
 interface Point {
   x: number
@@ -23,6 +32,10 @@ interface ArenaPlayer {
   avatar: string
   hue: number
   score: number
+  length?: number
+  bodyRadius?: number
+  headRadius?: number
+  isBot?: boolean
   alive: boolean
   angle: number
   trail: Point[]
@@ -37,6 +50,7 @@ interface ArenaSnapshot {
 }
 
 interface RenderPlayer extends Omit<ArenaPlayer, 'trail'> {
+  length: number
   trail: Point[]
 }
 
@@ -56,13 +70,6 @@ type LeaderboardPlayer = Pick<ArenaPlayer, 'id' | 'name' | 'avatar' | 'score'> &
 
 const DEFAULT_WORLD_SIZE = 5_600
 const DEFAULT_ARENA_RADIUS = 2_720
-const BODY_WIDTH = 17
-const HEAD_RADIUS = 11
-
-function angleDifference(from: number, to: number): number {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from))
-}
-
 function traceSmoothTrail(context: CanvasRenderingContext2D, points: Point[]): void {
   if (points.length === 0) return
   context.moveTo(points[0].x, points[0].y)
@@ -75,13 +82,10 @@ function traceSmoothTrail(context: CanvasRenderingContext2D, points: Point[]): v
 }
 
 function copyPlayer(player: ArenaPlayer): RenderPlayer {
-  return { ...player, trail: player.trail.map((point) => ({ ...point })) }
-}
-
-function screenPoint(point: Point, camera: Point, width: number, height: number): Point {
   return {
-    x: width / 2 + point.x - camera.x,
-    y: height / 2 + point.y - camera.y,
+    ...player,
+    length: player.length ?? trailLength(player.trail),
+    trail: player.trail.map((point) => ({ ...point })),
   }
 }
 
@@ -104,6 +108,7 @@ export default function OnlineSnake({ onExit }: Props) {
   const snapshotRef = useRef<ArenaSnapshot>({ players: [], foods: [], speed: 124, worldSize: DEFAULT_WORLD_SIZE, arenaRadius: DEFAULT_ARENA_RADIUS })
   const renderPlayersRef = useRef(new Map<string, RenderPlayer>())
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
+  const zoomRef = useRef(1)
   const cameraReadyRef = useRef(false)
   const lastFrameRef = useRef(0)
   const lastSnapshotReceivedRef = useRef(0)
@@ -149,6 +154,7 @@ export default function OnlineSnake({ onExit }: Props) {
       setScore(0)
       lifeRef.current += 1
       cameraReadyRef.current = false
+      zoomRef.current = 1
       setShowGuide(true)
       setPhase('playing')
       return
@@ -158,6 +164,7 @@ export default function OnlineSnake({ onExit }: Props) {
       setScore(0)
       lifeRef.current += 1
       cameraReadyRef.current = false
+      zoomRef.current = 1
       setShowGuide(true)
       setPhase('playing')
       return
@@ -240,9 +247,10 @@ export default function OnlineSnake({ onExit }: Props) {
   const updateRenderedPlayers = useCallback((elapsed: number) => {
     const targetPlayers = snapshotRef.current.players
     const targetIds = new Set(targetPlayers.map((player) => player.id))
-    const factor = 1 - Math.exp(-elapsed * 15)
+    const correctionFactor = 1 - Math.exp(-elapsed * 7.5)
+    const turnFactor = 1 - Math.exp(-elapsed * 12)
     const predictionSeconds = lastSnapshotReceivedRef.current > 0
-      ? Math.min(0.12, Math.max(0, (performance.now() - lastSnapshotReceivedRef.current) / 1_000))
+      ? Math.min(0.24, Math.max(0, (performance.now() - lastSnapshotReceivedRef.current) / 1_000))
       : 0
 
     for (const [id] of renderPlayersRef.current) {
@@ -260,17 +268,27 @@ export default function OnlineSnake({ onExit }: Props) {
       rendered.hue = target.hue
       rendered.score = target.score
       rendered.alive = target.alive
-      rendered.angle += angleDifference(rendered.angle, target.angle) * factor
-      const predictionDistance = target.alive ? snapshotRef.current.speed * predictionSeconds : 0
-      const predictedX = Math.cos(target.angle) * predictionDistance
-      const predictedY = Math.sin(target.angle) * predictionDistance
-      rendered.trail = target.trail.map((point, index) => {
-        const current = rendered.trail[index] ?? point
-        return {
-          x: current.x + (point.x + predictedX - current.x) * factor,
-          y: current.y + (point.y + predictedY - current.y) * factor,
-        }
-      })
+      rendered.isBot = target.isBot
+      const targetLength = target.length ?? trailLength(target.trail)
+      rendered.length += (targetLength - rendered.length) * correctionFactor
+      rendered.bodyRadius = target.bodyRadius
+      rendered.headRadius = target.headRadius
+      rendered.angle += angleDifference(rendered.angle, target.angle) * turnFactor
+      if (!target.alive) continue
+
+      rendered.trail = advanceTrail(
+        rendered.trail,
+        rendered.angle,
+        snapshotRef.current.speed * elapsed,
+        rendered.length,
+      )
+      const predictedTrail = advanceTrail(
+        target.trail,
+        target.angle,
+        snapshotRef.current.speed * predictionSeconds,
+        targetLength,
+      )
+      rendered.trail = reconcileTrail(rendered.trail, predictedTrail, correctionFactor)
     }
 
     const mine = playerIdRef.current ? renderPlayersRef.current.get(playerIdRef.current) : undefined
@@ -286,6 +304,9 @@ export default function OnlineSnake({ onExit }: Props) {
       x: cameraRef.current.x + (head.x - cameraRef.current.x) * cameraFactor,
       y: cameraRef.current.y + (head.y - cameraRef.current.y) * cameraFactor,
     }
+    const targetZoom = cameraZoomForLength(mine.length)
+    const zoomFactor = 1 - Math.exp(-elapsed * 2.8)
+    zoomRef.current += (targetZoom - zoomRef.current) * zoomFactor
   }, [])
 
   const renderMinimap = useCallback(() => {
@@ -368,6 +389,7 @@ export default function OnlineSnake({ onExit }: Props) {
     if (!context) return
     const ratio = pixelRatioRef.current
     const camera = cameraRef.current
+    const zoom = zoomRef.current
     const worldSize = worldSizeRef.current
     const arenaRadius = arenaRadiusRef.current
 
@@ -380,9 +402,9 @@ export default function OnlineSnake({ onExit }: Props) {
     context.fillStyle = background
     context.fillRect(0, 0, viewport.width, viewport.height)
 
-    const dotSpacing = 38
-    const dotOffsetX = ((viewport.width / 2 - camera.x) % dotSpacing + dotSpacing) % dotSpacing
-    const dotOffsetY = ((viewport.height / 2 - camera.y) % dotSpacing + dotSpacing) % dotSpacing
+    const dotSpacing = 38 * zoom
+    const dotOffsetX = ((viewport.width / 2 - camera.x * zoom) % dotSpacing + dotSpacing) % dotSpacing
+    const dotOffsetY = ((viewport.height / 2 - camera.y * zoom) % dotSpacing + dotSpacing) % dotSpacing
     context.fillStyle = 'rgba(167, 243, 208, 0.065)'
     for (let x = dotOffsetX; x < viewport.width; x += dotSpacing) {
       for (let y = dotOffsetY; y < viewport.height; y += dotSpacing) {
@@ -392,11 +414,21 @@ export default function OnlineSnake({ onExit }: Props) {
       }
     }
 
-    const arenaCenter = screenPoint({ x: worldSize / 2, y: worldSize / 2 }, camera, viewport.width, viewport.height)
+    context.save()
+    context.translate(viewport.width / 2, viewport.height / 2)
+    context.scale(zoom, zoom)
+    context.translate(-camera.x, -camera.y)
+
+    const arenaCenter = { x: worldSize / 2, y: worldSize / 2 }
     context.save()
     context.fillStyle = 'rgba(2, 8, 18, 0.82)'
     context.beginPath()
-    context.rect(0, 0, viewport.width, viewport.height)
+    context.rect(
+      camera.x - viewport.width / (2 * zoom),
+      camera.y - viewport.height / (2 * zoom),
+      viewport.width / zoom,
+      viewport.height / zoom,
+    )
     context.arc(arenaCenter.x, arenaCenter.y, arenaRadius, 0, Math.PI * 2, true)
     context.fill('evenodd')
     context.shadowColor = 'rgba(251, 113, 133, 0.8)'
@@ -416,8 +448,11 @@ export default function OnlineSnake({ onExit }: Props) {
     context.restore()
 
     for (const food of snapshotRef.current.foods ?? []) {
-      const point = screenPoint(food, camera, viewport.width, viewport.height)
-      if (point.x < -30 || point.y < -30 || point.x > viewport.width + 30 || point.y > viewport.height + 30) continue
+      const point = food
+      const halfWorldWidth = viewport.width / (2 * zoom)
+      const halfWorldHeight = viewport.height / (2 * zoom)
+      if (point.x < camera.x - halfWorldWidth - 30 || point.y < camera.y - halfWorldHeight - 30
+        || point.x > camera.x + halfWorldWidth + 30 || point.y > camera.y + halfWorldHeight + 30) continue
       context.save()
       context.shadowColor = `hsla(${food.hue}, 95%, 62%, 0.95)`
       context.shadowBlur = 15
@@ -434,14 +469,6 @@ export default function OnlineSnake({ onExit }: Props) {
         context.lineWidth = 1.2
         context.stroke()
       }
-      if ((food.value ?? 1) >= 3) {
-        context.shadowBlur = 0
-        context.fillStyle = '#06251f'
-        context.font = '900 7px Cairo, sans-serif'
-        context.textAlign = 'center'
-        context.textBaseline = 'middle'
-        context.fillText(String(food.value), point.x, point.y + 0.5)
-      }
       context.restore()
     }
 
@@ -452,10 +479,19 @@ export default function OnlineSnake({ onExit }: Props) {
     const players = currentPlayers.sort((a, b) => Number(a.id === playerIdRef.current) - Number(b.id === playerIdRef.current))
     for (const player of players) {
       if (!player.alive || player.trail.length < 2) continue
-      const trail = player.trail.map((point) => screenPoint(point, camera, viewport.width, viewport.height))
+      const trail = player.trail
       const head = trail[0]
-      const visible = trail.some((point) => point.x > -80 && point.y > -80 && point.x < viewport.width + 80 && point.y < viewport.height + 80)
+      const halfWorldWidth = viewport.width / (2 * zoom)
+      const halfWorldHeight = viewport.height / (2 * zoom)
+      const visible = trail.some((point) => (
+        point.x > camera.x - halfWorldWidth - 80 && point.y > camera.y - halfWorldHeight - 80
+        && point.x < camera.x + halfWorldWidth + 80 && point.y < camera.y + halfWorldHeight + 80
+      ))
       if (!visible) continue
+
+      const bodyRadius = player.bodyRadius ?? bodyRadiusForLength(player.length)
+      const headRadius = player.headRadius ?? headRadiusForLength(player.length)
+      const bodyWidth = bodyRadius * 2
 
       context.save()
       context.globalAlpha = player.alive ? 1 : 0.36
@@ -464,12 +500,12 @@ export default function OnlineSnake({ onExit }: Props) {
       context.beginPath()
       traceSmoothTrail(context, trail)
       context.strokeStyle = 'rgba(1, 14, 13, 0.78)'
-      context.lineWidth = BODY_WIDTH + 7
+      context.lineWidth = bodyWidth + 7
       context.stroke()
       context.shadowColor = `hsla(${player.hue}, 88%, 58%, 0.68)`
       context.shadowBlur = 14
       context.strokeStyle = `hsl(${player.hue}, 78%, 52%)`
-      context.lineWidth = BODY_WIDTH
+      context.lineWidth = bodyWidth
       context.stroke()
       context.shadowBlur = 0
       context.strokeStyle = 'rgba(255,255,255,0.3)'
@@ -480,27 +516,28 @@ export default function OnlineSnake({ onExit }: Props) {
       context.shadowBlur = 12
       context.fillStyle = `hsl(${player.hue}, 82%, 54%)`
       context.beginPath()
-      context.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2)
+      context.arc(head.x, head.y, headRadius, 0, Math.PI * 2)
       context.fill()
       context.shadowBlur = 0
 
       const forward = { x: Math.cos(player.angle), y: Math.sin(player.angle) }
       const side = { x: -forward.y, y: forward.x }
       for (const direction of [-1, 1]) {
-        const eyeX = head.x + forward.x * 4.5 + side.x * direction * 4.6
-        const eyeY = head.y + forward.y * 4.5 + side.y * direction * 4.6
+        const eyeX = head.x + forward.x * headRadius * 0.41 + side.x * direction * headRadius * 0.42
+        const eyeY = head.y + forward.y * headRadius * 0.41 + side.y * direction * headRadius * 0.42
+        const eyeRadius = Math.max(2.8, headRadius * 0.24)
         context.fillStyle = '#f8fafc'
         context.beginPath()
-        context.arc(eyeX, eyeY, 2.8, 0, Math.PI * 2)
+        context.arc(eyeX, eyeY, eyeRadius, 0, Math.PI * 2)
         context.fill()
         context.fillStyle = '#07150f'
         context.beginPath()
-        context.arc(eyeX + forward.x, eyeY + forward.y, 1.35, 0, Math.PI * 2)
+        context.arc(eyeX + forward.x * eyeRadius * 0.36, eyeY + forward.y * eyeRadius * 0.36, eyeRadius * 0.48, 0, Math.PI * 2)
         context.fill()
       }
 
       if (player.alive && player.id === leaderId) {
-        const crownY = head.y - HEAD_RADIUS - 7
+        const crownY = head.y - headRadius - 7
         context.save()
         context.translate(head.x, crownY)
         context.shadowColor = 'rgba(250, 204, 21, 0.85)'
@@ -529,14 +566,17 @@ export default function OnlineSnake({ onExit }: Props) {
       }
 
       context.globalAlpha = player.alive ? 0.96 : 0.42
-      context.font = '800 11px Cairo, sans-serif'
+      context.font = `800 ${11 / zoom}px Cairo, sans-serif`
       context.textAlign = 'center'
       context.fillStyle = '#f8fafc'
       context.shadowColor = 'rgba(0,0,0,0.95)'
       context.shadowBlur = 7
-      context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - (player.id === leaderId ? 38 : 21))
+      const labelOffset = (player.id === leaderId ? headRadius + 27 : headRadius + 10) / zoom
+      context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - labelOffset)
       context.restore()
     }
+
+    context.restore()
 
     const pointer = pointerRef.current
     if (pointer.active) {

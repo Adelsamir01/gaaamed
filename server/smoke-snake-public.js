@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { SNAKE_BOT_COUNT } from './snake-arena.js'
 
 const url = process.env.SNAKE_SMOKE_URL || 'wss://dedos.adelsamir.com'
 const holdMs = Math.max(0, Number(process.env.SNAKE_SMOKE_HOLD_MS) || 0)
@@ -69,6 +70,14 @@ try {
       if (foodSnapshot.players?.some((player) => 'boosting' in player)) {
         throw new Error('The removed boost state is still present in the live snapshot.')
       }
+      const bots = foodSnapshot.players?.filter((player) => player.isBot) ?? []
+      if (bots.length < SNAKE_BOT_COUNT) {
+        throw new Error('The public arena is missing its bot snakes.')
+      }
+      if (foodSnapshot.players?.some((player) => !Number.isFinite(player.length)
+        || !Number.isFinite(player.bodyRadius) || !Number.isFinite(player.headRadius))) {
+        throw new Error('Snake growth dimensions are missing from the live snapshot.')
+      }
       if (!controlsSent) {
         startingHead = sharedSnapshots[0].players.find((player) => player.id === joined[0].playerId)?.trail?.[0]
         controlsSentAt = received[0].length
@@ -88,6 +97,7 @@ try {
           ok: true,
           arenaId: joined[0].arenaId,
           players: clients.length,
+          bots: bots.length,
           foodCount: foodSnapshot.foods.length,
           baseSpeed: foodSnapshot.speed,
           arenaRadius,

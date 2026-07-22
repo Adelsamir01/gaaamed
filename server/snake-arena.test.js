@@ -5,8 +5,11 @@ import {
   SnakeArenaManager,
   SNAKE_ARENA_RADIUS,
   SNAKE_BASE_SPEED,
+  SNAKE_BOT_COUNT,
   SNAKE_FOOD_COUNT,
   SNAKE_WORLD_SIZE,
+  snakeBodyRadius,
+  snakeHeadRadius,
 } from './snake-arena.js'
 
 function sequenceRandom(values) {
@@ -25,9 +28,27 @@ test('public arena accepts random players and broadcasts their shared player cou
   manager.join(second, { name: 'سارة', avatar: '🎮' })
 
   assert.equal(manager.arenas.size, 1)
-  assert.equal([...manager.arenas.values()][0].players.size, 2)
+  assert.equal([...manager.arenas.values()][0].humanPlayerCount(), 2)
+  assert.equal([...manager.arenas.values()][0].players.size, 2 + SNAKE_BOT_COUNT)
   assert.ok(sent.some(({ socket, message }) => socket === second && message.type === 'snake_public_joined'))
-  assert.ok(sent.some(({ message }) => message.type === 'snake_public_count' && message.playerCount === 2))
+  assert.ok(sent.some(({ message }) => message.type === 'snake_public_count' && message.playerCount === 2 + SNAKE_BOT_COUNT))
+})
+
+test('bot snakes populate every public arena without consuming human slots', () => {
+  const manager = new SnakeArenaManager({ send: () => {}, random: () => 0.4, maxPlayers: 1, botCount: 3 })
+  const first = {}
+  const second = {}
+  manager.track(first)
+  manager.track(second)
+  manager.join(first, { name: 'First' })
+  manager.join(second, { name: 'Second' })
+
+  assert.equal(manager.arenas.size, 2)
+  for (const arena of manager.arenas.values()) {
+    assert.equal(arena.humanPlayerCount(), 1)
+    assert.equal([...arena.players.values()].filter((player) => player.isBot).length, 3)
+    assert.equal(arena.snapshot().players.filter((player) => player.isBot).length, 3)
+  }
 })
 
 test('server owns movement and limits steering turn speed', () => {
@@ -54,6 +75,30 @@ test('food collection awards points and growth based on food size', () => {
   assert.equal(player.score, 5)
   assert.equal(player.length, startLength + 45)
   assert.equal(arena.foods.length, 1)
+  assert.ok(snakeBodyRadius(player.length) > snakeBodyRadius(startLength))
+  assert.ok(snakeHeadRadius(player.length) > snakeHeadRadius(startLength))
+  const snapshotPlayer = arena.snapshot().players.find(({ id }) => id === player.id)
+  assert.equal(snapshotPlayer.length, player.length)
+  assert.ok(snapshotPlayer.bodyRadius > 8.5)
+})
+
+test('bot snakes steer toward food, move, and automatically respawn after a crash', () => {
+  const arena = new SnakeArena('bots', { random: () => 0.5 })
+  arena.addBots(1)
+  const bot = [...arena.players.values()][0]
+  const head = { ...bot.trail[0] }
+  arena.foods = [{ id: 99, x: head.x, y: head.y + 200, hue: 40, radius: 8, value: 3, source: 'arena' }]
+  bot.botThinkIn = 0
+  arena.tick(0.05)
+
+  assert.notDeepEqual(bot.trail[0], head)
+  assert.notEqual(bot.targetAngle, bot.angle)
+
+  bot.alive = false
+  bot.respawnIn = 0.01
+  arena.tick(0.05)
+  assert.equal(bot.alive, true)
+  assert.equal(bot.score, 0)
 })
 
 test('arena has more food with visibly different sizes and point values', () => {
@@ -136,7 +181,7 @@ test('a snake dies on another snake body and becomes food', () => {
   second.targetAngle = 0
   second.length = 240
   second.trail = [
-    { x: 1_020, y: 1_000 },
+    { x: 1_028, y: 1_000 },
     { x: 1_004.5, y: 1_000 },
     { x: 990, y: 1_000 },
   ]
