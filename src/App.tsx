@@ -80,7 +80,10 @@ function Shell() {
     if (!onboarded) return
     const handleNotificationChat = (event: Event) => {
       const threadId = (event as CustomEvent<{ threadId?: string }>).detail?.threadId
-      if (threadId) openChat(threadId)
+      if (threadId) {
+        consumePendingNotificationThread()
+        openChat(threadId)
+      }
     }
     window.addEventListener(OPEN_NOTIFICATION_CHAT_EVENT, handleNotificationChat)
     const pendingThreadId = consumePendingNotificationThread()

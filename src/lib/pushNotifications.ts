@@ -15,11 +15,16 @@ function cleanThreadId(value: unknown): string | null {
   return /^[A-Za-z0-9_-]{1,128}$/.test(threadId) ? threadId : null
 }
 
-function openNotificationChat(action: ActionPerformed): void {
-  const threadId = cleanThreadId(action.notification.data?.threadId)
-  if (!threadId) return
+export function openNotificationThread(value: unknown): boolean {
+  const threadId = cleanThreadId(value)
+  if (!threadId) return false
   pendingThreadId = threadId
   window.dispatchEvent(new CustomEvent(OPEN_NOTIFICATION_CHAT_EVENT, { detail: { threadId } }))
+  return true
+}
+
+function openNotificationChat(action: ActionPerformed): void {
+  openNotificationThread(action.notification.data?.threadId)
 }
 
 export function consumePendingNotificationThread(): string | null {

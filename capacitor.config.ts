@@ -15,7 +15,9 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true,
     },
     PushNotifications: {
-      presentationOptions: ['sound', 'alert', 'banner', 'list'],
+      // The app renders its own clickable notification while foregrounded.
+      // Keep native banners and sounds for background/lock-screen delivery only.
+      presentationOptions: [],
     },
   },
 };

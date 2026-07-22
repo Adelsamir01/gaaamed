@@ -4,7 +4,7 @@ import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineCl
 import { useApp } from '@/store/AppContext'
 import type { PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
-import { getCurrentPushToken, initializePushNotifications, onPushToken } from '@/lib/pushNotifications'
+import { getCurrentPushToken, initializePushNotifications, onPushToken, openNotificationThread } from '@/lib/pushNotifications'
 
 export interface Opponent {
   name: string
@@ -89,12 +89,15 @@ function trimMessageCache(messages: Record<string, ChatMessage[]>): Record<strin
   )
 }
 
-function showChatNotification(message: ServerChatMessage) {
+function showChatNotification(threadId: string, message: ServerChatMessage) {
   const preview = message.kind === 'game_invite' ? 'دعوة للعب 🎮' : message.text.trim().slice(0, 72)
   toast.custom((toastId) => (
     <button
       type="button"
-      onClick={() => toast.dismiss(toastId)}
+      onClick={() => {
+        toast.dismiss(toastId)
+        openNotificationThread(threadId)
+      }}
       className="group flex w-[min(92vw,370px)] items-center gap-3 rounded-[1.35rem] border border-emerald-300/30 bg-gradient-to-l from-slate-950 via-[#101f2a] to-emerald-950 p-3 text-right text-white shadow-[0_18px_55px_rgba(2,12,23,0.7),0_0_28px_rgba(16,185,129,0.16)]"
       dir="rtl"
       aria-label={`رسالة جديدة من ${message.senderName}`}
@@ -518,7 +521,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId, threadId })
           }
           if (message.senderId !== meRef.current?.userId && openThreadRef.current !== threadId) {
-            showChatNotification(message)
+            showChatNotification(threadId, message)
           }
           break
         }
