@@ -16,6 +16,8 @@ interface Props {
   orientation?: Color
   selected?: Square | null
   legalMoves?: Move[]
+  premove?: { from: Square; to: Square } | null
+  premoveMode?: boolean
   lastMove?: { from: string; to: string } | null
   disabled?: boolean
   pending?: boolean
@@ -27,6 +29,8 @@ export default function ChessBoard({
   orientation = 'w',
   selected = null,
   legalMoves = [],
+  premove = null,
+  premoveMode = false,
   lastMove = null,
   disabled = false,
   pending = false,
@@ -48,7 +52,7 @@ export default function ChessBoard({
       className={cn(
         'relative grid aspect-square w-full max-w-[390px] grid-cols-8 overflow-hidden rounded-[1.2rem] border-[3px] border-[#583c25] bg-[#583c25]',
         'shadow-[0_18px_45px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.08)]',
-        pending && 'after:absolute after:inset-0 after:z-20 after:bg-white/[0.025]',
+        pending && 'after:pointer-events-none after:absolute after:inset-0 after:z-20 after:bg-white/[0.025]',
       )}
       dir="ltr"
       role="grid"
@@ -61,6 +65,7 @@ export default function ChessBoard({
         const dark = (fileIndex + rank) % 2 === 1
         const legal = legalTargets.get(square)
         const isSelected = selected === square
+        const isPremove = premove?.from === square || premove?.to === square
         const isLast = lastMove?.from === square || lastMove?.to === square
         const showFile = index >= 56
         const showRank = index % 8 === 0
@@ -77,12 +82,31 @@ export default function ChessBoard({
               'relative grid aspect-square min-h-0 place-items-center overflow-hidden disabled:cursor-default',
               dark ? 'bg-[#769656]' : 'bg-[#eeeed2]',
               isLast && (dark ? 'bg-[#a7b64e]' : 'bg-[#f4f06a]'),
+              isPremove && 'z-[8] bg-sky-400/65 ring-[3px] ring-inset ring-sky-200/90',
               isSelected && 'z-10 ring-[3px] ring-inset ring-amber-300 bg-amber-300/70',
               checkedKing === square && 'animate-pulse bg-rose-500 ring-[3px] ring-inset ring-rose-200',
             )}
           >
-            {legal && !piece && <span className="absolute z-10 h-[24%] w-[24%] rounded-full bg-slate-900/42 shadow-sm" />}
-            {legal && piece && <span className="absolute inset-[7%] z-10 rounded-full border-[4px] border-slate-900/38" />}
+            {legal && !piece && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className={cn(
+                  'pointer-events-none absolute z-10 h-[27%] w-[27%] rounded-full shadow-[0_1px_5px_rgba(0,0,0,0.28)] ring-2 ring-white/35',
+                  premoveMode ? 'bg-sky-700/75' : 'bg-slate-900/58',
+                )}
+              />
+            )}
+            {legal && piece && (
+              <motion.span
+                initial={{ scale: 0.82, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={cn(
+                  'pointer-events-none absolute inset-[5%] z-10 rounded-full border-[5px] shadow-inner',
+                  premoveMode ? 'border-sky-600/75' : 'border-slate-900/50',
+                )}
+              />
+            )}
             {piece && (
               <motion.span
                 key={`${square}-${piece.color}-${piece.type}`}

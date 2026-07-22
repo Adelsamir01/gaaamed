@@ -10,10 +10,12 @@ import ChessBoard, { PromotionPicker } from './ChessBoard'
 import { CapturedPieces, ChessPlayerCard, MoveStrip } from './ChessHud'
 import { chessEndState, chooseChessMove } from './engine.js'
 import { chessReasonLabel } from './presentation'
+import { premoveOptions, resolvePremove, type ChessPremove } from './premove'
 
 interface PromotionChoice {
   from: Square
   to: Square
+  premove: boolean
 }
 
 export default function ChessGame({ config, onFinish }: GameProps) {
@@ -21,15 +23,23 @@ export default function ChessGame({ config, onFinish }: GameProps) {
   const [chess] = useState(() => new Chess())
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const premoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const premoveRef = useRef<ChessPremove | null>(null)
   const finishedRef = useRef(false)
   const [fen, setFen] = useState(() => chess.fen())
   const [history, setHistory] = useState<Move[]>([])
   const [selected, setSelected] = useState<Square | null>(null)
   const [lastMove, setLastMove] = useState<Move | null>(null)
   const [promotion, setPromotion] = useState<PromotionChoice | null>(null)
+  const [premove, setPremove] = useState<ChessPremove | null>(null)
   const [ending, setEnding] = useState<{ winner: 'w' | 'b' | null; reason: string } | null>(null)
   const [confirmResign, setConfirmResign] = useState(false)
   const againstBot = config.mode === 'bot'
+
+  const updatePremove = useCallback((next: ChessPremove | null) => {
+    premoveRef.current = next
+    setPremove(next)
+  }, [])
 
   const sync = useCallback((move?: Move | null) => {
     setFen(chess.fen())
@@ -41,6 +51,7 @@ export default function ChessGame({ config, onFinish }: GameProps) {
   const finish = useCallback((winner: 'w' | 'b' | null, reason: string) => {
     if (finishedRef.current) return
     finishedRef.current = true
+    updatePremove(null)
     setEnding({ winner, reason })
     const movesPlayed = chess.history().length
     const outcome = winner == null ? 'draw' : winner === 'w' ? 'win' : 'loss'
@@ -61,7 +72,7 @@ export default function ChessGame({ config, onFinish }: GameProps) {
         detail: `المباراة استمرت ${Math.ceil(movesPlayed / 2)} نقلة كاملة.`,
       })
     }, 1_500)
-  }, [againstBot, chess, onFinish])
+  }, [againstBot, chess, onFinish, updatePremove])
 
   const finishIfNeeded = useCallback(() => {
     const end = chessEndState(chess)
@@ -86,16 +97,34 @@ export default function ChessGame({ config, onFinish }: GameProps) {
 
   const position = useMemo(() => new Chess(fen), [fen])
   const botThinking = againstBot && position.turn() === 'b' && !position.isGameOver() && !ending
-  const legalMoves = useMemo(() => selected
-    ? position.moves({ square: selected, verbose: true })
-    : [], [position, selected])
+  const legalMoves = useMemo(() => {
+    if (!selected) return []
+    return botThinking
+      ? premoveOptions(fen, selected, 'w')
+      : position.moves({ square: selected, verbose: true })
+  }, [botThinking, fen, position, selected])
+
+  const queuePremove = (from: Square, to: Square, promotionPiece: PieceSymbol = 'q') => {
+    if (!botThinking || finishedRef.current) return
+    updatePremove({ from, to, promotion: promotionPiece })
+    setSelected(null)
+    sounds.pop()
+  }
 
   const chooseSquare = (square: Square) => {
-    if (finishedRef.current || botThinking) return
-    if (againstBot && chess.turn() === 'b') return
+    if (finishedRef.current) return
+    if (botThinking && premove && (square === premove.from || square === premove.to)) {
+      updatePremove(null)
+      setSelected(null)
+      sounds.click()
+      return
+    }
+    if (againstBot && chess.turn() === 'b' && !botThinking) return
     const piece = chess.get(square)
+    const selectableColor = botThinking ? 'w' : chess.turn()
     if (!selected) {
-      if (piece?.color === chess.turn()) {
+      if (piece?.color === selectableColor) {
+        if (botThinking) updatePremove(null)
         sounds.click()
         setSelected(square)
       }
@@ -105,7 +134,8 @@ export default function ChessGame({ config, onFinish }: GameProps) {
       setSelected(null)
       return
     }
-    if (piece?.color === chess.turn()) {
+    if (piece?.color === selectableColor) {
+      if (botThinking) updatePremove(null)
       sounds.click()
       setSelected(square)
       return
@@ -117,32 +147,50 @@ export default function ChessGame({ config, onFinish }: GameProps) {
       return
     }
     if (candidates.some((move) => move.promotion)) {
-      setPromotion({ from: selected, to: square })
+      setPromotion({ from: selected, to: square, premove: botThinking })
       return
     }
-    play(selected, square)
+    if (botThinking) queuePremove(selected, square)
+    else play(selected, square)
   }
 
   useEffect(() => {
-    if (!botThinking || finishedRef.current) return
+    if (!botThinking || finishedRef.current || promotion?.premove) return
     const expectedFen = chess.fen()
     botTimerRef.current = setTimeout(() => {
       const botMove = chooseChessMove(expectedFen, config.difficulty)
-      if (botMove && chess.fen() === expectedFen) play(botMove.from, botMove.to, botMove.promotion ?? 'q')
-    }, 380)
+      if (!botMove || chess.fen() !== expectedFen) return
+      const botMoved = play(botMove.from, botMove.to, botMove.promotion ?? 'q')
+      const queued = premoveRef.current
+      if (!botMoved || !queued || chess.isGameOver()) {
+        if (chess.isGameOver()) updatePremove(null)
+        return
+      }
+      premoveTimerRef.current = setTimeout(() => {
+        const latest = premoveRef.current
+        if (!latest || finishedRef.current) return
+        const resolved = resolvePremove(chess.fen(), latest)
+        updatePremove(null)
+        if (resolved) play(resolved.from, resolved.to, resolved.promotion)
+        else sounds.wrong()
+      }, 220)
+    }, 900)
     return () => {
       if (botTimerRef.current) clearTimeout(botTimerRef.current)
     }
-  }, [botThinking, chess, config.difficulty, fen, play])
+  }, [botThinking, chess, config.difficulty, fen, play, promotion?.premove, updatePremove])
 
   useEffect(() => () => {
     if (botTimerRef.current) clearTimeout(botTimerRef.current)
+    if (premoveTimerRef.current) clearTimeout(premoveTimerRef.current)
     if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
   }, [])
 
   const undo = () => {
     if (finishedRef.current || history.length === 0) return
     if (botTimerRef.current) clearTimeout(botTimerRef.current)
+    if (premoveTimerRef.current) clearTimeout(premoveTimerRef.current)
+    updatePremove(null)
     chess.undo()
     if (againstBot && chess.turn() === 'b' && chess.history().length > 0) chess.undo()
     sounds.flip()
@@ -155,6 +203,7 @@ export default function ChessGame({ config, onFinish }: GameProps) {
       window.setTimeout(() => setConfirmResign(false), 2_500)
       return
     }
+    updatePremove(null)
     const winner = againstBot ? 'b' : chess.turn() === 'w' ? 'b' : 'w'
     finish(winner, 'resignation')
   }
@@ -165,7 +214,9 @@ export default function ChessGame({ config, onFinish }: GameProps) {
   const status = ending
     ? `${chessReasonLabel(ending.reason)} ${ending.winner ? '🏆' : '🤝'}`
     : botThinking
-      ? 'الكمبيوتر بيفكر…'
+      ? premove
+        ? `نقلة مسبقة جاهزة: ${premove.from} ← ${premove.to}`
+        : 'الكمبيوتر بيفكر… اختار نقلتك من دلوقتي'
       : position.isCheck()
         ? `كش! دور ${turn === 'w' ? whiteName : blackName}`
         : `دور ${turn === 'w' ? whiteName : blackName}`
@@ -196,8 +247,10 @@ export default function ChessGame({ config, onFinish }: GameProps) {
           fen={fen}
           selected={selected}
           legalMoves={legalMoves}
+          premove={premove}
+          premoveMode={botThinking}
           lastMove={lastMove}
-          disabled={!!ending || botThinking}
+          disabled={!!ending}
           pending={botThinking}
           onSquare={chooseSquare}
         />
@@ -237,9 +290,10 @@ export default function ChessGame({ config, onFinish }: GameProps) {
 
       {promotion && (
         <PromotionPicker
-          color={position.turn()}
+          color={promotion.premove ? 'w' : position.turn()}
           onPick={(piece) => {
-            play(promotion.from, promotion.to, piece)
+            if (promotion.premove) queuePremove(promotion.from, promotion.to, piece)
+            else play(promotion.from, promotion.to, piece)
             setPromotion(null)
           }}
         />

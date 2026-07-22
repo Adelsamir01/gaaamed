@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import ChessBoard, { PromotionPicker } from './ChessBoard'
 import { CapturedPieces, ChessPlayerCard, MoveStrip } from './ChessHud'
 import { chessReasonLabel } from './presentation'
+import { premoveOptions, resolvePremove, type ChessPremove } from './premove'
 
 interface ChessMoveState {
   from: Square
@@ -37,6 +38,11 @@ interface ChessState {
 interface PromotionChoice {
   from: Square
   to: Square
+  premove: boolean
+}
+
+interface QueuedPremove extends ChessPremove {
+  afterHistory: number
 }
 
 export default function OnlineChess({ onFinish }: GameProps) {
@@ -47,12 +53,19 @@ export default function OnlineChess({ onFinish }: GameProps) {
   const [game, setGame] = useState<ChessState | null>(null)
   const [selected, setSelected] = useState<Square | null>(null)
   const [promotion, setPromotion] = useState<PromotionChoice | null>(null)
+  const [premove, setPremove] = useState<QueuedPremove | null>(null)
   const [pending, setPending] = useState(false)
   const [clientNow, setClientNow] = useState(0)
   const [receivedAt, setReceivedAt] = useState(0)
   const [confirmResign, setConfirmResign] = useState(false)
   const finishedRef = useRef(false)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const premoveRef = useRef<QueuedPremove | null>(null)
+
+  const updatePremove = useCallback((next: QueuedPremove | null) => {
+    premoveRef.current = next
+    setPremove(next)
+  }, [])
 
   const finish = useCallback((state: ChessState) => {
     if (finishedRef.current || !state.ended) return
@@ -89,6 +102,20 @@ export default function OnlineChess({ onFinish }: GameProps) {
       const receivedAtNow = performance.now()
       setReceivedAt(receivedAtNow)
       setClientNow(receivedAtNow)
+      let queuedMove: ChessPremove | null = null
+      const queued = premoveRef.current
+      if (
+        queued
+        && event.msg.type === 'chess_state'
+        && event.msg.effect === 'move'
+        && next.turnSlot === mySlot
+        && next.history.length > queued.afterHistory
+      ) {
+        queuedMove = resolvePremove(next.fen, queued)
+        updatePremove(null)
+        setPromotion(null)
+        if (!queuedMove) sounds.wrong()
+      }
       setGame((current) => {
         if (event.msg.type === 'chess_state' && event.msg.effect === 'move' && current?.lastMove?.san !== next.lastMove?.san) {
           if (next.lastMove?.color === myColor) sounds.pop()
@@ -96,17 +123,32 @@ export default function OnlineChess({ onFinish }: GameProps) {
         }
         return next
       })
-      setPending(false)
+      if (event.msg.type === 'chess_state' && event.msg.effect === 'move') setPromotion(null)
+      setPending(queuedMove !== null)
       setSelected(null)
-      if (event.msg.type === 'chess_rejected') sounds.wrong()
-      if (next.ended) finish(next)
+      if (event.msg.type === 'chess_rejected') {
+        updatePremove(null)
+        sounds.wrong()
+      }
+      if (next.ended) {
+        updatePremove(null)
+        finish(next)
+      } else if (queuedMove) {
+        sounds.pop()
+        sendRaw({
+          type: 'chess_move',
+          from: queuedMove.from,
+          to: queuedMove.to,
+          promotion: queuedMove.promotion,
+        })
+      }
     })
     requestGameSync()
     return () => {
       unsubscribe()
       if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
     }
-  }, [finish, myColor, requestGameSync, subscribe])
+  }, [finish, myColor, mySlot, requestGameSync, sendRaw, subscribe, updatePremove])
 
   useEffect(() => {
     const timer = window.setInterval(() => setClientNow(performance.now()), 250)
@@ -115,9 +157,13 @@ export default function OnlineChess({ onFinish }: GameProps) {
 
   const fen = game?.fen
   const chess = useMemo(() => fen ? new Chess(fen) : null, [fen])
-  const legalMoves = useMemo(() => selected && chess
-    ? chess.moves({ square: selected, verbose: true })
-    : [], [chess, selected])
+  const myTurn = game?.turnSlot === mySlot
+  const legalMoves = useMemo(() => {
+    if (!selected || !chess || !game) return []
+    return myTurn
+      ? chess.moves({ square: selected, verbose: true })
+      : premoveOptions(game.fen, selected, myColor)
+  }, [chess, game, myColor, myTurn, selected])
 
   const displayClock = (playerSlot: number) => {
     if (!game) return 0
@@ -128,15 +174,37 @@ export default function OnlineChess({ onFinish }: GameProps) {
 
   const sendMove = (from: Square, to: Square, promotionPiece: PieceSymbol = 'q') => {
     if (!game || game.ended || pending || game.turnSlot !== mySlot) return
+    updatePremove(null)
     setPending(true)
     sendRaw({ type: 'chess_move', from, to, promotion: promotionPiece })
   }
 
+  const queuePremove = (from: Square, to: Square, promotionPiece: PieceSymbol = 'q') => {
+    if (!game || game.ended || pending || game.turnSlot === mySlot) return
+    const next: QueuedPremove = {
+      from,
+      to,
+      promotion: promotionPiece,
+      afterHistory: game.history.length,
+    }
+    updatePremove(next)
+    setSelected(null)
+    sounds.pop()
+  }
+
   const chooseSquare = (square: Square) => {
-    if (!game || !chess || game.ended || pending || game.turnSlot !== mySlot) return
+    if (!game || !chess || game.ended || pending) return
+    const choosingPremove = game.turnSlot !== mySlot
+    if (choosingPremove && premove && (square === premove.from || square === premove.to)) {
+      updatePremove(null)
+      setSelected(null)
+      sounds.click()
+      return
+    }
     const piece = chess.get(square)
     if (!selected) {
       if (piece?.color === myColor) {
+        if (choosingPremove) updatePremove(null)
         sounds.click()
         setSelected(square)
       }
@@ -147,6 +215,7 @@ export default function OnlineChess({ onFinish }: GameProps) {
       return
     }
     if (piece?.color === myColor) {
+      if (choosingPremove) updatePremove(null)
       sounds.click()
       setSelected(square)
       return
@@ -158,10 +227,11 @@ export default function OnlineChess({ onFinish }: GameProps) {
       return
     }
     if (candidates.some((move) => move.promotion)) {
-      setPromotion({ from: selected, to: square })
+      setPromotion({ from: selected, to: square, premove: choosingPremove })
       return
     }
-    sendMove(selected, square)
+    if (choosingPremove) queuePremove(selected, square)
+    else sendMove(selected, square)
   }
 
   if (!game || !chess) {
@@ -175,14 +245,15 @@ export default function OnlineChess({ onFinish }: GameProps) {
 
   const opponentSlot = mySlot === 1 ? 2 : 1
   const opponentColor: Color = myColor === 'w' ? 'b' : 'w'
-  const myTurn = game.turnSlot === mySlot
   const status = game.ended
     ? chessReasonLabel(game.reason)
     : pending
       ? 'بنثبت النقلة على الخادم…'
-      : game.check
-        ? myTurn ? 'كش! لازم تحمي ملكك' : `كش على ${opponent?.name ?? 'الخصم'}!`
-        : myTurn ? 'دورك — اختار قطعة' : `دور ${opponent?.name ?? 'الخصم'}…`
+      : premove
+        ? `نقلة مسبقة جاهزة: ${premove.from} ← ${premove.to}`
+        : game.check
+          ? myTurn ? 'كش! لازم تحمي ملكك' : `كش على ${opponent?.name ?? 'الخصم'}!`
+          : myTurn ? 'دورك — اختار قطعة' : `دور ${opponent?.name ?? 'الخصم'}…`
   const history = game.history as unknown as Move[]
 
   return (
@@ -218,8 +289,10 @@ export default function OnlineChess({ onFinish }: GameProps) {
           orientation={myColor}
           selected={selected}
           legalMoves={legalMoves}
+          premove={premove}
+          premoveMode={!myTurn}
           lastMove={game.lastMove}
-          disabled={game.ended || pending || !myTurn}
+          disabled={game.ended || pending}
           pending={pending}
           onSquare={chooseSquare}
         />
@@ -269,7 +342,8 @@ export default function OnlineChess({ onFinish }: GameProps) {
         <PromotionPicker
           color={myColor}
           onPick={(piece) => {
-            sendMove(promotion.from, promotion.to, piece)
+            if (promotion.premove) queuePremove(promotion.from, promotion.to, piece)
+            else sendMove(promotion.from, promotion.to, piece)
             setPromotion(null)
           }}
         />
