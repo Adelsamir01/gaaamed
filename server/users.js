@@ -15,6 +15,11 @@ const CLIENT_ID_RE = /^[A-Za-z0-9_-]{6,64}$/
 const MAX_MESSAGES_PER_THREAD = 200
 const FLUSH_DEBOUNCE_MS = 500
 const HANDLE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
+const PUBLIC_GAME_IDS = [
+  'tictactoe', 'chess', 'memory', 'trivia', 'match3', 'rps',
+  'reaction', 'snake', 'minesweeper', 'connect4', 'shakhbata', 'bank-el7az',
+]
+const MAX_PUBLIC_GAME_COUNT = 1_000_000
 
 export function resolveDataDir() {
   const fromEnv = process.env.DEDOS_DATA_DIR
@@ -54,10 +59,49 @@ function safeXp(value) {
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100_000_000, Math.floor(numeric))) : 0
 }
 
+function safeGameCount(value) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(MAX_PUBLIC_GAME_COUNT, Math.floor(numeric))) : 0
+}
+
+export function sanitizeGameStats(stats) {
+  const clean = {}
+  for (const gameId of PUBLIC_GAME_IDS) {
+    const source = stats?.[gameId]
+    if (!source || typeof source !== 'object' || Array.isArray(source)) continue
+    const played = safeGameCount(source.played)
+    const won = Math.min(played, safeGameCount(source.won))
+    const numericBest = Number(source.bestScore)
+    const bestScore = Number.isFinite(numericBest)
+      ? Math.max(0, Math.min(1_000_000_000, Math.floor(numericBest)))
+      : undefined
+    if (played === 0 && won === 0 && bestScore === undefined) continue
+    clean[gameId] = { played, won, ...(bestScore === undefined ? {} : { bestScore }) }
+  }
+  return clean
+}
+
 export function publicCard(user) {
   return user
     ? { userId: user.userId, handle: user.handle, name: user.name, avatar: user.avatar, xp: safeXp(user.xp) }
     : null
+}
+
+export function publicProfile(user) {
+  if (!user) return null
+  const stats = sanitizeGameStats(user.stats)
+  const totals = Object.values(stats).reduce(
+    (sum, game) => ({ played: sum.played + game.played, won: sum.won + game.won }),
+    { played: 0, won: 0 },
+  )
+  return {
+    ...publicCard(user),
+    stats,
+    totals: {
+      ...totals,
+      winRate: totals.played > 0 ? Math.round((totals.won / totals.played) * 100) : 0,
+    },
+  }
 }
 
 export class UserStore {
@@ -179,6 +223,14 @@ export class UserStore {
 
   areFriends(a, b) {
     return this.friendsOf(a).includes(b)
+  }
+
+  updateStats(userId, stats) {
+    const user = this.byId(userId)
+    if (!user) throw new Error('الحساب غير موجود.')
+    user.stats = sanitizeGameStats(stats)
+    this.usersFile.scheduleSave()
+    return user.stats
   }
 
   // ---------------- إشعارات الهاتف ----------------

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
-import { UserStore, publicCard } from './users.js'
+import { UserStore, publicCard, publicProfile } from './users.js'
 
 const testRoot = path.resolve('server', '.tmp-user-tests')
 
@@ -26,6 +26,30 @@ test('player XP is persisted and included in public leaderboard cards', () => {
 
     const legacyClient = store.identify({ deviceId: 'xp-device', name: 'Adel', avatar: 'A' }).user
     assert.equal(publicCard(legacyClient).xp, 515, 'older clients must not erase stored XP')
+  } finally {
+    store.close()
+  }
+})
+
+test('public profiles persist sanitized per-game statistics and totals', () => {
+  const store = new UserStore(testRoot)
+  try {
+    const user = store.identify({ deviceId: 'stats-device', name: 'Mona', avatar: 'M' }).user
+    store.updateStats(user.userId, {
+      memory: { played: 18.9, won: 7.8, bestScore: 420.7 },
+      chess: { played: 3, won: 99 },
+      unknown: { played: 999, won: 999 },
+      snake: { played: 'bad', won: -4, bestScore: Number.NaN },
+    })
+
+    assert.deepEqual(publicProfile(user), {
+      ...publicCard(user),
+      stats: {
+        chess: { played: 3, won: 3 },
+        memory: { played: 18, won: 7, bestScore: 420 },
+      },
+      totals: { played: 21, won: 10, winRate: 48 },
+    })
   } finally {
     store.close()
   }

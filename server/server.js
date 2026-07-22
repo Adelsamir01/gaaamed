@@ -17,7 +17,7 @@ import {
   broadcastPlayers, destroyShakhbata,
 } from './shakhbata.js'
 import { RoomManager, StatsStore, parseClientMessage, resolveStatsFilePath } from './bankel7az.js'
-import { UserStore, resolveDataDir, publicCard } from './users.js'
+import { UserStore, resolveDataDir, publicCard, publicProfile } from './users.js'
 import { DocumentDatabase, resolveDatabasePath } from './database.js'
 import {
   advanceTriviaQuestion,
@@ -1325,6 +1325,31 @@ wss.on('connection', (ws, request) => {
           handle,
           user: found && found.userId !== ws._userId ? publicCard(found) : null,
         })
+        break
+      }
+
+      case 'user_profile': {
+        if (!ws._userId) return
+        const targetUserId = String(msg.userId || '')
+        const requestId = String(msg.requestId || '').slice(0, 80)
+        const canView = targetUserId === ws._userId || userStore.areFriends(ws._userId, targetUserId)
+        const user = canView ? userStore.byId(targetUserId) : null
+        const activeGame = user ? activeGameOf(targetUserId) : null
+        send(ws, {
+          type: 'user_profile',
+          requestId,
+          profile: user ? {
+            ...publicProfile(user),
+            presence: presenceOf(targetUserId, activeGame),
+            ...(activeGame ? { activeGame } : {}),
+          } : null,
+        })
+        break
+      }
+
+      case 'profile_stats': {
+        if (!ws._userId) return
+        userStore.updateStats(ws._userId, msg.stats)
         break
       }
 

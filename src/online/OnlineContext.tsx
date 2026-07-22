@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineClientStorage, type ConnectionStatus, type ServerMessage } from './client'
 import { useApp } from '@/store/AppContext'
-import type { GameResult, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
+import type { GameResult, PublicPlayerProfile, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 import { getCurrentPushToken, initializePushNotifications, onPushToken, openNotificationThread } from '@/lib/pushNotifications'
 
@@ -159,6 +159,7 @@ interface OnlineContextValue {
   openThreadId: string | null
   setOpenThreadId: (id: string | null) => void
   searchUser: (handle: string) => Promise<PublicUserCard | null>
+  getUserProfile: (userId: string) => Promise<PublicPlayerProfile | null>
   setHandle: (handle: string) => Promise<{ ok: boolean; message?: string }>
   friendAdd: (userId: string) => void
   friendAccept: (userId: string) => void
@@ -232,6 +233,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const openThreadRef = useRef<string | null>(null)
   openThreadRef.current = openThreadId
   const searchResolversRef = useRef(new Map<string, (card: PublicUserCard | null) => void>())
+  const profileResolversRef = useRef(new Map<string, (profile: PublicPlayerProfile | null) => void>())
   const handleResolverRef = useRef<((r: { ok: boolean; message?: string }) => void) | null>(null)
   const threadResolverRef = useRef<((t: ServerThread | null) => void) | null>(null)
   const startGameRef = useRef<() => void>(() => {})
@@ -463,6 +465,15 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'friend_request_received': {
           const requester = msg.user as PublicUserCard | undefined
           toast.info('طلب صداقة جديد 👋', { description: requester ? `${requester.name} يريد إضافتك` : undefined })
+          break
+        }
+        case 'user_profile': {
+          const requestId = String(msg.requestId || '')
+          const resolver = profileResolversRef.current.get(requestId)
+          if (resolver) {
+            profileResolversRef.current.delete(requestId)
+            resolver((msg.profile as PublicPlayerProfile | null) ?? null)
+          }
           break
         }
         case 'session_state':
@@ -714,6 +725,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     }
   }, [status, onboarded, profile.name, profile.avatar, profile.handle, profile.xp])
 
+  // Game history is public profile data, synchronized independently from identity updates.
+  useEffect(() => {
+    if (status !== 'online' || !me) return
+    onlineClient.send({ type: 'profile_stats', stats: app.stats })
+  }, [app.stats, me, status])
+
   const acceptGameInvite = useCallback((inviteToken: string, name: string, avatar: string, threadId: string, messageId: string) => {
     setOpponent(null)
     setFromQuickMatch(false)
@@ -859,6 +876,18 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   const friendAdd = useCallback((userId: string) => {
     onlineClient.send({ type: 'friend_request', userId })
+  }, [])
+
+  const getUserProfile = useCallback((userId: string) => {
+    if (!userId) return Promise.resolve(null)
+    const requestId = crypto.randomUUID()
+    return new Promise<PublicPlayerProfile | null>((resolvePromise) => {
+      profileResolversRef.current.set(requestId, resolvePromise)
+      onlineClient.send({ type: 'user_profile', userId, requestId })
+      window.setTimeout(() => {
+        if (profileResolversRef.current.delete(requestId)) resolvePromise(null)
+      }, 5000)
+    })
   }, [])
 
   const friendAccept = useCallback((userId: string) => {
@@ -1011,7 +1040,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
-      searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
+      searchUser, getUserProfile, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
@@ -1022,7 +1051,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,
-      searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
+      searchUser, getUserProfile, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useState } from 'react'
 import { Gift, Crown, Flame, ChevronLeft, MessageCircle, UserPlus } from 'lucide-react'
 import { useApp } from '@/store/AppContext'
 import { useOnline } from '@/online/OnlineContext'
@@ -10,6 +11,7 @@ import { launchConfetti } from '@/lib/confetti'
 import { buildLeaderboard } from '@/lib/leaderboard'
 import { selectFavoriteGame } from '@/lib/favoriteGame'
 import type { TabId } from './TabBar'
+import PlayerProfileDialog from './PlayerProfileDialog'
 
 interface Props {
   goTab: (t: TabId) => void
@@ -22,6 +24,7 @@ const arabicNumber = new Intl.NumberFormat('ar-EG')
 export default function Home({ goTab, openGame, openChat }: Props) {
   const { profile, canClaimDaily, claimDailyReward, stats } = useApp()
   const { friends, threads, status, onlineUserCount } = useOnline()
+  const [selectedPlayer, setSelectedPlayer] = useState<{ userId: string; isMe: boolean } | null>(null)
 
   const claim = () => {
     if (claimDailyReward()) {
@@ -154,9 +157,11 @@ export default function Home({ goTab, openGame, openChat }: Props) {
       />
       <div className="glass rounded-3xl p-2">
         {leaderboard.map((player, index) => (
-          <div
+          <button
+            type="button"
             key={player.userId}
-            className={`flex items-center gap-3 p-2.5 rounded-2xl ${player.isMe ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}
+            onClick={() => setSelectedPlayer({ userId: player.userId, isMe: player.isMe })}
+            className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-start transition-colors hover:bg-white/5 ${player.isMe ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}
           >
             <span className="w-6 text-center font-black text-sm text-muted-foreground">{rankMarks[index] ?? index + 1}</span>
             <div className="relative">
@@ -180,7 +185,7 @@ export default function Home({ goTab, openGame, openChat }: Props) {
               </p>
               <p className="text-[10px] font-bold text-muted-foreground">مستوى {levelFromXp(player.points)}</p>
             </div>
-          </div>
+          </button>
         ))}
         {friends.length === 0 && (
           <button
@@ -239,6 +244,12 @@ export default function Home({ goTab, openGame, openChat }: Props) {
           </button>
         )}
       </div>
+
+      <PlayerProfileDialog
+        userId={selectedPlayer?.userId ?? null}
+        isCurrentUser={selectedPlayer?.isMe}
+        onClose={() => setSelectedPlayer(null)}
+      />
     </div>
   )
 }

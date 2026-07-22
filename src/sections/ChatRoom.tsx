@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import PlayerProfileDialog from './PlayerProfileDialog'
 
 interface Props {
   threadId: string
@@ -253,6 +254,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const [inviteGame, setInviteGame] = useState<string | null>(null)
   const [inviteRounds, setInviteRounds] = useState<number>(DEFAULT_ROUNDS)
   const [inviteDifficulty, setInviteDifficulty] = useState<Difficulty>('easy')
+  const [profileOpen, setProfileOpen] = useState(false)
   const [showNewestButton, setShowNewestButton] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -382,42 +384,50 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
           <ChevronRight className="w-5 h-5" />
           رجوع
         </button>
-        <div className="relative shrink-0">
-          <AvatarCircle emoji={thread?.avatar ?? '💬'} size="sm" />
-          {dmFriend && dmPresence && (
-            <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full border-2 border-slate-950 bg-slate-950">
-              <StatusDot status={dmPresence} />
-            </span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-sm font-extrabold">{thread?.name ?? 'محادثة'}</p>
-            {status === 'online' && dmFriend?.presence === 'playing' && dmFriend.activeGame && (
-              <span className="max-w-[52%] shrink truncate rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-extrabold text-amber-200">
-                {dmFriend.activeGame.emoji} {dmFriend.activeGame.name}
+        <button
+          type="button"
+          disabled={!dmFriend}
+          onClick={() => setProfileOpen(true)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+          aria-label={dmFriend ? `عرض ملف ${dmFriend.name}` : undefined}
+        >
+          <div className="relative shrink-0">
+            <AvatarCircle emoji={thread?.avatar ?? '💬'} size="sm" />
+            {dmFriend && dmPresence && (
+              <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full border-2 border-slate-950 bg-slate-950">
+                <StatusDot status={dmPresence} />
               </span>
             )}
           </div>
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
-            {thread?.kind === 'group'
-              ? `${thread.memberIds.length} أعضاء`
-              : dmFriend
-                ? <>
-                    <span className={cn(
-                      'shrink-0 font-bold',
-                      status === 'online' && dmPresence === 'online' && 'text-emerald-300',
-                      status === 'online' && dmPresence === 'playing' && 'text-amber-300',
-                    )}>
-                      {status === 'online'
-                        ? statusLabel[dmFriend.presence]
-                        : status === 'connecting' ? 'جاري تحديث الحالة…' : 'الحالة غير متاحة'}
-                    </span>
-                    {dmFriend.handle && <span className="truncate" dir="ltr">@{dmFriend.handle}</span>}
-                  </>
-                : ''}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-sm font-extrabold">{thread?.name ?? 'محادثة'}</p>
+              {status === 'online' && dmFriend?.presence === 'playing' && dmFriend.activeGame && (
+                <span className="max-w-[52%] shrink truncate rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-extrabold text-amber-200">
+                  {dmFriend.activeGame.emoji} {dmFriend.activeGame.name}
+                </span>
+              )}
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+              {thread?.kind === 'group'
+                ? `${thread.memberIds.length} أعضاء`
+                : dmFriend
+                  ? <>
+                      <span className={cn(
+                        'shrink-0 font-bold',
+                        status === 'online' && dmPresence === 'online' && 'text-emerald-300',
+                        status === 'online' && dmPresence === 'playing' && 'text-amber-300',
+                      )}>
+                        {status === 'online'
+                          ? statusLabel[dmFriend.presence]
+                          : status === 'connecting' ? 'جاري تحديث الحالة…' : 'الحالة غير متاحة'}
+                      </span>
+                      {dmFriend.handle && <span className="truncate" dir="ltr">@{dmFriend.handle}</span>}
+                    </>
+                  : ''}
+            </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* الرسائل */}
@@ -607,6 +617,10 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
           )}
         </DialogContent>
       </Dialog>
+      <PlayerProfileDialog
+        userId={profileOpen ? dmFriend?.userId ?? null : null}
+        onClose={() => setProfileOpen(false)}
+      />
     </div>
   )
 }

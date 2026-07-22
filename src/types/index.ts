@@ -46,6 +46,17 @@ export interface PublicUserCard {
   xp: number
 }
 
+export interface PublicPlayerProfile extends PublicUserCard {
+  presence: Presence
+  activeGame?: ServerFriend['activeGame']
+  stats: Record<string, GameStats>
+  totals: {
+    played: number
+    won: number
+    winRate: number
+  }
+}
+
 export interface GameInvite {
   gameId: string
   roomCode: string
