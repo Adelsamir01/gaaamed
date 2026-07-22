@@ -1,4 +1,4 @@
-/* End-to-end smoke test for server-authoritative Memory, Trivia, and Match-Three rooms. */
+/* End-to-end smoke test for every server-authoritative competitive game. */
 import WebSocket from 'ws'
 import { TRIVIA_ANSWER_KEY } from './competitive-games.js'
 import { applyMatch3Swap, findMatch3Move } from '../src/games/match3/engine.js'
@@ -110,7 +110,47 @@ async function testMatch3() {
   guest.close()
 }
 
+async function testChess() {
+  const { host, guest } = await createPair('chess')
+  send(host, { type: 'action', action: { kind: 'start' } })
+  send(host, { type: 'action', action: { kind: 'start' } })
+  const opening = await next(host, 'chess_state')
+  const guestOpening = await next(guest, 'chess_state')
+  if (opening.effect !== 'start' || opening.state.fen !== guestOpening.state.fen) throw new Error('Chess starting position was not synchronized')
+  await wait(80)
+  if (host.inbox.filter((message) => message.type === 'chess_state' && message.effect === 'start').length !== 1) throw new Error('Chess accepted a duplicate start')
+
+  let hostAfter = host.inbox.length
+  let guestAfter = guest.inbox.length
+  send(guest, { type: 'chess_move', from: 'e7', to: 'e5' })
+  const rejected = await next(guest, 'chess_rejected', guestAfter)
+  if (rejected.reason !== 'not_your_turn') throw new Error('Chess accepted an out-of-turn move')
+
+  const moves = [
+    [host, 'e2', 'e4'], [guest, 'e7', 'e5'],
+    [host, 'f1', 'c4'], [guest, 'b8', 'c6'],
+    [host, 'd1', 'h5'], [guest, 'g8', 'f6'],
+    [host, 'h5', 'f7'],
+  ]
+  let finalState = opening
+  for (const [player, from, to] of moves) {
+    hostAfter = host.inbox.length
+    guestAfter = guest.inbox.length
+    send(player, { type: 'chess_move', from, to })
+    finalState = await next(host, 'chess_state', hostAfter)
+    const mirrored = await next(guest, 'chess_state', guestAfter)
+    if (finalState.state.fen !== mirrored.state.fen) throw new Error('Chess position diverged between players')
+  }
+  if (!finalState.state.ended || finalState.state.winnerSlot !== 1 || finalState.state.reason !== 'checkmate') {
+    throw new Error('Chess did not authoritatively detect checkmate')
+  }
+  if (finalState.state.history.length !== 7 || finalState.state.clocks['1'] >= 600_000) throw new Error('Chess history or server clock was not updated')
+  host.close()
+  guest.close()
+}
+
 await testMemory()
 await testTrivia()
 await testMatch3()
+await testChess()
 console.log('✓ competitive multiplayer smoke test passed')

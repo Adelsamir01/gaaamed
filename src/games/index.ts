@@ -4,6 +4,7 @@ import type { GameCategory, GameConfig, GameResult } from '@/types'
 // Games are large, independent experiences. Loading them only when selected
 // keeps the home screen fast and avoids retaining every game in memory.
 const TicTacToe = lazy(() => import('./tictactoe/TicTacToe'))
+const ChessGame = lazy(() => import('./chess/ChessGame'))
 const MemoryGame = lazy(() => import('./memory/MemoryGame'))
 const TriviaGame = lazy(() => import('./trivia/TriviaGame'))
 const RpsGame = lazy(() => import('./rps/RpsGame'))
@@ -13,6 +14,7 @@ const MinesweeperGame = lazy(() => import('./minesweeper/MinesweeperGame'))
 const Match3Game = lazy(() => import('./match3/Match3Game'))
 const OnlineMatch3 = lazy(() => import('./match3/OnlineMatch3'))
 const OnlineTicTacToe = lazy(() => import('./online/OnlineTicTacToe'))
+const OnlineChess = lazy(() => import('./chess/OnlineChess'))
 const ConnectFourLocal = lazy(() => import('./connect4/ConnectFourLocal'))
 const OnlineConnectFour = lazy(() => import('./online/ConnectFour'))
 const OnlineRps = lazy(() => import('./online/OnlineRps'))
@@ -69,6 +71,26 @@ export const GAMES: GameDef[] = [
     online: true,
     onlineComponent: OnlineTicTacToe,
     component: TicTacToe,
+  },
+  {
+    id: 'chess',
+    name: 'شطرنج',
+    description: 'شطرنج كامل بقواعده — ضد كمبيوتر ذكي، مع صاحبك على نفس الجهاز، أو أونلاين',
+    emoji: '♟️',
+    category: 'ذكاء',
+    howToPlay: [
+      'اضغط على القطعة لتظهر كل نقلاتها القانونية، ثم اضغط على المربع المطلوب',
+      'احمِ ملكك واعمل كش مات لملك الخصم؛ اللعبة تدعم التبييت والأخذ بالتجاوز وترقية البيدق',
+      'ضد الكمبيوتر: اختار سهل أو متوسط أو صعب، ويمكنك التراجع عن آخر دور كامل',
+      'أونلاين: لكل لاعب ١٠ دقائق، والخادم يراجع الدور وصحة كل نقلة ويحسب انتهاء الوقت',
+      'يمكنك اللعب مع صديق بدعوة من الشات أو بدء مباراة سريعة مع لاعب عشوائي فورًا',
+    ],
+    supportsBot: true,
+    supportsTwoPlayer: true,
+    difficulties: true,
+    online: true,
+    onlineComponent: OnlineChess,
+    component: ChessGame,
   },
   {
     id: 'memory',

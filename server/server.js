@@ -37,6 +37,7 @@ import {
   triviaQuestionSnapshot,
 } from './competitive-games.js'
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
+import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
 
 const PORT = Number(process.env.PORT) || 8787
@@ -75,6 +76,7 @@ const pushNotifications = new PushNotificationService({ tokenStore: userStore, m
 const INVITE_GAMES = {
   tictactoe: { name: 'إكس أو', emoji: '⭕' },
   connect4: { name: 'أربعة تربح', emoji: '🔴' },
+  chess: { name: 'شطرنج', emoji: '♟️' },
   rps: { name: 'حجر ورقة مقص', emoji: '✂️' },
   reaction: { name: 'سرعة البرق', emoji: '⚡' },
   memory: { name: 'لعبة الذاكرة', emoji: '🧠' },
@@ -426,9 +428,11 @@ function clearCompetitiveTimers(room) {
   if (room.memoryTimer) clearTimeout(room.memoryTimer)
   if (room.triviaTimer) clearTimeout(room.triviaTimer)
   if (room.match3Timer) clearTimeout(room.match3Timer)
+  if (room.chessTimer) clearTimeout(room.chessTimer)
   room.memoryTimer = null
   room.triviaTimer = null
   room.match3Timer = null
+  room.chessTimer = null
 }
 
 function memoryEndPayload(room) {
@@ -523,11 +527,41 @@ function startMatch3Game(room) {
   room.match3Timer = setTimeout(() => finishMatch3Room(room, game), Math.max(0, game.endAt - Date.now() + 40))
 }
 
+function broadcastChessState(room, effect = 'sync') {
+  if (!room.chess) return
+  broadcast(room, { type: 'chess_state', state: chessSnapshot(room.chess), effect })
+}
+
+function scheduleChessDeadline(room) {
+  if (room.chessTimer) clearTimeout(room.chessTimer)
+  room.chessTimer = null
+  if (!room.chess || room.chess.ended) return
+  const activeSlot = room.chess.chess.turn() === 'w' ? 1 : 2
+  const delay = Math.max(0, chessClock(room.chess, activeSlot)) + 30
+  const game = room.chess
+  room.chessTimer = setTimeout(() => {
+    if (room.chess !== game || game.ended || !expireChessClock(game)) return
+    room.chessTimer = null
+    broadcastChessState(room, 'timeout')
+  }, delay)
+}
+
+function startChessGame(room) {
+  clearCompetitiveTimers(room)
+  room.memory = null
+  room.trivia = null
+  room.match3 = null
+  room.chess = createChessGame()
+  broadcastChessState(room, 'start')
+  scheduleChessDeadline(room)
+}
+
 function startCompetitiveGame(room) {
   room.rematchVotes.clear()
   if (room.gameId === 'memory') startMemoryGame(room)
   else if (room.gameId === 'trivia') startTriviaGame(room)
   else if (room.gameId === 'match3') startMatch3Game(room)
+  else if (room.gameId === 'chess') startChessGame(room)
 }
 
 function sendCompetitiveSync(ws, room) {
@@ -539,6 +573,10 @@ function sendCompetitiveSync(ws, room) {
   if (room.gameId === 'match3' && room.match3) {
     sendMatch3State(ws, room)
     if (room.match3.ended) send(ws, { type: 'match3_end', ...finishMatch3Battle(room.match3) })
+    return
+  }
+  if (room.gameId === 'chess' && room.chess) {
+    send(ws, { type: 'chess_state', state: chessSnapshot(room.chess), effect: 'sync' })
     return
   }
   if (room.gameId !== 'trivia' || !room.trivia) return
@@ -664,6 +702,8 @@ function createRoomRecord(gameId, drawTime, settings, requestedCode = null) {
     triviaTimer: null,
     match3: null,
     match3Timer: null,
+    chess: null,
+    chessTimer: null,
     shak: null,
     settings: normalizeSettings(settings),
     // غرف دعوات المحادثات الفردية تبدأ تلقائيًا عند اكتمال لاعبَين (الجروبات تنتظر المضيف)
@@ -1012,10 +1052,10 @@ wss.on('connection', (ws, request) => {
       case 'action': {
         const room = rooms.get(ws._room)
         if (!room) return
-        if (msg.action?.kind === 'start' && (room.gameId === 'memory' || room.gameId === 'trivia' || room.gameId === 'match3')) {
+        if (msg.action?.kind === 'start' && (room.gameId === 'memory' || room.gameId === 'trivia' || room.gameId === 'match3' || room.gameId === 'chess')) {
           if (ws._slot !== 1 || room.players.size < 2) return
           // start قد يتكرر بسبب إعادة إرسال الشبكة؛ المباراة النشطة لا تُصفّر أبدًا.
-          if ((room.memory && !room.memory.ended) || (room.trivia && !room.trivia.ended) || (room.match3 && !room.match3.ended)) return
+          if ((room.memory && !room.memory.ended) || (room.trivia && !room.trivia.ended) || (room.match3 && !room.match3.ended) || (room.chess && !room.chess.ended)) return
           startCompetitiveGame(room)
         }
         const other = room.players.get(otherSlot(ws._slot))
@@ -1027,6 +1067,28 @@ wss.on('connection', (ws, request) => {
         const room = rooms.get(ws._room)
         if (!room) return
         sendCompetitiveSync(ws, room)
+        break
+      }
+
+      case 'chess_move': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'chess' || !room.chess || room.players.size < 2) return
+        const outcome = applyChessMove(room.chess, ws._slot, msg.from, msg.to, msg.promotion)
+        if (!outcome.accepted) {
+          send(ws, { type: 'chess_rejected', reason: outcome.reason, state: chessSnapshot(room.chess) })
+          break
+        }
+        broadcastChessState(room, outcome.ended ? 'end' : 'move')
+        scheduleChessDeadline(room)
+        break
+      }
+
+      case 'chess_resign': {
+        const room = rooms.get(ws._room)
+        if (!room || room.gameId !== 'chess' || !room.chess || !resignChessGame(room.chess, ws._slot)) return
+        if (room.chessTimer) clearTimeout(room.chessTimer)
+        room.chessTimer = null
+        broadcastChessState(room, 'end')
         break
       }
 
@@ -1135,6 +1197,7 @@ wss.on('connection', (ws, request) => {
         if (room.gameId === 'memory' && room.memory && !room.memory.ended) return
         if (room.gameId === 'trivia' && room.trivia && !room.trivia.ended) return
         if (room.gameId === 'match3' && room.match3 && !room.match3.ended) return
+        if (room.gameId === 'chess' && room.chess && !room.chess.ended) return
         room.rematchVotes.add(ws._slot)
         const other = room.players.get(otherSlot(ws._slot))
         send(other, { type: 'rematch', from: ws._slot })
