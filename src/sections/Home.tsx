@@ -8,6 +8,7 @@ import { levelFromXp } from '@/types'
 import { sounds } from '@/lib/sounds'
 import { launchConfetti } from '@/lib/confetti'
 import { buildLeaderboard } from '@/lib/leaderboard'
+import { selectFavoriteGame } from '@/lib/favoriteGame'
 import type { TabId } from './TabBar'
 
 interface Props {
@@ -30,7 +31,8 @@ export default function Home({ goTab, openGame, openChat }: Props) {
   }
 
   const activeThreads = threads.filter((t) => t.unread > 0).length > 0 ? threads.filter((t) => t.unread > 0) : threads.slice(0, 2)
-  const featured = GAMES[0]
+  const favorite = selectFavoriteGame(GAMES, stats)
+  const featured = favorite?.game ?? GAMES[0]
   const leaderboard = buildLeaderboard(profile, friends).slice(0, 5)
   const rankMarks = ['🥇', '🥈', '🥉']
 
@@ -85,8 +87,16 @@ export default function Home({ goTab, openGame, openChat }: Props) {
         </div>
       </motion.div>
 
-      {/* اللعبة المميزة */}
-      <SectionTitle title="لعبة مميزة ⭐" />
+      {/* اللعبة المميزة الشخصية */}
+      <SectionTitle
+        title={favorite ? 'لعبتك المفضلة ❤️' : 'لعبة مميزة ⭐'}
+        action={favorite && (
+          <span className="flex items-center gap-1 text-[10px] font-bold text-amber-300">
+            <Flame className="h-3 w-3" />
+            لعبتها <bdi className="tabular-nums">{arabicNumber.format(favorite.played)}</bdi> مرة
+          </span>
+        )}
+      />
       <motion.button
         whileTap={{ scale: 0.98 }}
         onClick={() => openGame(featured.id)}
