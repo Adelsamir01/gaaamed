@@ -1,21 +1,22 @@
 /** Server-authoritative state machines for the competitive games. */
 
 import { applyMatch3Swap, createMatch3Game } from '../src/games/match3/engine.js'
+import { TRIVIA_QUESTIONS, selectTriviaQuestionIds } from '../src/data/trivia.ts'
 
 export const MEMORY_EMOJIS = Object.freeze(['🐪', '🌴', '🕌', '☕', '🌙', '⭐', '🏺', '🐎'])
 
-// Keep this aligned with src/data/trivia.ts. Question ids are stable array indexes.
-export const TRIVIA_ANSWER_KEY = Object.freeze([
-  1, 2, 1, 2, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 0, 1, 1, 2, 0,
-  1, 1, 2, 1, 1, 2, 0, 2, 1, 2, 2, 2, 0, 2, 1, 2, 1, 1, 1, 1,
-  1, 1, 2, 1, 0, 1, 1, 2, 1, 2, 1, 1, 0,
-])
+// The server derives its authoritative answers from the exact bank packaged in
+// the app, so adding questions can never shift client/server answer indexes.
+export const TRIVIA_ANSWER_KEY = Object.freeze(TRIVIA_QUESTIONS.map((question) => question.correct))
+export { TRIVIA_QUESTIONS }
 
 export const TRIVIA_ROUND_COUNT = 10
 export const TRIVIA_DURATION_MS = 15_000
 export const TRIVIA_LEAD_IN_MS = 800
 export const MATCH3_DURATION_MS = 75_000
 export const MATCH3_LEAD_IN_MS = 1_200
+
+let recentTriviaQuestionIds = []
 
 function shuffled(values, random = Math.random) {
   const result = [...values]
@@ -151,8 +152,15 @@ export function finishMatch3Battle(game) {
 }
 
 export function createTriviaGame(now = Date.now, random = Math.random) {
+  const selection = selectTriviaQuestionIds(
+    TRIVIA_ANSWER_KEY.length,
+    TRIVIA_ROUND_COUNT,
+    recentTriviaQuestionIds,
+    random,
+  )
+  recentTriviaQuestionIds = selection.nextRecentIds
   return {
-    questionIds: shuffled([...TRIVIA_ANSWER_KEY.keys()], random).slice(0, TRIVIA_ROUND_COUNT),
+    questionIds: selection.selectedIds,
     index: 0,
     startAt: now() + TRIVIA_LEAD_IN_MS,
     durationMs: TRIVIA_DURATION_MS,

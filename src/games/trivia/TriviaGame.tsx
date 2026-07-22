@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Flame, Check, X, ChevronLeft } from 'lucide-react'
 import type { GameProps } from '@/games'
 import type { TriviaQuestion } from '@/types'
-import { TRIVIA_QUESTIONS } from '@/data/trivia'
+import { selectTriviaQuestions } from '@/data/trivia'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +16,7 @@ interface Answer {
 }
 
 export default function TriviaGame({ onFinish }: GameProps) {
-  const questions = useMemo(() => [...TRIVIA_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, ROUND_SIZE), [])
+  const questions = useMemo(() => selectTriviaQuestions(ROUND_SIZE), [])
   const [index, setIndex] = useState(0)
   const [answers, setAnswers] = useState<Answer[]>([])
   const [picked, setPicked] = useState<number | null>(null)

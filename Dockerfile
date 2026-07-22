@@ -12,6 +12,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 COPY --chown=node:node server ./server
+COPY --chown=node:node src/data/trivia.ts ./src/data/trivia.ts
+COPY --chown=node:node src/games/match3/engine.js ./src/games/match3/engine.js
 COPY --chown=node:node tools/backup-server.mjs tools/verify-backup.mjs ./tools/
 COPY --chown=node:node dedos-release.apk ./dedos-release.apk
 

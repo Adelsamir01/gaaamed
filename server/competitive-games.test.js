@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import test from 'node:test'
 import {
   TRIVIA_ANSWER_KEY,
+  TRIVIA_QUESTIONS,
   applyMemoryFlip,
   createMemoryGame,
   createMatch3Battle,
@@ -18,10 +19,23 @@ import {
 } from './competitive-games.js'
 import { findMatch3Move } from '../src/games/match3/engine.js'
 
-test('server trivia answer key stays aligned with the client question bank', () => {
+test('the shared trivia bank is large, unique, and valid on client and server', () => {
   const source = fs.readFileSync(new URL('../src/data/trivia.ts', import.meta.url), 'utf8')
   const clientAnswers = [...source.matchAll(/correct:\s*(\d)/g)].map((match) => Number(match[1]))
   assert.deepEqual([...TRIVIA_ANSWER_KEY], clientAnswers)
+  assert.ok(TRIVIA_QUESTIONS.length >= 180)
+  assert.equal(new Set(TRIVIA_QUESTIONS.map((question) => question.q)).size, TRIVIA_QUESTIONS.length)
+  for (const question of TRIVIA_QUESTIONS) {
+    assert.equal(question.options.length, 4)
+    assert.ok(Number.isInteger(question.correct) && question.correct >= 0 && question.correct < 4)
+    assert.equal(new Set(question.options).size, 4)
+  }
+})
+
+test('successive online trivia matches do not repeat recent questions', () => {
+  const first = createTriviaGame(() => 0, () => 0.42)
+  const second = createTriviaGame(() => 0, () => 0.42)
+  assert.equal(first.questionIds.some((id) => second.questionIds.includes(id)), false)
 })
 
 test('memory hides cards and enforces turn, matching, and miss handoff', () => {
