@@ -23,3 +23,21 @@ export function untrackPresence(onlineUsers, userId, socket) {
 export function onlineUserCount(onlineUsers) {
   return onlineUsers.size
 }
+
+/** Return the chat invitation a user is actively waiting or playing inside. */
+export function activeInviteForUser(onlineUsers, rooms, userId, canSee = () => true) {
+  const sockets = onlineUsers.get(userId)
+  if (!sockets) return null
+  for (const socket of sockets) {
+    const room = rooms.get(socket._room)
+    if (!room?.chatInvite || room.players?.get(socket._slot) !== socket) continue
+    const invite = {
+      threadId: room.chatInvite.threadId,
+      messageId: room.chatInvite.messageId,
+      roomCode: room.code,
+      gameId: room.gameId,
+    }
+    if (canSee(invite)) return invite
+  }
+  return null
+}

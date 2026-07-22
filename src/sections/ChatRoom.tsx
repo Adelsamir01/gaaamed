@@ -2,9 +2,10 @@ import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as Re
 import { motion } from 'framer-motion'
 import { ChevronRight, Gamepad2, Heart, Loader2, Send, Trophy } from 'lucide-react'
 import { useOnline, type ChatMessage } from '@/online/OnlineContext'
-import { AvatarCircle } from './components'
+import { AvatarCircle, StatusDot } from './components'
 import { ONLINE_GAMES, getGame } from '@/games'
 import { DEFAULT_ROUNDS, gameUsesRounds, type Difficulty } from '@/types'
+import { statusLabel } from '@/data/friends'
 import { ROUND_AR, RoundsStepper } from './OnlineLobby'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
@@ -27,12 +28,14 @@ interface BubbleProps {
   mine: boolean
   isGroup: boolean
   currentUserId?: string
+  friendInsideInvite: boolean
+  friendName?: string
   onJoin: (code: string, messageId: string) => void
   onHeart: (messageId: string) => void
 }
 
 /** فقاعة رسالة مُخزَّنة: لا يعاد رسمها مع كل رسالة جديدة — فقط الفقاعات الجديدة تُرسم وتتحرك */
-const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUserId, onJoin, onHeart }: BubbleProps) {
+const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUserId, friendInsideInvite, friendName, onJoin, onHeart }: BubbleProps) {
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
   const lastTapRef = useRef(0)
   const heartCount = m.heartUserIds?.length ?? 0
@@ -76,7 +79,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
       initial={{ opacity: 0, scale: 0.35, y: 4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       className={cn(
-        'absolute -bottom-3 z-10 flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full border px-1.5 shadow-lg backdrop-blur-xl',
+        'absolute -bottom-2.5 z-10 flex h-5 min-w-5 items-center justify-center gap-0.5 rounded-full border px-1 shadow-md backdrop-blur-xl',
         mine ? 'left-2' : 'right-2',
         reactedByMe
           ? 'border-pink-200/70 bg-pink-500 text-white shadow-pink-950/35'
@@ -84,8 +87,8 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
       )}
       aria-label={`${heartCount} إعجاب بالقلب`}
     >
-      <Heart className="h-3 w-3" fill="currentColor" />
-      {heartCount > 1 && <bdi className="text-[9px] font-black tabular-nums">{heartCount}</bdi>}
+      <Heart className="h-2.5 w-2.5" fill="currentColor" />
+      {heartCount > 1 && <bdi className="text-[8px] font-black tabular-nums">{heartCount}</bdi>}
     </motion.span>
   )
 
@@ -161,13 +164,35 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
                   )}
                 </div>
               ) : (
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => onJoin(m.invite!.roomCode, m.id)}
-                  className="mt-3 w-full py-2.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold text-sm glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
-                >
-                  {mine ? 'ارجع للعبة 🎮' : 'اقبل التحدي 🎮'}
-                </motion.button>
+                <>
+                  {friendInsideInvite && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-3 flex items-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2"
+                    >
+                      <span className="relative flex h-2.5 w-2.5 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                      </span>
+                      <p className="min-w-0 text-[11px] font-extrabold text-emerald-200">
+                        {friendName || 'صاحبك'} جوه اللعبة ومستنيك
+                      </p>
+                    </motion.div>
+                  )}
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onJoin(m.invite!.roomCode, m.id)}
+                    className={cn(
+                      'mt-3 w-full rounded-2xl bg-gradient-to-l py-2.5 text-sm font-extrabold text-white transition-all',
+                      friendInsideInvite
+                        ? 'from-emerald-400 to-cyan-500 shadow-[0_0_22px_rgba(52,211,153,0.24)] hover:from-emerald-300 hover:to-cyan-400'
+                        : 'from-emerald-500 to-teal-500 glow-emerald hover:from-emerald-400 hover:to-teal-400',
+                    )}
+                  >
+                    {friendInsideInvite ? 'ادخل اللعبة دلوقتي 🎮' : mine ? 'ارجع للعبة 🎮' : 'اقبل التحدي 🎮'}
+                  </motion.button>
+                </>
               )}
             </div>
             {heart}
@@ -234,6 +259,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const stickToBottomRef = useRef(true)
 
   const dmFriend = thread?.kind === 'dm' ? friends.find((f) => thread.memberIds.includes(f.userId)) : undefined
+  const dmPresence = status === 'online' ? dmFriend?.presence : 'offline'
   const isGroup = thread?.kind === 'group'
   const myId = me?.userId
 
@@ -356,16 +382,34 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
           <ChevronRight className="w-5 h-5" />
           رجوع
         </button>
-        <AvatarCircle emoji={thread?.avatar ?? '💬'} size="sm" />
+        <div className="relative shrink-0">
+          <AvatarCircle emoji={thread?.avatar ?? '💬'} size="sm" />
+          {dmFriend && dmPresence && (
+            <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full border-2 border-slate-950 bg-slate-950">
+              <StatusDot status={dmPresence} />
+            </span>
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-sm truncate">{thread?.name ?? 'محادثة'}</p>
-          <p className="text-[10px] text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
             {thread?.kind === 'group'
               ? `${thread.memberIds.length} أعضاء`
-              : dmFriend?.handle
-                ? <span dir="ltr">@{dmFriend.handle}</span>
+              : dmFriend
+                ? <>
+                    <span className={cn(
+                      'shrink-0 font-bold',
+                      status === 'online' && dmPresence === 'online' && 'text-emerald-300',
+                      status === 'online' && dmPresence === 'playing' && 'text-amber-300',
+                    )}>
+                      {status === 'online'
+                        ? statusLabel[dmFriend.presence]
+                        : status === 'connecting' ? 'جاري تحديث الحالة…' : 'الحالة غير متاحة'}
+                    </span>
+                    {dmFriend.handle && <span className="truncate" dir="ltr">@{dmFriend.handle}</span>}
+                  </>
                 : ''}
-          </p>
+          </div>
         </div>
       </div>
 
@@ -392,6 +436,15 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
               mine={m.senderId === myId}
               isGroup={isGroup === true}
               currentUserId={myId}
+              friendInsideInvite={Boolean(
+                status === 'online' &&
+                dmFriend?.activeInvite?.threadId === threadId &&
+                dmFriend.activeInvite.messageId === m.id &&
+                dmFriend.activeInvite.roomCode === m.invite?.roomCode &&
+                dmFriend.activeInvite.gameId === m.invite?.gameId &&
+                !m.invite?.result
+              )}
+              friendName={dmFriend?.name}
               onJoin={handleJoin}
               onHeart={handleHeart}
             />

@@ -23,6 +23,13 @@ export interface ServerFriend {
   avatar: string
   xp: number
   presence: Presence
+  /** The exact pending chat invitation this friend currently has open. */
+  activeInvite?: {
+    threadId: string
+    messageId: string
+    roomCode: string
+    gameId: string
+  } | null
 }
 
 export interface PublicUserCard {

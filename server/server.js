@@ -39,7 +39,7 @@ import {
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
 import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
-import { onlineUserCount, trackPresence, untrackPresence } from './presence.js'
+import { activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -664,12 +664,25 @@ function presenceOf(userId) {
   return 'online'
 }
 
+function activeInviteOf(userId, viewerUserId) {
+  return activeInviteForUser(onlineUsers, rooms, userId, (invite) => (
+    userStore.threadById(invite.threadId)?.memberIds.includes(viewerUserId) === true
+  ))
+}
+
 function friendsListFor(userId) {
   return userStore
     .friendsOf(userId)
     .map((id) => userStore.byId(id))
     .filter(Boolean)
-    .map((u) => ({ ...publicCard(u), presence: presenceOf(u.userId) }))
+    .map((u) => {
+      const activeInvite = activeInviteOf(u.userId, userId)
+      return {
+        ...publicCard(u),
+        presence: presenceOf(u.userId),
+        ...(activeInvite ? { activeInvite } : {}),
+      }
+    })
 }
 
 function friendRequestsFor(userId) {
