@@ -49,7 +49,16 @@ interface ScorePop {
   score: number
 }
 
-function moveLabel(move: Match3MoveEffect): string {
+interface OptimisticMove {
+  first: number
+  second: number
+  authoritativeState: Match3State | null
+  animationDone: boolean
+}
+
+type Match3MoveSummary = Pick<Match3MoveEffect, 'scoreDelta' | 'cascades' | 'createdSpecial'>
+
+function moveLabel(move: Match3MoveSummary): string {
   if (move.createdSpecial === 'rainbow') return 'دوامة ألوان! 🌈'
   if (move.createdSpecial === 'bomb') return 'قنبلة سكر! 💥'
   if (move.createdSpecial === 'row' || move.createdSpecial === 'col') return 'صاروخ حلوى! 🚀'
@@ -77,6 +86,16 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   const scorePopIdRef = useRef(0)
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scorePopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const optimisticMoveRef = useRef<OptimisticMove | null>(null)
+
+  const showMoveFeedback = useCallback((move: Match3MoveSummary) => {
+    scorePopIdRef.current += 1
+    setScorePop({ id: scorePopIdRef.current, text: moveLabel(move), score: move.scoreDelta })
+    if (move.createdSpecial === 'rainbow') sounds.win()
+    else if (move.cascades >= 2 || move.createdSpecial) sounds.correct()
+    else sounds.pop()
+  }, [])
 
   const finish = useCallback((result: Match3EndMessage) => {
     if (finishedRef.current) return
@@ -113,7 +132,11 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
       if (event.kind !== 'match3') return
       if (event.msg.type === 'match3_state') {
         const incoming = event.msg as unknown as Match3StateMessage
-        const animation = incoming.effect === 'move' && incoming.move && gameRef.current
+        const optimistic = optimisticMoveRef.current
+        const confirmsOptimisticMove = incoming.effect === 'move' && !!incoming.move && !!optimistic
+          && incoming.move.first === optimistic.first
+          && incoming.move.second === optimistic.second
+        const animation = !confirmsOptimisticMove && incoming.effect === 'move' && incoming.move && gameRef.current
           ? applyMatch3Swap(gameRef.current, incoming.move.first, incoming.move.second)
           : null
         gameRef.current = incoming.state
@@ -123,20 +146,27 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
         setClockOffset(incoming.serverTime - Date.now())
         setNow(Date.now())
         if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
-        if (incoming.effect === 'move' && incoming.move) {
-          scorePopIdRef.current += 1
-          setScorePop({ id: scorePopIdRef.current, text: moveLabel(incoming.move), score: incoming.move.scoreDelta })
-          if (incoming.move.createdSpecial === 'rainbow') sounds.win()
-          else if (incoming.move.cascades >= 2 || incoming.move.createdSpecial) sounds.correct()
-          else sounds.pop()
+        if (confirmsOptimisticMove && optimistic) {
+          optimistic.authoritativeState = incoming.state
+          setPending(false)
+          if (optimistic.animationDone) {
+            optimisticMoveRef.current = null
+            syncState(incoming.state)
+            if (scorePopTimerRef.current) clearTimeout(scorePopTimerRef.current)
+            scorePopTimerRef.current = setTimeout(() => setScorePop(null), 260)
+          }
+        } else if (incoming.effect === 'move' && incoming.move) {
+          showMoveFeedback(incoming.move)
           void playFrames(animation?.accepted ? animation.frames : undefined, incoming.state, (frame) => {
             if (frame.phase === 'burst' && frame.cascade > 1) sounds.pop()
           }).then((played) => {
             if (!played) return
             setPending(false)
-            window.setTimeout(() => setScorePop(null), 260)
+            if (scorePopTimerRef.current) clearTimeout(scorePopTimerRef.current)
+            scorePopTimerRef.current = setTimeout(() => setScorePop(null), 260)
           })
         } else {
+          optimisticMoveRef.current = null
           syncState(incoming.state)
           setPending(false)
         }
@@ -146,8 +176,10 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
         setEndAt(incoming.endAt)
         setClockOffset(incoming.serverTime - Date.now())
       } else if (event.msg.type === 'match3_rejected') {
+        optimisticMoveRef.current = null
         setPending(false)
         if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
+        if (gameRef.current) syncState(gameRef.current)
         sounds.wrong()
       } else if (event.msg.type === 'match3_end') {
         finish(event.msg as unknown as Match3EndMessage)
@@ -158,12 +190,13 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
       unsubscribe()
       if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
       if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
+      if (scorePopTimerRef.current) clearTimeout(scorePopTimerRef.current)
     }
-  }, [finish, playFrames, requestGameSync, subscribe, syncState])
+  }, [finish, playFrames, requestGameSync, showMoveFeedback, subscribe, syncState])
 
   useEffect(() => {
     if (!game || ending) return
-    const timer = window.setInterval(() => setNow(Date.now()), 100)
+    const timer = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(timer)
   }, [ending, game])
 
@@ -172,7 +205,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   const leadInMs = startAt ? Math.max(0, startAt - serverNow) : 0
   const started = !!startAt && leadInMs <= 0
   const timeProgress = Math.min(100, (remainingMs / 75_000) * 100)
-  const mine = scores[mySlot] ?? game?.score ?? 0
+  const mine = game?.score ?? scores[mySlot] ?? 0
   const theirs = scores[theirSlot] ?? 0
   const leader = mine === theirs ? 0 : mine > theirs ? mySlot : theirSlot
   const countdown = Math.max(1, Math.ceil(leadInMs / 400))
@@ -188,14 +221,45 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
   }, [ending, mine, started, theirs])
 
   const swap = useCallback((first: number, second: number) => {
-    if (!game || pending || animating || !started || remainingMs <= 0 || ending) return
+    const tapServerTime = Date.now() + clockOffset
+    if (
+      !game || pending || animating || ending || !startAt
+      || tapServerTime < startAt || (endAt > 0 && tapServerTime >= endAt)
+    ) return
+    const result = applyMatch3Swap(game, first, second)
+    if (!result.accepted) {
+      sounds.wrong()
+      return
+    }
+    const optimistic: OptimisticMove = {
+      first,
+      second,
+      authoritativeState: null,
+      animationDone: false,
+    }
+    optimisticMoveRef.current = optimistic
     setPending(true)
+    showMoveFeedback(result)
+    void playFrames(result.frames, result.state, (frame) => {
+      if (frame.phase === 'burst' && frame.cascade > 1) sounds.pop()
+    }).then((played) => {
+      if (!played || optimisticMoveRef.current !== optimistic) return
+      optimistic.animationDone = true
+      if (optimistic.authoritativeState) {
+        optimisticMoveRef.current = null
+        syncState(optimistic.authoritativeState)
+        if (scorePopTimerRef.current) clearTimeout(scorePopTimerRef.current)
+        scorePopTimerRef.current = setTimeout(() => setScorePop(null), 260)
+      }
+    })
     sendRaw({ type: 'match3_swap', first, second })
     pendingTimerRef.current = setTimeout(() => {
+      optimisticMoveRef.current = null
       setPending(false)
+      setScorePop(null)
       requestGameSync()
     }, 2_000)
-  }, [animating, ending, game, pending, remainingMs, requestGameSync, sendRaw, started])
+  }, [animating, clockOffset, endAt, ending, game, pending, playFrames, requestGameSync, sendRaw, showMoveFeedback, startAt, syncState])
 
   if (!game) {
     return (

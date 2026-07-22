@@ -81,6 +81,8 @@
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
+  contain: layout paint style;
+  touch-action: none;
   border-radius: 22px;
   background:
     linear-gradient(rgba(22, 14, 54, 0.7), rgba(16, 13, 48, 0.78)),
@@ -107,6 +109,8 @@
 
 .match3-piece-button {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 12.5%;
   height: 12.5%;
   display: grid;
@@ -115,6 +119,10 @@
   border-radius: 12px;
   z-index: 2;
   -webkit-tap-highlight-color: transparent;
+  backface-visibility: hidden;
+  contain: layout style;
+  transform-origin: center;
+  will-change: transform, opacity;
 }
 
 .match3-piece-button:disabled { cursor: default; }
@@ -285,6 +293,8 @@
   place-items: center;
   pointer-events: none;
   overflow: visible;
+  contain: layout style;
+  will-change: transform, opacity;
 }
 
 .match3-burst-flash {
@@ -317,6 +327,7 @@
   background: #fff4a3;
   box-shadow: 0 0 4px #fff, 0 0 10px currentColor;
   animation: match3-particle-fly 0.36s cubic-bezier(0.16, 0.78, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .match3-burst-particle-1 { color: #ff6fa5; background: #ff83b3; }
@@ -328,8 +339,8 @@
 }
 
 @keyframes match3-hint {
-  from { transform: scale(1); filter: brightness(1); }
-  to { transform: scale(1.12); filter: brightness(1.35) drop-shadow(0 0 7px rgba(255, 235, 123, 0.9)); }
+  from { background: rgba(255, 255, 255, 0.03); box-shadow: 0 0 0 rgba(255, 235, 123, 0); }
+  to { background: rgba(255, 236, 136, 0.18); box-shadow: 0 0 0 2px rgba(255, 245, 196, 0.74), 0 0 16px rgba(255, 214, 88, 0.68); }
 }
 
 @keyframes match3-rainbow { to { transform: rotate(360deg); } }

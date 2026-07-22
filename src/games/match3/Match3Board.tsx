@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { findMatch3Move, MATCH3_SIZE, type Match3Cell, type Match3State } from './engine.js'
@@ -69,12 +69,15 @@ export function CandyPiece({ cell, mini = false }: { cell: Match3Cell; mini?: bo
   )
 }
 
-export default function Match3Board({ state, disabled = false, onSwap, celebration = false, visual = null }: Match3BoardProps) {
+function Match3Board({ state, disabled = false, onSwap, celebration = false, visual = null }: Match3BoardProps) {
   const [selection, setSelection] = useState<{ index: number; boardKey: string } | null>(null)
   const [hint, setHint] = useState<{ pair: [number, number]; boardKey: string } | null>(null)
   const [interaction, setInteraction] = useState(0)
   const pointerRef = useRef<PointerStart | null>(null)
   const boardKey = useMemo(() => state.board.map((cell) => cell?.id ?? 0).join(','), [state.board])
+  const clearingIndices = useMemo(() => new Set(
+    visual?.phase === 'clear' ? visual.indices : [],
+  ), [visual])
   const selected = selection?.boardKey === boardKey ? selection.index : null
   const visibleHint = hint?.boardKey === boardKey ? hint.pair : null
 
@@ -149,31 +152,30 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
             const row = Math.floor(index / MATCH3_SIZE)
             const col = index % MATCH3_SIZE
             const hinted = visibleHint?.includes(index) ?? false
-            const clearing = visual?.phase === 'clear' && visual.indices.includes(index)
+            const clearing = clearingIndices.has(index)
+            const moveDuration = visual?.phase === 'shuffle' ? 0.26 : visual?.phase === 'fall' ? 0.22 : 0.16
             return (
               <motion.button
                 key={cell.id}
                 role="gridcell"
                 type="button"
-                initial={{ scale: 0, opacity: 0, y: -32 }}
+                initial={{ x: `${col * 100}%`, y: '-100%', scale: 0.72, opacity: 0 }}
                 animate={{
-                  left: `${col * 12.5}%`,
-                  top: `${row * 12.5}%`,
-                  scale: clearing ? [1, 1.2, 1.08] : selected === index ? 1.12 : 1,
+                  x: `${col * 100}%`,
+                  y: `${row * 100}%`,
+                  scale: selected === index ? 1.12 : 1,
                   opacity: 1,
-                  y: 0,
-                  rotate: clearing ? [0, -4, 4, 0] : 0,
+                  rotate: 0,
                 }}
-                exit={{ scale: [1.08, 1.3, 0.1], opacity: [1, 1, 0], rotate: [0, 8, 26] }}
+                exit={{ scale: 0.12, opacity: 0, rotate: 24 }}
                 transition={clearing
-                  ? { duration: 0.21, ease: 'easeOut' }
+                  ? { duration: 0.15, ease: 'easeOut' }
                   : {
-                      left: { type: 'spring', stiffness: 390, damping: 27, mass: 0.72 },
-                      top: { type: 'spring', stiffness: 390, damping: 27, mass: 0.72 },
-                      scale: { type: 'spring', stiffness: 420, damping: 27 },
-                      y: { type: 'spring', stiffness: 390, damping: 27 },
-                      opacity: { duration: 0.14 },
-                      rotate: { duration: 0.17 },
+                      x: { duration: moveDuration, ease: [0.2, 0.86, 0.25, 1] },
+                      y: { duration: moveDuration, ease: [0.2, 0.86, 0.25, 1] },
+                      scale: { duration: 0.13, ease: 'easeOut' },
+                      opacity: { duration: 0.1 },
+                      rotate: { duration: 0.14 },
                     }}
                 whileTap={disabled ? undefined : { scale: 0.88 }}
                 onPointerDown={(event) => pointerDown(event, index)}
@@ -213,12 +215,12 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
               >
                 <span className="match3-burst-flash" />
                 <span className="match3-burst-ring" />
-                {Array.from({ length: 8 }, (_, particle) => (
+                {Array.from({ length: 6 }, (_, particle) => (
                   <span
                     key={particle}
                     className={`match3-burst-particle match3-burst-particle-${particle % 4}`}
                     style={{
-                      '--particle-angle': `${particle * 45}deg`,
+                      '--particle-angle': `${particle * 60}deg`,
                       '--particle-distance': `${24 + (particle % 3) * 5}px`,
                     } as CSSProperties}
                   />
@@ -231,3 +233,5 @@ export default function Match3Board({ state, disabled = false, onSwap, celebrati
     </div>
   )
 }
+
+export default memo(Match3Board)

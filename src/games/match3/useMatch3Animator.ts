@@ -9,11 +9,11 @@ export interface Match3VisualEffect {
 }
 
 const FRAME_DURATION_MS: Record<Match3AnimationFrame['phase'], number> = {
-  swap: 180,
-  clear: 220,
-  burst: 320,
-  fall: 280,
-  shuffle: 340,
+  swap: 165,
+  clear: 170,
+  burst: 280,
+  fall: 230,
+  shuffle: 270,
 }
 
 export function useMatch3Animator<T extends Match3State | null>(initialState: T) {
