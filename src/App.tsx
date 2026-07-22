@@ -99,7 +99,7 @@ function Shell() {
     if (!ownInvite) return
     online.clearOwnInviteRoom()
     setFriendMatchThreadId(ownInvite.threadId)
-    online.acceptGameInvite(ownInvite.code, profile.name, profile.avatar)
+    online.acceptGameInvite(ownInvite.code, profile.name, profile.avatar, ownInvite.threadId, ownInvite.messageId)
     setChatRoomId(null)
     setView({ kind: 'online' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,9 +161,10 @@ function Shell() {
   }
 
   // قبول تحدٍ من دعوة دردشة
-  const acceptInvite = (inviteToken: string) => {
+  const acceptInvite = (inviteToken: string, messageId: string) => {
+    if (!chatRoomId) return
     setFriendMatchThreadId(chatRoomId)
-    online.acceptGameInvite(inviteToken, profile.name, profile.avatar)
+    online.acceptGameInvite(inviteToken, profile.name, profile.avatar, chatRoomId, messageId)
     setChatRoomId(null)
     setView({ kind: 'online' })
   }

@@ -73,6 +73,13 @@ test('friend game results replace an invite action, persist, and cannot be overw
     })
     const completedAt = Date.now() + 100
 
+    const pending = store.pendingGameInvite(thread.id, message.id, mona.userId)
+    assert.equal(pending.message.invite.roomCode, '1234')
+    assert.throws(
+      () => store.pendingGameInvite(thread.id, message.id, outsider.userId),
+      /المحادثة/,
+    )
+
     const completed = store.completeGameInvite(thread.id, message.id, mona.userId, {
       kind: 'winner',
       winnerId: mona.userId,
@@ -96,6 +103,10 @@ test('friend game results replace an invite action, persist, and cannot be overw
     })
     assert.equal(retried.changed, false)
     assert.equal(message.invite.result.kind, 'winner')
+    assert.throws(
+      () => store.pendingGameInvite(thread.id, message.id, adel.userId),
+      /انتهت/,
+    )
     assert.throws(
       () => store.completeGameInvite(thread.id, message.id, outsider.userId, { kind: 'draw', completedAt }),
       /المحادثة/,

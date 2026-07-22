@@ -285,11 +285,38 @@ async function main() {
   assert(invite.gameName === 'إكس أو' && invite.gameEmoji === '⭕', 'B3: الدعوة تحمل اسم اللعبة ورمزها')
 
   // A ينضم أولًا لغرفة الدعوة الفارغة → slot 1
-  A2.send({ type: 'join', code: invite.roomCode, name: 'آدم', avatar: '😎' })
+  A2.send({
+    type: 'join',
+    code: invite.roomCode,
+    name: 'آدم',
+    avatar: '😎',
+    threadId: threadIdPersist,
+    messageId: inviteAtB.message.id,
+  })
   const joinA = await A2.waitFor((m) => m.type === 'joined' && m.code === invite.roomCode)
   assert(joinA.slot === 1, 'A2: أول منضم لغرفة الدعوة يأخذ slot=1')
   assert(joinA.autoStart === true, 'A2: غرفة دعوة DM موسومة autoStart=true')
-  B3.send({ type: 'join', code: invite.roomCode, name: 'بدر', avatar: '🦊' })
+  // مغادرة لوبي الدعوة لا تلغيها: الغرفة الفارغة تُنظّف ثم يعيد الخادم إنشاءها من رسالة الدردشة.
+  A2.send({ type: 'leave' })
+  await wait(200)
+  A2.send({
+    type: 'join',
+    code: invite.roomCode,
+    name: 'آدم',
+    avatar: '😎',
+    threadId: threadIdPersist,
+    messageId: inviteAtB.message.id,
+  })
+  const rejoinA = await A2.waitFor((m) => m.type === 'joined' && m.code === invite.roomCode)
+  assert(rejoinA.slot === 1 && rejoinA.autoStart === true, 'A2: رجع لنفس الدعوة بعد مغادرة اللوبي')
+  B3.send({
+    type: 'join',
+    code: invite.roomCode,
+    name: 'بدر',
+    avatar: '🦊',
+    threadId: threadIdPersist,
+    messageId: inviteAtB.message.id,
+  })
   const joinB = await B3.waitFor((m) => m.type === 'joined' && m.code === invite.roomCode)
   assert(joinB.slot === 2 && joinB.opponent?.name === 'آدم', 'B3: ثاني منضم slot=2 ويرى الخصم')
   assert(joinB.autoStart === true, 'B3: المنضم الثاني يرى autoStart=true أيضًا')

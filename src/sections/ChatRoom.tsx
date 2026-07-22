@@ -15,7 +15,7 @@ import {
 interface Props {
   threadId: string
   onBack: () => void
-  onAcceptInvite: (inviteToken: string) => void
+  onAcceptInvite: (inviteToken: string, messageId: string) => void
 }
 
 function fmtTime(ts: number) {
@@ -27,7 +27,7 @@ interface BubbleProps {
   mine: boolean
   isGroup: boolean
   currentUserId?: string
-  onJoin: (code: string) => void
+  onJoin: (code: string, messageId: string) => void
   onHeart: (messageId: string) => void
 }
 
@@ -158,13 +158,13 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
                     </>
                   )}
                 </div>
-              ) : !mine && (
+              ) : (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => onJoin(m.invite!.roomCode)}
+                  onClick={() => onJoin(m.invite!.roomCode, m.id)}
                   className="mt-3 w-full py-2.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-500 text-white font-extrabold text-sm glow-emerald hover:from-emerald-400 hover:to-teal-400 transition-all"
                 >
-                  اقبل التحدي 🎮
+                  {mine ? 'ارجع للعبة 🎮' : 'اقبل التحدي 🎮'}
                 </motion.button>
               )}
             </div>
@@ -236,9 +236,9 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
 
   // مرجع ثابت لزر قبول التحدي حتى لا تُكسر مذكرة الفقاعات
   const handleJoin = useCallback(
-    (inviteToken: string) => {
+    (inviteToken: string, messageId: string) => {
       sounds.pop()
-      onAcceptInvite(inviteToken)
+      onAcceptInvite(inviteToken, messageId)
     },
     [onAcceptInvite],
   )

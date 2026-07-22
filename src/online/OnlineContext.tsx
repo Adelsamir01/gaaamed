@@ -132,7 +132,7 @@ interface OnlineContextValue {
   /** إعدادات جلسة اللعب الحالية (عدد الجولات). */
   roomSettings: RoomSettings | null
   /** Accept a chat game invitation; the session identifier stays private to the UI. */
-  acceptGameInvite: (inviteToken: string, name: string, avatar: string) => void
+  acceptGameInvite: (inviteToken: string, name: string, avatar: string, threadId: string, messageId: string) => void
   leaveRoom: () => void
   startGame: () => void
   sendAction: (action: Record<string, unknown>) => void
@@ -178,7 +178,7 @@ interface OnlineContextValue {
   /** غرفة دعوة محادثة فردية: تبدأ تلقائيًا فور اكتمال لاعبَين */
   autoStartRoom: boolean
   // غرفة دعوة أرسلها المستخدم — ليدخلها تلقائيًا فور إرسالها
-  ownInviteRoom: { code: string; gameId: string; threadId: string } | null
+  ownInviteRoom: { code: string; gameId: string; threadId: string; messageId: string } | null
   clearOwnInviteRoom: () => void
 }
 
@@ -210,7 +210,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const [fromQuickMatch, setFromQuickMatch] = useState(false)
   const [autoStartRoom, setAutoStartRoom] = useState(false)
   const [roomSettings, setRoomSettings] = useState<RoomSettings | null>(null)
-  const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string; threadId: string } | null>(null)
+  const [ownInviteRoom, setOwnInviteRoom] = useState<{ code: string; gameId: string; threadId: string; messageId: string } | null>(null)
   const clearOwnInviteRoom = useCallback(() => setOwnInviteRoom(null), [])
 
   const gameHandlersRef = useRef(new Set<GameEventHandler>())
@@ -519,7 +519,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             message.senderId === meRef.current?.userId &&
             message.invite?.roomCode
           ) {
-            setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId, threadId })
+            setOwnInviteRoom({ code: message.invite.roomCode, gameId: message.invite.gameId, threadId, messageId: message.id })
           }
           if (message.senderId !== meRef.current?.userId && openThreadRef.current !== threadId) {
             showChatNotification(threadId, message)
@@ -698,7 +698,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     }
   }, [status, onboarded, profile.name, profile.avatar, profile.handle])
 
-  const acceptGameInvite = useCallback((inviteToken: string, name: string, avatar: string) => {
+  const acceptGameInvite = useCallback((inviteToken: string, name: string, avatar: string, threadId: string, messageId: string) => {
     setOpponent(null)
     setFromQuickMatch(false)
     setAutoStartRoom(false)
@@ -708,7 +708,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(autoStartTimerRef.current)
       autoStartTimerRef.current = null
     }
-    onlineClient.send({ type: 'join', code: inviteToken.trim(), name, avatar })
+    onlineClient.send({ type: 'join', code: inviteToken.trim(), name, avatar, threadId, messageId })
   }, [])
 
   const leaveRoom = useCallback(() => {

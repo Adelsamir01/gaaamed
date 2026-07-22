@@ -438,6 +438,17 @@ export class UserStore {
     return { thread, message, created: true }
   }
 
+  pendingGameInvite(threadId, messageId, userId) {
+    const thread = this.threadById(threadId)
+    if (!this.isMember(thread, userId)) throw new Error('المحادثة دي مش موجودة.')
+    const message = thread.messages.find((candidate) => candidate.id === messageId)
+    if (!message || message.kind !== 'game_invite' || !message.invite) {
+      throw new Error('دعوة اللعبة دي مش موجودة.')
+    }
+    if (message.invite.result) throw new Error('المباراة دي انتهت بالفعل.')
+    return { thread, message }
+  }
+
   completeGameInvite(threadId, messageId, userId, result) {
     const thread = this.threadById(threadId)
     if (!this.isMember(thread, userId)) throw new Error('المحادثة دي مش موجودة.')

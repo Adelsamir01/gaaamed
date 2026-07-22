@@ -644,8 +644,9 @@ function broadcastFriendsUpdate(userId) {
 
 // إنشاء سجل غرفة موحّد (إنشاء عادي / دعوة دردشة / مباراة سريعة)
 // settings تُطبيع وتُخزن على السجل قبل تهيئة شخبطة حتى يقرأ المحرك room.settings?.rounds
-function createRoomRecord(gameId, drawTime, settings) {
-  const code = genCode()
+function createRoomRecord(gameId, drawTime, settings, requestedCode = null) {
+  const restoredCode = String(requestedCode || '')
+  const code = /^\d{4}$/.test(restoredCode) && !rooms.has(restoredCode) ? restoredCode : genCode()
   const room = {
     code,
     gameId: gameId || 'unknown',
@@ -896,7 +897,47 @@ wss.on('connection', (ws, request) => {
 
       case 'join': {
         snakeManager.leave(ws)
-        const room = rooms.get(String(msg.code || ''))
+        const requestedCode = String(msg.code || '')
+        let room = rooms.get(requestedCode)
+        let inviteRecord = null
+        if (msg.threadId || msg.messageId) {
+          if (!ws._userId) {
+            send(ws, { type: 'error', message: 'سجّل دخولك الأول علشان تفتح الدعوة.' })
+            return
+          }
+          try {
+            inviteRecord = userStore.pendingGameInvite(
+              String(msg.threadId || ''),
+              String(msg.messageId || ''),
+              ws._userId,
+            )
+            if (inviteRecord.message.invite.roomCode !== requestedCode) {
+              throw new Error('دعوة اللعبة دي اتغيرت، افتحها من المحادثة تاني.')
+            }
+          } catch (error) {
+            send(ws, { type: 'error', message: error.message })
+            return
+          }
+
+          const expectedLink = { threadId: inviteRecord.thread.id, messageId: inviteRecord.message.id }
+          if (!room) {
+            room = createRoomRecord(
+              inviteRecord.message.invite.gameId,
+              undefined,
+              inviteRecord.message.invite.settings,
+              requestedCode,
+            )
+            room.autoStart = inviteRecord.thread.kind === 'dm'
+            room.chatInvite = expectedLink
+            console.log(`INVITE_ROOM_RESTORED ${room.code} ${room.gameId}`)
+          } else if (
+            room.chatInvite?.threadId !== expectedLink.threadId ||
+            room.chatInvite?.messageId !== expectedLink.messageId
+          ) {
+            send(ws, { type: 'error', message: 'الغرفة دي مش مرتبطة بالدعوة.' })
+            return
+          }
+        }
         if (!room) {
           send(ws, { type: 'error', message: 'الغرفة غير موجودة، تأكد من الرمز' })
           return
