@@ -38,7 +38,22 @@ export interface GameInvite {
   gameEmoji: string
   /** إعدادات غرفة الدعوة (عدد الجولات) — تُملأ من الخادم */
   settings?: RoomSettings | null
+  /** Persisted final result, replacing the join action after a friend match ends. */
+  result?: GameInviteResult | null
 }
+
+export type GameInviteResult =
+  | {
+      kind: 'winner'
+      winnerId: string | null
+      winnerName: string
+      winnerAvatar: string
+      completedAt: number
+    }
+  | {
+      kind: 'draw'
+      completedAt: number
+    }
 
 /** إعدادات غرفة أونلاين — عدد جولات السلسلة/المباراة */
 export interface RoomSettings {
@@ -89,6 +104,9 @@ export type GameOutcome = 'win' | 'loss' | 'draw'
 export interface GameResult {
   gameId: string
   outcome: GameOutcome
+  /** Global winner metadata used to persist results for group friend matches. */
+  winnerName?: string
+  winnerSlot?: number
   /** نقاط رقمية اختيارية (مثل عدد الإجابات الصحيحة أو زمن رد الفعل) */
   score?: number
   /** أفضل نتيجة للحفظ (زمن أقل أفضل في سرعة البرق) */

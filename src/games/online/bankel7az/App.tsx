@@ -168,6 +168,7 @@ function GameApp({
       onFinishGame({
         gameId: "bank-el7az",
         outcome: iWon ? "win" : "loss",
+        winnerName: winner?.name,
         coinsEarned: iWon ? 30 : 10,
         xpEarned: iWon ? 40 : 10,
         summary: iWon ? "فزت بلعبة بنك الحظ! 🏦" : `${winner?.name ?? "خصمك"} كسب بنك الحظ`,

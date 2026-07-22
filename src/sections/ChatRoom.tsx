@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight, Gamepad2, Heart, Loader2, Send } from 'lucide-react'
+import { ChevronRight, Gamepad2, Heart, Loader2, Send, Trophy } from 'lucide-react'
 import { useOnline, type ChatMessage } from '@/online/OnlineContext'
 import { AvatarCircle } from './components'
 import { ONLINE_GAMES, getGame } from '@/games'
@@ -56,6 +56,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
     }
   }
 
+  const displayedAt = m.kind === 'game_invite' ? (m.invite?.result?.completedAt ?? m.time) : m.time
   const time = (
     <span
       className={cn(
@@ -65,7 +66,7 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
       dir="rtl"
     >
       {m.pending && <Loader2 className="h-2.5 w-2.5 animate-spin" aria-label="جارٍ الإرسال" />}
-      {fmtTime(m.time)}
+      {fmtTime(displayedAt)}
     </span>
   )
 
@@ -90,6 +91,8 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
 
   // فقاعة دعوة اللعبة الغنية
   if (m.kind === 'game_invite' && m.invite) {
+    const result = m.invite.result
+    const winnerIsMe = result?.kind === 'winner' && result.winnerId === currentUserId
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -112,9 +115,11 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
             <div
               className={cn(
                 'rounded-3xl border p-3.5',
-                mine
-                  ? 'rounded-bl-md border-emerald-400/40 bg-emerald-500/15'
-                  : 'rounded-br-md border-white/15 bg-white/5',
+                result
+                  ? 'border-amber-300/40 bg-gradient-to-br from-amber-400/15 via-orange-400/8 to-white/5 shadow-[0_12px_35px_rgba(245,158,11,0.12)]'
+                  : mine
+                    ? 'rounded-bl-md border-emerald-400/40 bg-emerald-500/15'
+                    : 'rounded-br-md border-white/15 bg-white/5',
               )}
             >
               <div className="flex items-center gap-3">
@@ -122,13 +127,38 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
                 <div className="flex-1">
                   <p className="font-extrabold text-sm">{m.invite.gameName}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {mine ? 'أرسلت دعوة لعب 🎮' : `${m.senderName} بيتحداك!`}
-                    {m.invite.settings?.rounds != null &&
+                    {result ? 'انتهت المباراة' : mine ? 'أرسلت دعوة لعب 🎮' : `${m.senderName} بيتحداك!`}
+                    {!result && m.invite.settings?.rounds != null &&
                       ` · ${ROUND_AR[m.invite.settings.rounds] ?? m.invite.settings.rounds} جولات 🏆`}
                   </p>
                 </div>
               </div>
-              {!mine && (
+              {result ? (
+                <div className="mt-3 flex items-center gap-3 rounded-2xl border border-amber-200/20 bg-black/20 px-3 py-2.5">
+                  {result.kind === 'draw' ? (
+                    <>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-xl">🤝</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-bold text-amber-200/70">النتيجة</p>
+                        <p className="text-sm font-black text-amber-100">تعادل!</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-amber-200/30 bg-amber-300/15 text-xl">
+                        {result.winnerAvatar || '🏆'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-bold text-amber-200/70">الفائز</p>
+                        <p className="truncate text-sm font-black text-amber-100">
+                          {winnerIsMe ? 'إنت كسبت! 🏆' : `${result.winnerName} كسب!`}
+                        </p>
+                      </div>
+                      <Trophy className="h-5 w-5 shrink-0 text-amber-300" />
+                    </>
+                  )}
+                </div>
+              ) : !mine && (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onJoin(m.invite!.roomCode)}

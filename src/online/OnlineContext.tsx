@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineClientStorage, type ConnectionStatus, type ServerMessage } from './client'
 import { useApp } from '@/store/AppContext'
-import type { PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
+import type { GameResult, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 import { getCurrentPushToken, initializePushNotifications, onPushToken, openNotificationThread } from '@/lib/pushNotifications'
 
@@ -169,6 +169,7 @@ interface OnlineContextValue {
   chatSend: (threadId: string, text: string) => void
   chatReact: (threadId: string, messageId: string) => void
   chatSendInvite: (threadId: string, gameId: string, settings?: RoomSettings) => void
+  reportFriendGameResult: (threadId: string, result: GameResult) => void
   refreshSocial: () => void
   // المباراة السريعة
   quickMatch: (gameId: string) => void
@@ -544,6 +545,21 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               ? { ...thread, lastMessage: { ...thread.lastMessage, heartUserIds } }
               : thread
           )))
+          break
+        }
+        case 'chat_game_result': {
+          const threadId = String(msg.threadId || '')
+          const message = msg.message as ServerChatMessage
+          if (!threadId || !message?.id) break
+          setMessages((current) => {
+            const list = current[threadId]
+            if (!list?.some((candidate) => candidate.id === message.id)) return current
+            return {
+              ...current,
+              [threadId]: list.map((candidate) => candidate.id === message.id ? message : candidate),
+            }
+          })
+          if (msg.thread) upsertThread(msg.thread as ServerThread)
           break
         }
         case 'quick_match_waiting':
@@ -938,6 +954,18 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const reportFriendGameResult = useCallback((threadId: string, result: GameResult) => {
+    if (!code) return
+    onlineClient.send({
+      type: 'chat_game_result',
+      threadId,
+      roomCode: code,
+      outcome: result.outcome,
+      ...(result.winnerName ? { winnerName: result.winnerName } : {}),
+      ...(result.winnerSlot != null ? { winnerSlot: result.winnerSlot } : {}),
+    })
+  }, [code])
+
   const refreshSocial = useCallback(() => {
     onlineClient.send({ type: 'friends_list' })
     onlineClient.send({ type: 'friend_requests_list' })
@@ -962,7 +990,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
-      loadThread, chatSend, chatReact, chatSendInvite, refreshSocial,
+      loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
     }),
@@ -973,7 +1001,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,
       searchUser, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
-      loadThread, chatSend, chatReact, chatSendInvite, refreshSocial,
+      loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],
   )

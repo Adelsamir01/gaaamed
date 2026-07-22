@@ -21,7 +21,12 @@ function fmtTime(ts: number) {
 
 function preview(t: ServerThread) {
   if (!t.lastMessage) return 'ابدأ المحادثة…'
-  if (t.lastMessage.kind === 'game_invite') return `🎮 دعوة لعبة ${t.lastMessage.invite?.gameName ?? ''}`
+  if (t.lastMessage.kind === 'game_invite') {
+    const invite = t.lastMessage.invite
+    if (invite?.result?.kind === 'draw') return `🤝 ${invite.gameName}: تعادل`
+    if (invite?.result?.kind === 'winner') return `🏆 ${invite.result.winnerName} كسب ${invite.gameName}`
+    return `🎮 دعوة لعبة ${invite?.gameName ?? ''}`
+  }
   return t.lastMessage.text
 }
 
@@ -121,7 +126,9 @@ export default function Chat({ openChat }: { openChat: (id: string) => void }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-extrabold text-sm truncate">{t.name}</span>
                   {t.lastMessage && (
-                    <span className="text-[10px] text-muted-foreground shrink-0">{fmtTime(t.lastMessage.time)}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {fmtTime(t.lastMessage.invite?.result?.completedAt ?? t.lastMessage.time)}
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-0.5">

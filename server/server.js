@@ -651,6 +651,7 @@ function createRoomRecord(gameId, drawTime, settings) {
     gameId: gameId || 'unknown',
     players: new Map(),
     names: new Map(),
+    participants: new Map(),
     rpsChoices: new Map(),
     reactTaps: new Map(),
     rpsWins: new Map(),
@@ -666,6 +667,7 @@ function createRoomRecord(gameId, drawTime, settings) {
     settings: normalizeSettings(settings),
     // غرف دعوات المحادثات الفردية تبدأ تلقائيًا عند اكتمال لاعبَين (الجروبات تنتظر المضيف)
     autoStart: false,
+    chatInvite: null,
     createdAt: Date.now(),
   }
   if (room.gameId === 'shakhbata') initShakhbata(room, drawTime)
@@ -682,6 +684,55 @@ function removeFromQueues(ws) {
   }
 }
 
+function addRoomPlayer(room, slot, ws, profile) {
+  const player = {
+    name: String(profile?.name || 'لاعب').trim().slice(0, 24) || 'لاعب',
+    avatar: String(profile?.avatar || '🎮').slice(0, 8),
+  }
+  room.players.set(slot, ws)
+  room.names.set(slot, player)
+  room.participants.set(slot, { ...player, userId: ws._userId ?? null })
+}
+
+function resolveReportedFriendGameResult(room, ws, msg) {
+  const outcome = ['win', 'loss', 'draw'].includes(msg.outcome) ? msg.outcome : null
+  if (!outcome) return null
+
+  let winnerSlot = null
+  const requestedSlot = Number(msg.winnerSlot)
+  if (Number.isInteger(requestedSlot) && room.participants.has(requestedSlot)) {
+    winnerSlot = requestedSlot
+  }
+
+  if (winnerSlot == null) {
+    const requestedName = String(msg.winnerName || '').trim()
+    if (requestedName) {
+      winnerSlot = [...room.participants.entries()]
+        .find(([, participant]) => participant.name === requestedName)?.[0] ?? null
+    }
+  }
+
+  if (winnerSlot == null && outcome === 'win' && room.participants.has(ws._slot)) {
+    winnerSlot = ws._slot
+  }
+  if (winnerSlot == null && outcome === 'loss' && room.participants.size === 2) {
+    winnerSlot = [...room.participants.keys()].find((slot) => slot !== ws._slot) ?? null
+  }
+  if (winnerSlot == null && outcome === 'draw') {
+    return { kind: 'draw', completedAt: Date.now() }
+  }
+
+  const winner = winnerSlot == null ? null : room.participants.get(winnerSlot)
+  if (!winner) return null
+  return {
+    kind: 'winner',
+    winnerId: winner.userId,
+    winnerName: winner.name,
+    winnerAvatar: winner.avatar,
+    completedAt: Date.now(),
+  }
+}
+
 function tryMatch(gameId) {
   const queue = matchQueues.get(gameId)
   if (!queue) return
@@ -693,8 +744,7 @@ function tryMatch(gameId) {
     const room = createRoomRecord(gameId, undefined, pair[0].settings)
     pair.forEach((entry, index) => {
       const slot = index + 1
-      room.players.set(slot, entry.ws)
-      room.names.set(slot, { name: entry.name, avatar: entry.avatar })
+      addRoomPlayer(room, slot, entry.ws, { name: entry.name, avatar: entry.avatar })
       entry.ws._room = room.code
       entry.ws._slot = slot
     })
@@ -834,8 +884,7 @@ wss.on('connection', (ws, request) => {
       case 'create': {
         snakeManager.leave(ws)
         const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime, msg.settings)
-        room.players.set(1, ws)
-        room.names.set(1, { name: msg.name || 'لاعب', avatar: msg.avatar || '🎮' })
+        addRoomPlayer(room, 1, ws, { name: msg.name, avatar: msg.avatar })
         ws._room = room.code
         ws._slot = 1
         send(ws, { type: 'created', code: room.code, slot: 1, settings: room.settings })
@@ -861,8 +910,7 @@ wss.on('connection', (ws, request) => {
             return
           }
           const slot = lowestFreeSlot(room, BANK_MAX)
-          room.players.set(slot, ws)
-          room.names.set(slot, me)
+          addRoomPlayer(room, slot, ws, me)
           ws._room = room.code
           ws._slot = slot
           send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room), autoStart: room.autoStart === true, settings: room.settings })
@@ -884,8 +932,7 @@ wss.on('connection', (ws, request) => {
             return
           }
           const slot = lowestFreeSlot(room)
-          room.players.set(slot, ws)
-          room.names.set(slot, me)
+          addRoomPlayer(room, slot, ws, me)
           ws._room = room.code
           ws._slot = slot
           send(ws, { type: 'joined', code: room.code, slot, gameId: room.gameId, players: shakPlayers(room), autoStart: room.autoStart === true, settings: room.settings })
@@ -901,8 +948,7 @@ wss.on('connection', (ws, request) => {
           return
         }
         const slot = lowestFreeSlot(room, 2)
-        room.players.set(slot, ws)
-        room.names.set(slot, me)
+        addRoomPlayer(room, slot, ws, me)
         ws._room = room.code
         ws._slot = slot
         const otherSlotNum = otherSlot(slot)
@@ -1284,6 +1330,7 @@ wss.on('connection', (ws, request) => {
           const threadId = String(msg.threadId || '')
           const kind = msg.kind === 'game_invite' ? 'game_invite' : 'text'
           let invite = null
+          let inviteRoom = null
           let text = String(msg.text ?? '')
           if (kind === 'game_invite') {
             const gameId = String(msg.invite?.gameId || '')
@@ -1294,6 +1341,7 @@ wss.on('connection', (ws, request) => {
             }
             // الخادم ينشئ غرفة الدعوة ويضمّن الكود في الرسالة (مع إعدادات الجولات إن وُجدت)
             const room = createRoomRecord(gameId, undefined, msg.settings)
+            inviteRoom = room
             // دعوات المحادثة الفردية (DM) تدخل الطرفين في اللعب مباشرة: تبدأ تلقائيًا عند اكتمال لاعبَين
             const inviteThread = userStore.threadById(threadId)
             room.autoStart = inviteThread?.kind === 'dm'
@@ -1303,6 +1351,9 @@ wss.on('connection', (ws, request) => {
           }
           const clientId = typeof msg.clientId === 'string' ? msg.clientId : null
           const { thread, message, created } = userStore.postMessage(threadId, ws._userId, { text, kind, invite, clientId })
+          if (created && inviteRoom) {
+            inviteRoom.chatInvite = { threadId: thread.id, messageId: message.id }
+          }
           for (const memberId of thread.memberIds) {
             pushToUser(memberId, {
               type: 'chat_message',
@@ -1312,6 +1363,46 @@ wss.on('connection', (ws, request) => {
             })
           }
           if (created) void pushNotifications.sendChatNotification({ thread, message, senderId: ws._userId })
+        } catch (error) {
+          send(ws, { type: 'error', message: error.message })
+        }
+        break
+      }
+
+      case 'chat_game_result': {
+        if (!ws._userId) return
+        const room = rooms.get(ws._room)
+        const link = room?.chatInvite
+        if (
+          !room ||
+          !link ||
+          String(msg.roomCode || '') !== room.code ||
+          String(msg.threadId || '') !== link.threadId ||
+          room.participants.get(ws._slot)?.userId !== ws._userId
+        ) {
+          send(ws, { type: 'error', message: 'تعذر حفظ نتيجة المباراة.' })
+          return
+        }
+        const result = resolveReportedFriendGameResult(room, ws, msg)
+        if (!result) {
+          send(ws, { type: 'error', message: 'نتيجة المباراة غير مكتملة.' })
+          return
+        }
+        try {
+          const { thread, message } = userStore.completeGameInvite(
+            link.threadId,
+            link.messageId,
+            ws._userId,
+            result,
+          )
+          for (const memberId of thread.memberIds) {
+            pushToUser(memberId, {
+              type: 'chat_game_result',
+              threadId: thread.id,
+              message,
+              thread: userStore.threadSummary(thread, memberId),
+            })
+          }
         } catch (error) {
           send(ws, { type: 'error', message: error.message })
         }

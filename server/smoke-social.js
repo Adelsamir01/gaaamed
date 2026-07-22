@@ -296,6 +296,16 @@ async function main() {
   const oppJoin = await A2.waitFor((m) => m.type === 'opponent_joined')
   assert(oppJoin.opponent?.name === 'بدر', 'A2: وصله opponent_joined')
   assert(oppJoin.autoStart === true, 'A2: opponent_joined يحمل autoStart=true (زناد البدء التلقائي)')
+  A2.send({
+    type: 'chat_game_result',
+    threadId: threadIdPersist,
+    roomCode: invite.roomCode,
+    outcome: 'win',
+  })
+  const resultAtA = await A2.waitFor((m) => m.type === 'chat_game_result' && m.message?.id === inviteAtB.message.id)
+  const resultAtB = await B3.waitFor((m) => m.type === 'chat_game_result' && m.message?.id === inviteAtB.message.id)
+  assert(resultAtA.message.invite.result?.winnerId === idA.user.userId, 'A2: نتيجة الدعوة تسجل الفائز بهويته')
+  assert(resultAtB.message.invite.result?.winnerName === 'آدم', 'B3: بطاقة الدعوة تحولت إلى نتيجة باسم آدم')
   A2.send({ type: 'leave' })
   B3.send({ type: 'leave' })
   await wait(200)

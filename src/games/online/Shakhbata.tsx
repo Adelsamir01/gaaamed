@@ -481,6 +481,8 @@ export default function Shakhbata({ onFinish }: GameProps) {
     onFinish({
       gameId: 'shakhbata',
       outcome: r.outcome,
+      winnerName: leaderboard[0]?.name,
+      winnerSlot: leaderboard[0]?.slot,
       score: myScore,
       bestCandidate: myScore,
       coinsEarned: r.coins,

@@ -438,6 +438,38 @@ export class UserStore {
     return { thread, message, created: true }
   }
 
+  completeGameInvite(threadId, messageId, userId, result) {
+    const thread = this.threadById(threadId)
+    if (!this.isMember(thread, userId)) throw new Error('المحادثة دي مش موجودة.')
+    const message = thread.messages.find((candidate) => candidate.id === messageId)
+    if (!message || message.kind !== 'game_invite' || !message.invite) {
+      throw new Error('دعوة اللعبة دي مش موجودة.')
+    }
+
+    // The first valid finish report wins. Both players normally report the same
+    // result, so making this idempotent prevents late or retried packets from
+    // changing an already published winner.
+    if (message.invite.result) return { thread, message, changed: false }
+
+    const completedAt = Number.isFinite(result?.completedAt) ? Number(result.completedAt) : Date.now()
+    if (result?.kind === 'draw') {
+      message.invite.result = { kind: 'draw', completedAt }
+    } else {
+      const winnerName = String(result?.winnerName || '').trim().slice(0, 24)
+      if (!winnerName) throw new Error('الفائز غير معروف.')
+      message.invite.result = {
+        kind: 'winner',
+        winnerId: result?.winnerId ? String(result.winnerId) : null,
+        winnerName,
+        winnerAvatar: String(result?.winnerAvatar || '🏆').slice(0, 8),
+        completedAt,
+      }
+    }
+    thread.updatedAt = Math.max(thread.updatedAt, completedAt)
+    this.chatsFile.scheduleSave()
+    return { thread, message, changed: true }
+  }
+
   toggleMessageHeart(threadId, messageId, userId) {
     const thread = this.threadById(threadId)
     if (!this.isMember(thread, userId)) throw new Error('المحادثة دي مش موجودة.')

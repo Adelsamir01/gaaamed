@@ -68,6 +68,7 @@ export default function OnlineLobby({
   const handleGameFinished = (gameResult: GameResult) => {
     finishGame(gameResult)
     if (friendThreadId && onFriendMatchFinished) {
+      online.reportFriendGameResult(friendThreadId, gameResult)
       onFriendMatchFinished(friendThreadId)
       return
     }

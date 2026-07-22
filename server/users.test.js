@@ -58,3 +58,49 @@ test('message hearts toggle, persist, and are limited to thread members', () => 
     store.close()
   }
 })
+
+test('friend game results replace an invite action, persist, and cannot be overwritten', () => {
+  const store = new UserStore(testRoot)
+  try {
+    const adel = store.identify({ deviceId: 'result-device-adel', name: 'Adel', avatar: '😎' }).user
+    const mona = store.identify({ deviceId: 'result-device-mona', name: 'Mona', avatar: '🦊' }).user
+    const outsider = store.identify({ deviceId: 'result-device-outsider', name: 'Noor', avatar: '🌟' }).user
+    const { thread } = store.getOrCreateDm(adel.userId, mona.userId)
+    const { message } = store.postMessage(thread.id, adel.userId, {
+      text: 'دعوة للعب إكس أو',
+      kind: 'game_invite',
+      invite: { gameId: 'tictactoe', roomCode: '1234', gameName: 'إكس أو', gameEmoji: '⭕' },
+    })
+    const completedAt = Date.now() + 100
+
+    const completed = store.completeGameInvite(thread.id, message.id, mona.userId, {
+      kind: 'winner',
+      winnerId: mona.userId,
+      winnerName: mona.name,
+      winnerAvatar: mona.avatar,
+      completedAt,
+    })
+    assert.equal(completed.changed, true)
+    assert.deepEqual(message.invite.result, {
+      kind: 'winner',
+      winnerId: mona.userId,
+      winnerName: 'Mona',
+      winnerAvatar: '🦊',
+      completedAt,
+    })
+    assert.equal(store.threadSummary(thread, adel.userId).updatedAt, completedAt)
+
+    const retried = store.completeGameInvite(thread.id, message.id, adel.userId, {
+      kind: 'draw',
+      completedAt: completedAt + 1,
+    })
+    assert.equal(retried.changed, false)
+    assert.equal(message.invite.result.kind, 'winner')
+    assert.throws(
+      () => store.completeGameInvite(thread.id, message.id, outsider.userId, { kind: 'draw', completedAt }),
+      /المحادثة/,
+    )
+  } finally {
+    store.close()
+  }
+})

@@ -195,7 +195,11 @@ export default function Home({ goTab, openGame, openChat }: Props) {
                 <MessageCircle className="w-3 h-3 shrink-0" />
                 {t.lastMessage
                   ? t.lastMessage.kind === 'game_invite'
-                    ? `🎮 دعوة لعبة ${t.lastMessage.invite?.gameName ?? ''}`
+                    ? t.lastMessage.invite?.result?.kind === 'draw'
+                      ? `🤝 ${t.lastMessage.invite.gameName}: تعادل`
+                      : t.lastMessage.invite?.result?.kind === 'winner'
+                        ? `🏆 ${t.lastMessage.invite.result.winnerName} كسب ${t.lastMessage.invite.gameName}`
+                        : `🎮 دعوة لعبة ${t.lastMessage.invite?.gameName ?? ''}`
                     : t.lastMessage.text
                   : 'لا رسائل بعد'}
               </p>
