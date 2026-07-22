@@ -40,6 +40,10 @@ android {
             minifyEnabled true
             // Remove resources that become unreachable after R8 code shrinking.
             shrinkResources true
+            // Package native symbols so Play Console can decode native crashes and ANRs.
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
