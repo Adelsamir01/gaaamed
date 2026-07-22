@@ -176,13 +176,13 @@
     scrollbar-width: none;
   }
   .safe-bottom {
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
   }
   .safe-top {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
   }
   .tab-page {
-    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7.5rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)));
   }
   /* Core tabs stay mounted so switching only flips visibility. This keeps
      their data, forms, and scroll state warm between navigation taps. */
@@ -191,7 +191,7 @@
   }
   .game-start-action {
     margin-inline: -1rem;
-    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
     background: linear-gradient(to top, hsl(var(--background)) 72%, hsl(var(--background) / 0));
   }
   .bidi-number {
@@ -199,8 +199,18 @@
     unicode-bidi: isolate;
   }
   .game-stage {
-    min-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - 5.5rem - max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)));
     justify-content: center;
+  }
+  /* Android 15+ is edge-to-edge. Capacitor injects --safe-area-inset-* on
+     WebViews where the native window no longer shrinks around system bars. */
+  .online-game-screen {
+    height: calc(100dvh - max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)));
+    min-height: 0;
+  }
+  .online-game-body {
+    min-height: 0;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
   }
 }
 

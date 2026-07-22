@@ -624,7 +624,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
   }, [myRank])
 
   return (
-    <div className="relative flex flex-col gap-1.5 h-[calc(100dvh-5rem)] overflow-hidden select-none">
+    <div className="relative flex h-full min-h-0 flex-col gap-1.5 overflow-hidden select-none">
       {/* ===== الترويسة: جولة + رسام + مؤقت ===== */}
       <div className="flex items-center justify-between gap-2 shrink-0">
         <span className="glass rounded-full px-3 py-1 text-[11px] font-extrabold text-muted-foreground">
@@ -685,7 +685,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
 
       {/* ===== اللوحة الورقية ===== */}
       <div
-        className="relative rounded-3xl overflow-hidden border border-white/15 shrink-0 shadow-[inset_0_2px_16px_rgba(2,6,23,0.14)] h-[54%]"
+        className="relative min-h-[150px] basis-[54%] shrink overflow-hidden rounded-3xl border border-white/15 shadow-[inset_0_2px_16px_rgba(2,6,23,0.14)]"
         style={{
           background: '#fdfdfa',
           backgroundImage: 'radial-gradient(circle, rgba(15,23,42,0.08) 1px, transparent 1px)',
@@ -823,7 +823,7 @@ export default function Shakhbata({ onFinish }: GameProps) {
       )}
 
       {/* ===== الدردشة: فقاعات ===== */}
-      <div ref={chatRef} className="glass rounded-2xl p-2 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-1.5">
+      <div ref={chatRef} className="glass flex min-h-[68px] flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain rounded-2xl p-2">
         {chat.length === 0 && <p className="text-center text-[11px] text-muted-foreground my-auto">خمّنوا الكلمة هنا… 💬</p>}
         {chat.map((m) => {
           if (m.kind === 'message') {

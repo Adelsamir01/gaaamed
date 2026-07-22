@@ -120,9 +120,10 @@ export default function OnlineLobby({
   // ===== شاشة اللعب =====
   if (online.phase === 'playing' && game) {
     const GameComp = game.onlineComponent ?? game.component
+    const isShakhbata = game.id === 'shakhbata'
     return (
-      <div className="min-h-dvh flex flex-col">
-        <div className="px-4 pt-4 flex items-center gap-2">
+      <div className={cn(isShakhbata ? 'online-game-screen overflow-hidden' : 'min-h-dvh', 'flex flex-col')}>
+        <div className="px-4 pt-4 flex shrink-0 items-center gap-2">
           <button
             onClick={exitOnline}
             className="min-h-11 flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
@@ -135,7 +136,12 @@ export default function OnlineLobby({
           </span>
           <span className="w-16">{statusDot}</span>
         </div>
-        <motion.div key={online.matchId} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex-1 px-4 pb-8">
+        <motion.div
+          key={online.matchId}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn('flex-1 px-4', isShakhbata ? 'online-game-body overflow-hidden' : 'pb-8')}
+        >
           <GameComp config={{ mode: 'bot', difficulty: 'medium' }} onFinish={handleGameFinished} onExit={exitOnline} />
         </motion.div>
       </div>
