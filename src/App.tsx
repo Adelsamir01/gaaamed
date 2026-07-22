@@ -46,7 +46,7 @@ type View =
 function Shell() {
   const { onboarded, profile, startGame, finishGame } = useApp()
   const online = useOnline()
-  const { sendRaw: sendOnline, status: onlineStatus } = online
+  const { loadThread: loadOnlineThread, sendRaw: sendOnline, status: onlineStatus } = online
   const [tab, setTab] = useState<TabId>('home')
   const [view, setView] = useState<View>({ kind: 'tabs' })
   const [chatRoomId, setChatRoomId] = useState<string | null>(null)
@@ -92,9 +92,9 @@ function Shell() {
   }, [activateTab])
 
   const openChatFromNotification = useCallback((threadId: string) => {
-    online.loadThread(threadId)
+    loadOnlineThread(threadId)
     openChat(threadId)
-  }, [online.loadThread, openChat])
+  }, [loadOnlineThread, openChat])
 
   useEffect(() => {
     if (!onboarded) return

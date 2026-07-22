@@ -404,6 +404,17 @@ function genCode() {
   return code
 }
 
+const serializedMessageCache = new WeakMap()
+
+function serialiseMessage(obj) {
+  if (!obj || typeof obj !== 'object') return JSON.stringify(obj)
+  const cached = serializedMessageCache.get(obj)
+  if (cached) return cached
+  const payload = JSON.stringify(obj)
+  serializedMessageCache.set(obj, payload)
+  return payload
+}
+
 function send(ws, obj) {
   if (!ws || ws.readyState !== 1) return false
   if (ws.bufferedAmount > MAX_WS_BUFFERED_BYTES) {
@@ -411,7 +422,9 @@ function send(ws, obj) {
     ws.close(1013, 'slow_client')
     return false
   }
-  const payload = JSON.stringify(obj)
+  // Arena snapshots are identical for every member. Cache by object identity
+  // so a 100+ KB state is serialized once per arena, not once per socket.
+  const payload = serialiseMessage(obj)
   ws.send(payload)
   return true
 }
@@ -949,7 +962,7 @@ wss.on('connection', (ws, request) => {
       case 'snake_public_join': {
         handleLeave(ws)
         removeFromQueues(ws)
-        snakeManager.join(ws, { name: msg.name, avatar: msg.avatar })
+        snakeManager.join(ws, { name: msg.name, avatar: msg.avatar, snapshotVersion: msg.snapshotVersion })
         if (ws._userId) broadcastFriendsUpdate(ws._userId)
         break
       }
@@ -1717,7 +1730,16 @@ httpServer.listen(PORT, () => {
   log('info', 'server_started', { port: PORT, version: APP_VERSION })
 })
 
-const snakeTickTimer = setInterval(() => snakeManager.tick(), SNAKE_TICK_MS)
+let lastSnakeTickAt = performance.now()
+const snakeTickTimer = setInterval(() => {
+  const now = performance.now()
+  const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastSnakeTickAt) / 1_000))
+  lastSnakeTickAt = now
+  const maximumStep = SNAKE_TICK_MS / 1_000
+  const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
+  const stepSeconds = elapsedSeconds / stepCount
+  for (let step = 0; step < stepCount; step += 1) snakeManager.tick(stepSeconds)
+}, SNAKE_TICK_MS)
 if (snakeTickTimer.unref) snakeTickTimer.unref()
 const snakeSnapshotTimer = setInterval(() => snakeManager.broadcastSnapshots(), SNAKE_SNAPSHOT_MS)
 if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()

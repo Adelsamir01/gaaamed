@@ -5,6 +5,7 @@ import {
   bodyRadiusForLength,
   cameraZoomForLength,
   headRadiusForLength,
+  mergeFoodSnapshot,
   reconcileTrail,
   trailLength,
 } from '../src/games/online/snakeMotion.ts'
@@ -41,4 +42,13 @@ test('long snakes grow thicker while their own camera zooms out smoothly', () =>
   assert.equal(cameraZoomForLength(128), 1)
   assert.ok(cameraZoomForLength(1_000) < 0.7)
   assert.ok(cameraZoomForLength(100_000) >= 0.62)
+})
+
+test('food patches update only changed arena items without mutating the prior snapshot', () => {
+  const current = [{ id: 1, value: 'old' }, { id: 2, value: 'keep' }]
+  const merged = mergeFoodSnapshot(current, undefined, [{ id: 3, value: 'new' }], [1])
+
+  assert.deepEqual(merged, [{ id: 2, value: 'keep' }, { id: 3, value: 'new' }])
+  assert.deepEqual(current, [{ id: 1, value: 'old' }, { id: 2, value: 'keep' }])
+  assert.equal(mergeFoodSnapshot(current, undefined), current)
 })

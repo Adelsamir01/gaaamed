@@ -3,6 +3,20 @@ export interface SnakePoint {
   y: number
 }
 
+export function mergeFoodSnapshot<T extends { id: number }>(
+  current: T[],
+  full: T[] | undefined,
+  upserts: T[] = [],
+  removedIds: number[] = [],
+): T[] {
+  if (full) return full
+  if (upserts.length === 0 && removedIds.length === 0) return current
+  const byId = new Map(current.map((food) => [food.id, food]))
+  for (const foodId of removedIds) byId.delete(foodId)
+  for (const food of upserts) byId.set(food.id, food)
+  return [...byId.values()]
+}
+
 const START_LENGTH = 128
 const BASE_BODY_RADIUS = 8.5
 
@@ -56,43 +70,58 @@ export function advanceTrail(points: SnakePoint[], angle: number, distance: numb
   }, ...points], maximumLength)
 }
 
-function sampleTrail(points: SnakePoint[], distanceFromHead: number): SnakePoint {
-  if (points.length === 0) return { x: 0, y: 0 }
-  let travelled = 0
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1]
-    const current = points[index]
-    const segmentLength = Math.hypot(current.x - previous.x, current.y - previous.y)
-    if (travelled + segmentLength >= distanceFromHead) {
-      const ratio = segmentLength > 0 ? (distanceFromHead - travelled) / segmentLength : 0
-      return {
-        x: previous.x + (current.x - previous.x) * ratio,
-        y: previous.y + (current.y - previous.y) * ratio,
-      }
-    }
-    travelled += segmentLength
-  }
-  return { ...points.at(-1)! }
-}
-
 export function reconcileTrail(current: SnakePoint[], target: SnakePoint[], factor: number): SnakePoint[] {
   if (current.length === 0) return target.map((point) => ({ ...point }))
   if (target.length === 0) return current
   const safeFactor = clamp(factor, 0, 1)
   const reconciled: SnakePoint[] = []
-  let distanceFromHead = 0
+  let currentDistance = 0
+  let targetIndex = 1
+  let targetSegmentStart = 0
+  let targetSegmentLength = target.length > 1
+    ? Math.hypot(target[1].x - target[0].x, target[1].y - target[0].y)
+    : 0
 
   for (let index = 0; index < current.length; index += 1) {
     if (index > 0) {
-      distanceFromHead += Math.hypot(
+      currentDistance += Math.hypot(
         current[index].x - current[index - 1].x,
         current[index].y - current[index - 1].y,
       )
     }
-    const targetPoint = sampleTrail(target, distanceFromHead)
+
+    // Both distances only move from head to tail. Keeping the target cursor
+    // here makes reconciliation O(current + target), instead of rescanning the
+    // complete target trail for every body point.
+    while (targetIndex < target.length && targetSegmentStart + targetSegmentLength < currentDistance) {
+      targetSegmentStart += targetSegmentLength
+      targetIndex += 1
+      if (targetIndex < target.length) {
+        targetSegmentLength = Math.hypot(
+          target[targetIndex].x - target[targetIndex - 1].x,
+          target[targetIndex].y - target[targetIndex - 1].y,
+        )
+      }
+    }
+
+    let targetX: number
+    let targetY: number
+    if (targetIndex >= target.length) {
+      const tail = target[target.length - 1]
+      targetX = tail.x
+      targetY = tail.y
+    } else {
+      const previous = target[targetIndex - 1]
+      const next = target[targetIndex]
+      const ratio = targetSegmentLength > 0
+        ? clamp((currentDistance - targetSegmentStart) / targetSegmentLength, 0, 1)
+        : 0
+      targetX = previous.x + (next.x - previous.x) * ratio
+      targetY = previous.y + (next.y - previous.y) * ratio
+    }
     reconciled.push({
-      x: current[index].x + (targetPoint.x - current[index].x) * safeFactor,
-      y: current[index].y + (targetPoint.y - current[index].y) * safeFactor,
+      x: current[index].x + (targetX - current[index].x) * safeFactor,
+      y: current[index].y + (targetY - current[index].y) * safeFactor,
     })
   }
 

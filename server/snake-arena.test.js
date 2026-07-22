@@ -228,3 +228,55 @@ test('the massive circular arena has a lethal outer boundary instead of wrapping
   assert.equal(player.alive, false)
   assert.ok(player.trail[0].x > center + SNAKE_ARENA_RADIUS - 12)
 })
+
+test('regular arena broadcasts send compact food patches after the initial full state', () => {
+  const sent = []
+  const manager = new SnakeArenaManager({
+    send: (socket, message) => sent.push({ socket, message }),
+    random: () => 0.5,
+    botCount: 0,
+  })
+  const socket = {}
+  const legacySocket = {}
+  manager.track(socket)
+  manager.track(legacySocket)
+  const player = manager.join(socket, { name: 'Player', snapshotVersion: 2 })
+  const arena = [...manager.arenas.values()][0]
+  manager.memberships.set(legacySocket, { arenaId: arena.id, playerId: 'legacy-observer', snapshotVersion: 1 })
+
+  sent.length = 0
+  manager.broadcastSnapshots()
+  const full = sent.find(({ socket: target, message }) => target === socket && message.type === 'snake_public_snapshot')?.message
+  assert.equal(full.foods.length, SNAKE_FOOD_COUNT)
+  const legacyFull = sent.find(({ socket: target, message }) => target === legacySocket && message.type === 'snake_public_snapshot')?.message
+  assert.equal(legacyFull.foods.length, SNAKE_FOOD_COUNT)
+
+  sent.length = 0
+  player.angle = 0
+  player.targetAngle = 0
+  const eaten = arena.foods[0]
+  eaten.x = player.trail[0].x + SNAKE_BASE_SPEED * 0.05
+  eaten.y = player.trail[0].y
+  arena.tick(0.05)
+  manager.broadcastSnapshots()
+
+  const patch = sent.find(({ socket: target, message }) => target === socket && message.type === 'snake_public_snapshot')?.message
+  assert.equal('foods' in patch, false)
+  assert.deepEqual(patch.foodRemovedIds, [eaten.id])
+  assert.equal(patch.foodUpserts.length, 1)
+  const legacyUpdate = sent.find(({ socket: target, message }) => target === legacySocket && message.type === 'snake_public_snapshot')?.message
+  assert.equal(legacyUpdate.foods.length, SNAKE_FOOD_COUNT)
+  assert.equal('foodUpserts' in legacyUpdate, false)
+})
+
+test('long trails are bounded in network snapshots while preserving both ends', () => {
+  const arena = new SnakeArena('snapshot', { random: () => 0.5 })
+  const player = arena.addPlayer({ id: 'long', name: 'Long' })
+  player.length = 3_000
+  player.trail = Array.from({ length: 500 }, (_, index) => ({ x: 2_000 - index * 6, y: 2_000 }))
+
+  const trail = arena.snapshot().players[0].trail
+  assert.ok(trail.length <= 122)
+  assert.deepEqual(trail[0], player.trail[0])
+  assert.deepEqual(trail.at(-1), player.trail.at(-1))
+})

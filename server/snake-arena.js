@@ -18,6 +18,10 @@ const BOT_RESPAWN_MIN_SECONDS = 1.4
 const BOT_RESPAWN_VARIANCE_SECONDS = 1.8
 export const SNAKE_FOOD_COUNT = 260
 const MAX_REMAINS_FOOD = 180
+const SNAPSHOT_MAX_TRAIL_POINTS = 120
+const FOOD_GRID_SIZE = 72
+const BODY_GRID_SIZE = 96
+const MAX_FOOD_RADIUS = 11
 const FOOD_HUES = [38, 52, 94, 162, 188, 280, 332]
 const FOOD_VARIANTS = [
   { radius: 4.5, value: 1 },
@@ -46,6 +50,76 @@ function clamp(value, min, max) {
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function distanceSquared(a, b) {
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  return dx * dx + dy * dy
+}
+
+function spatialKey(x, y, cellSize) {
+  return `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`
+}
+
+function addSpatialItem(grid, item, cellSize) {
+  const key = spatialKey(item.x, item.y, cellSize)
+  const bucket = grid.get(key)
+  if (bucket) bucket.push(item)
+  else grid.set(key, [item])
+}
+
+function removeSpatialItem(grid, item, cellSize) {
+  const key = spatialKey(item.x, item.y, cellSize)
+  const bucket = grid.get(key)
+  if (!bucket) return
+  const index = bucket.indexOf(item)
+  if (index >= 0) bucket.splice(index, 1)
+  if (bucket.length === 0) grid.delete(key)
+}
+
+function nearbySpatialItems(grid, point, radius, cellSize) {
+  const nearby = []
+  const minX = Math.floor((point.x - radius) / cellSize)
+  const maxX = Math.floor((point.x + radius) / cellSize)
+  const minY = Math.floor((point.y - radius) / cellSize)
+  const maxY = Math.floor((point.y + radius) / cellSize)
+  for (let cellX = minX; cellX <= maxX; cellX += 1) {
+    for (let cellY = minY; cellY <= maxY; cellY += 1) {
+      const bucket = grid.get(`${cellX}:${cellY}`)
+      if (bucket) nearby.push(...bucket)
+    }
+  }
+  return nearby
+}
+
+function buildFoodGrid(foods) {
+  const grid = new Map()
+  for (const food of foods) addSpatialItem(grid, food, FOOD_GRID_SIZE)
+  return grid
+}
+
+function buildBodyGrid(players) {
+  const grid = new Map()
+  for (const player of players) {
+    if (!player.alive) continue
+    const radius = snakeBodyRadius(player.length)
+    for (let index = 1; index < player.trail.length; index += 1) {
+      const point = player.trail[index]
+      addSpatialItem(grid, { x: point.x, y: point.y, playerId: player.id, radius }, BODY_GRID_SIZE)
+    }
+  }
+  return grid
+}
+
+function snapshotTrail(points) {
+  if (points.length <= 2) return points
+  const stride = Math.max(2, Math.ceil(points.length / SNAPSHOT_MAX_TRAIL_POINTS))
+  const sampled = [points[0]]
+  for (let index = stride; index < points.length - 1; index += stride) sampled.push(points[index])
+  const tail = points[points.length - 1]
+  if (sampled.at(-1) !== tail) sampled.push(tail)
+  return sampled
 }
 
 function angleDifference(from, to) {
@@ -125,6 +199,8 @@ export class SnakeArena {
     this.players = new Map()
     this.foodVersion = 0
     this.lastBroadcastFoodVersion = -1
+    this.pendingFoodUpserts = new Map()
+    this.pendingFoodRemovals = new Set()
     this.foods = Array.from({ length: SNAKE_FOOD_COUNT }, (_, index) => this.createFood(index))
     this.nextFoodId = SNAKE_FOOD_COUNT
   }
@@ -141,6 +217,27 @@ export class SnakeArena {
       value: variant.value,
       source: 'arena',
     }
+  }
+
+  noteFoodAdded(food) {
+    this.pendingFoodUpserts.set(food.id, food)
+  }
+
+  noteFoodRemoved(food) {
+    this.pendingFoodUpserts.delete(food.id)
+    this.pendingFoodRemovals.add(food.id)
+  }
+
+  consumeFoodChanges(includeFull) {
+    const changes = includeFull
+      ? { foods: this.foods }
+      : {
+          foodUpserts: [...this.pendingFoodUpserts.values()],
+          foodRemovedIds: [...this.pendingFoodRemovals],
+        }
+    this.pendingFoodUpserts.clear()
+    this.pendingFoodRemovals.clear()
+    return changes
   }
 
   dropPlayerFood(player) {
@@ -160,7 +257,7 @@ export class SnakeArena {
         x: point.x + (this.random() - 0.5) * 7,
         y: point.y + (this.random() - 0.5) * 7,
       }, this.size, this.radius, 18)
-      this.foods.push({
+      const food = {
         id: this.nextFoodId,
         x: Math.round(dropped.x * 10) / 10,
         y: Math.round(dropped.y * 10) / 10,
@@ -168,7 +265,9 @@ export class SnakeArena {
         radius: 5.5 + value * 1.15,
         value,
         source: 'remains',
-      })
+      }
+      this.foods.push(food)
+      this.noteFoodAdded(food)
       this.nextFoodId += 1
     }
     this.foodVersion += 1
@@ -252,7 +351,7 @@ export class SnakeArena {
     return this.spawnPlayer(player)
   }
 
-  updateBotSteering(player, dt, center) {
+  updateBotSteering(player, dt, center, bodyGrid) {
     player.botThinkIn -= dt
     const head = player.trail[0]
     const wallDistance = this.radius - distance(head, center)
@@ -295,14 +394,12 @@ export class SnakeArena {
     }
     let nearestThreat = null
     let nearestThreatDistance = Number.POSITIVE_INFINITY
-    for (const other of this.players.values()) {
-      if (!other.alive || other.id === player.id) continue
-      for (let index = 1; index < other.trail.length; index += 3) {
-        const threatDistance = distance(probe, other.trail[index])
-        if (threatDistance < nearestThreatDistance) {
-          nearestThreatDistance = threatDistance
-          nearestThreat = other.trail[index]
-        }
+    for (const threat of nearbySpatialItems(bodyGrid, probe, 130, BODY_GRID_SIZE)) {
+      if (threat.playerId === player.id) continue
+      const threatDistanceSquared = distanceSquared(probe, threat)
+      if (threatDistanceSquared < nearestThreatDistance * nearestThreatDistance) {
+        nearestThreatDistance = Math.sqrt(threatDistanceSquared)
+        nearestThreat = threat
       }
     }
     if (nearestThreat && nearestThreatDistance < 92 + snakeBodyRadius(player.length)) {
@@ -321,15 +418,18 @@ export class SnakeArena {
 
     const boundaryDeaths = new Set()
     const center = { x: this.size / 2, y: this.size / 2 }
-    for (const player of this.players.values()) {
+    const players = [...this.players.values()]
+    for (const player of players) {
       if (!player.isBot || player.alive) continue
       player.respawnIn -= dt
       if (player.respawnIn <= 0) this.spawnPlayer(player)
     }
-    for (const player of this.players.values()) {
-      if (player.isBot && player.alive) this.updateBotSteering(player, dt, center)
+    const steeringBodyGrid = buildBodyGrid(players)
+    for (const player of players) {
+      if (player.isBot && player.alive) this.updateBotSteering(player, dt, center, steeringBodyGrid)
     }
-    for (const player of this.players.values()) {
+    const foodGrid = buildFoodGrid(this.foods)
+    for (const player of players) {
       if (!player.alive) continue
       const turn = clamp(angleDifference(player.angle, player.targetAngle), -TURN_RATE * dt, TURN_RATE * dt)
       player.angle += turn
@@ -347,14 +447,25 @@ export class SnakeArena {
         continue
       }
 
-      const eatenIndex = this.foods.findIndex((food) => distance(nextHead, food) < headRadius + food.radius + 2)
-      if (eatenIndex >= 0) {
-        const [eaten] = this.foods.splice(eatenIndex, 1)
+      const nearbyFoods = nearbySpatialItems(foodGrid, nextHead, headRadius + MAX_FOOD_RADIUS + 2, FOOD_GRID_SIZE)
+      const eaten = nearbyFoods.find((food) => {
+        const collisionRadius = headRadius + food.radius + 2
+        return distanceSquared(nextHead, food) < collisionRadius * collisionRadius
+      })
+      if (eaten) {
+        const eatenIndex = this.foods.indexOf(eaten)
+        if (eatenIndex < 0) continue
+        this.foods.splice(eatenIndex, 1)
+        removeSpatialItem(foodGrid, eaten, FOOD_GRID_SIZE)
+        this.noteFoodRemoved(eaten)
         const value = clamp(Math.round(Number(eaten.value) || 1), 1, 5)
         player.score += value
         player.length += GROWTH_PER_POINT * value
         if (eaten.source !== 'remains') {
-          this.foods.push(this.createFood(this.nextFoodId))
+          const replacement = this.createFood(this.nextFoodId)
+          this.foods.push(replacement)
+          addSpatialItem(foodGrid, replacement, FOOD_GRID_SIZE)
+          this.noteFoodAdded(replacement)
           this.nextFoodId += 1
         }
         this.foodVersion += 1
@@ -362,21 +473,16 @@ export class SnakeArena {
     }
 
     const deathIds = new Set(boundaryDeaths)
-    for (const player of this.players.values()) {
+    const collisionGrid = buildBodyGrid(players)
+    for (const player of players) {
       if (!player.alive) continue
       const head = player.trail[0]
-      let collided = false
-
-      for (const other of this.players.values()) {
-        if (!other.alive || other.id === player.id) continue
-        for (let index = 1; index < other.trail.length; index += 1) {
-          if (distance(head, other.trail[index]) < snakeHeadRadius(player.length) + snakeBodyRadius(other.length) - 2) {
-            collided = true
-            break
-          }
-        }
-        if (collided) break
-      }
+      const headRadius = snakeHeadRadius(player.length)
+      const collided = nearbySpatialItems(collisionGrid, head, headRadius + 21, BODY_GRID_SIZE).some((bodyPoint) => {
+        if (bodyPoint.playerId === player.id) return false
+        const collisionRadius = headRadius + bodyPoint.radius - 2
+        return distanceSquared(head, bodyPoint) < collisionRadius * collisionRadius
+      })
 
       if (collided) {
         deathIds.add(player.id)
@@ -417,7 +523,7 @@ export class SnakeArena {
         isBot: player.isBot,
         alive: player.alive,
         angle: Math.round(player.angle * 10_000) / 10_000,
-        trail: player.trail.map((point) => ({
+        trail: snapshotTrail(player.trail).map((point) => ({
           x: Math.round(point.x * 10) / 10,
           y: Math.round(point.y * 10) / 10,
         })),
@@ -462,7 +568,8 @@ export class SnakeArenaManager {
       avatar: profile.avatar,
       hue: this.random() * 360,
     })
-    this.memberships.set(socket, { arenaId: arena.id, playerId })
+    const snapshotVersion = Number(profile.snapshotVersion) >= 2 ? 2 : 1
+    this.memberships.set(socket, { arenaId: arena.id, playerId, snapshotVersion })
     this.send(socket, {
       type: 'snake_public_joined',
       arenaId: arena.id,
@@ -526,10 +633,38 @@ export class SnakeArenaManager {
   broadcastSnapshots() {
     const now = this.now()
     for (const arena of this.arenas.values()) {
-      const includeFoods = arena.lastBroadcastFoodVersion !== arena.foodVersion
-      const snapshot = arena.snapshot(now, includeFoods)
+      const members = [...this.members(arena.id)]
+      if (members.length === 0) continue
+      const foodChanged = arena.lastBroadcastFoodVersion !== arena.foodVersion
+      const initialFoodState = foodChanged && arena.lastBroadcastFoodVersion < 0
+      if (initialFoodState) {
+        const snapshot = arena.snapshot(now, true)
+        arena.consumeFoodChanges(true)
+        arena.lastBroadcastFoodVersion = arena.foodVersion
+        for (const [socket] of members) this.send(socket, snapshot)
+        continue
+      }
+
+      const modernMembers = members.filter(([, membership]) => membership.snapshotVersion >= 2)
+      const legacyMembers = members.filter(([, membership]) => membership.snapshotVersion < 2)
+      const changes = foodChanged ? arena.consumeFoodChanges(false) : null
+      const sharedSnapshot = !foodChanged || modernMembers.length === 0 || legacyMembers.length === 0
+        ? arena.snapshot(now, foodChanged && legacyMembers.length > 0)
+        : null
+
+      if (modernMembers.length > 0) {
+        const snapshot = sharedSnapshot ?? arena.snapshot(now, false)
+        if (changes) {
+          if (changes.foodUpserts.length > 0) snapshot.foodUpserts = changes.foodUpserts
+          if (changes.foodRemovedIds.length > 0) snapshot.foodRemovedIds = changes.foodRemovedIds
+        }
+        for (const [socket] of modernMembers) this.send(socket, snapshot)
+      }
+      if (legacyMembers.length > 0) {
+        const snapshot = sharedSnapshot ?? arena.snapshot(now, foodChanged)
+        for (const [socket] of legacyMembers) this.send(socket, snapshot)
+      }
       arena.lastBroadcastFoodVersion = arena.foodVersion
-      for (const [socket] of this.members(arena.id)) this.send(socket, snapshot)
     }
   }
 
