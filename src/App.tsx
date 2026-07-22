@@ -44,7 +44,7 @@ type View =
   | { kind: 'snake-online' }
 
 function Shell() {
-  const { onboarded, profile, finishGame } = useApp()
+  const { onboarded, profile, startGame, finishGame } = useApp()
   const online = useOnline()
   const [tab, setTab] = useState<TabId>('home')
   const [view, setView] = useState<View>({ kind: 'tabs' })
@@ -169,9 +169,17 @@ function Shell() {
     setView({ kind: 'online' })
   }
 
-  const handleFinish = (result: GameResult, config: GameConfig) => {
-    finishGame(result)
-    setView({ kind: 'results', result, config })
+  const startOfflineGame = (gameId: string, config: GameConfig) => {
+    startGame(gameId)
+    setView({ kind: 'playing', gameId, config })
+  }
+
+  const handleOfflineFinish = (result: GameResult, config: GameConfig, gameId: string) => {
+    // The registry id is the dashboard's source of truth. This also protects
+    // progress if a game component accidentally returns a stale/renamed id.
+    const normalizedResult = result.gameId === gameId ? result : { ...result, gameId }
+    finishGame(normalizedResult, { countAsPlayed: false })
+    setView({ kind: 'results', result: normalizedResult, config })
   }
 
   const returnToFriendChat = (threadId: string) => {
@@ -188,7 +196,7 @@ function Shell() {
       <div className="mx-auto max-w-[420px] min-h-dvh relative safe-top">
         <GameResults
           result={view.result}
-          onReplay={() => setView({ kind: 'playing', gameId: view.result.gameId, config: view.config })}
+          onReplay={() => startOfflineGame(view.result.gameId, view.config)}
           onExit={() => {
             setView({ kind: 'tabs' })
             activateTab('games', false)
@@ -221,7 +229,7 @@ function Shell() {
           >
             <GameComp
               config={view.config}
-              onFinish={(r) => handleFinish(r, view.config)}
+              onFinish={(r) => handleOfflineFinish(r, view.config, view.gameId)}
               onExit={() => setView({ kind: 'lobby', gameId: view.gameId })}
             />
           </motion.div>
@@ -239,7 +247,7 @@ function Shell() {
           >
             <GameComp
               config={view.config}
-              onFinish={(r) => handleFinish(r, view.config)}
+              onFinish={(r) => handleOfflineFinish(r, view.config, view.gameId)}
               onExit={() => setView({ kind: 'lobby', gameId: view.gameId })}
             />
           </motion.div>
@@ -263,7 +271,7 @@ function Shell() {
           <span className="w-14" />
         </div>
         <motion.div key={view.gameId + JSON.stringify(view.config)} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex-1 px-4 pb-8">
-          <GameComp config={view.config} onFinish={(r) => handleFinish(r, view.config)} />
+          <GameComp config={view.config} onFinish={(r) => handleOfflineFinish(r, view.config, view.gameId)} />
         </motion.div>
       </div>
     )
@@ -276,7 +284,7 @@ function Shell() {
       <div className="mx-auto max-w-[420px] min-h-dvh safe-top">
         <GameLobby
           game={game}
-          onStart={(config) => setView({ kind: 'playing', gameId: view.gameId, config })}
+          onStart={(config) => startOfflineGame(view.gameId, config)}
           onOnline={() => {
             setFriendMatchThreadId(null)
             setView(view.gameId === 'snake'

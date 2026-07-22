@@ -4,6 +4,7 @@ import type { GameResult, GameStats, Profile, Settings } from '@/types'
 import { levelFromXp } from '@/types'
 import { setSoundEnabled } from '@/lib/sounds'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
+import { recordGameResult, recordGameStarted } from './gameStats'
 
 const STORAGE_KEY = 'gaaamed-state-v1'
 
@@ -19,7 +20,8 @@ interface AppContextValue extends PersistedState {
   completeOnboarding: (name: string, avatar: string, handle?: string) => void
   addCoins: (n: number) => void
   addXp: (n: number) => void
-  finishGame: (result: GameResult) => void
+  startGame: (gameId: string) => void
+  finishGame: (result: GameResult, options?: { countAsPlayed?: boolean }) => void
   claimDailyReward: () => boolean
   canClaimDaily: boolean
   setIdentity: (userId: string, handle: string) => void
@@ -106,16 +108,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const finishGame = useCallback((result: GameResult) => {
+  const startGame = useCallback((gameId: string) => {
+    setState((s) => ({ ...s, stats: recordGameStarted(s.stats, gameId) }))
+  }, [])
+
+  const finishGame = useCallback((result: GameResult, { countAsPlayed = true }: { countAsPlayed?: boolean } = {}) => {
     setState((s) => {
-      const prev = s.stats[result.gameId] ?? { played: 0, won: 0 }
-      let bestScore = prev.bestScore
-      if (result.bestCandidate !== undefined) {
-        if (bestScore === undefined) bestScore = result.bestCandidate
-        else if (result.lowerIsBetter) bestScore = Math.min(bestScore, result.bestCandidate)
-        else bestScore = Math.max(bestScore, result.bestCandidate)
-      }
-      const won = result.outcome === 'win'
       const oldLevel = levelFromXp(s.profile.xp)
       const newXp = s.profile.xp + result.xpEarned
       const newLevel = levelFromXp(newXp)
@@ -127,10 +125,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return {
         ...s,
         profile: { ...s.profile, xp: newXp, coins: s.profile.coins + result.coinsEarned },
-        stats: {
-          ...s.stats,
-          [result.gameId]: { played: prev.played + 1, won: prev.won + (won ? 1 : 0), bestScore },
-        },
+        stats: recordGameResult(s.stats, result, { countAsPlayed }),
       }
     })
   }, [])
@@ -175,6 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       completeOnboarding,
       addCoins,
       addXp,
+      startGame,
       finishGame,
       claimDailyReward,
       setIdentity,
@@ -182,7 +178,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSound,
       resetProgress,
     }),
-    [state, canClaimDaily, completeOnboarding, addCoins, addXp, finishGame, claimDailyReward, setIdentity, updateProfile, toggleSound, resetProgress],
+    [state, canClaimDaily, completeOnboarding, addCoins, addXp, startGame, finishGame, claimDailyReward, setIdentity, updateProfile, toggleSound, resetProgress],
   )
 
   if (!hydrated) {
