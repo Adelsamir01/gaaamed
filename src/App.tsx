@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { AppProvider, useApp } from '@/store/AppContext'
 import { OnlineProvider, useOnline } from '@/online/OnlineContext'
-import type { GameConfig, GameResult } from '@/types'
+import type { GameConfig, GameResult, RoomSettings } from '@/types'
 import { getGame } from '@/games'
 import { TabBar, type TabId } from '@/sections/TabBar'
 import { sounds } from '@/lib/sounds'
@@ -40,7 +40,7 @@ type View =
   | { kind: 'lobby'; gameId: string }
   | { kind: 'playing'; gameId: string; config: GameConfig }
   | { kind: 'results'; result: GameResult; config: GameConfig }
-  | { kind: 'online'; quickGameId?: string }
+  | { kind: 'online'; quickGameId?: string; quickSettings?: RoomSettings }
   | { kind: 'snake-online' }
 
 function Shell() {
@@ -285,11 +285,15 @@ function Shell() {
         <GameLobby
           game={game}
           onStart={(config) => startOfflineGame(view.gameId, config)}
-          onOnline={() => {
+          onOnline={(difficulty) => {
             setFriendMatchThreadId(null)
             setView(view.gameId === 'snake'
               ? { kind: 'snake-online' }
-              : { kind: 'online', quickGameId: view.gameId })
+              : {
+                  kind: 'online',
+                  quickGameId: view.gameId,
+                  quickSettings: view.gameId === 'memory' ? { difficulty } : undefined,
+                })
           }}
           onBack={() => setView({ kind: 'tabs' })}
         />
@@ -303,6 +307,7 @@ function Shell() {
       <div className="mx-auto max-w-[420px] min-h-dvh safe-top">
         <OnlineLobby
           quickGameId={view.quickGameId}
+          quickSettings={view.quickSettings}
           friendThreadId={friendMatchThreadId}
           onFriendMatchFinished={returnToFriendChat}
           onBack={() => {

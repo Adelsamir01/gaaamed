@@ -57,9 +57,10 @@ export type GameInviteResult =
       completedAt: number
     }
 
-/** إعدادات غرفة أونلاين — عدد جولات السلسلة/المباراة */
+/** إعدادات غرفة أونلاين — عدد الجولات ومستوى لوحة الألعاب التي تدعمه. */
 export interface RoomSettings {
   rounds?: number
+  difficulty?: Difficulty
 }
 
 /** خيارات الجولات المتاحة في منتقي الإعدادات */

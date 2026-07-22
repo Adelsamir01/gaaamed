@@ -4,7 +4,7 @@ import { ChevronRight, Gamepad2, Heart, Loader2, Send, Trophy } from 'lucide-rea
 import { useOnline, type ChatMessage } from '@/online/OnlineContext'
 import { AvatarCircle } from './components'
 import { ONLINE_GAMES, getGame } from '@/games'
-import { DEFAULT_ROUNDS, gameUsesRounds } from '@/types'
+import { DEFAULT_ROUNDS, gameUsesRounds, type Difficulty } from '@/types'
 import { ROUND_AR, RoundsStepper } from './OnlineLobby'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
@@ -130,6 +130,8 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
                     {result ? 'انتهت المباراة' : mine ? 'أرسلت دعوة لعب 🎮' : `${m.senderName} بيتحداك!`}
                     {!result && m.invite.settings?.rounds != null &&
                       ` · ${ROUND_AR[m.invite.settings.rounds] ?? m.invite.settings.rounds} جولات 🏆`}
+                    {!result && m.invite.gameId === 'memory' && m.invite.settings?.difficulty &&
+                      ` · ${m.invite.settings.difficulty === 'hard' ? 'صعب ٦×٥' : m.invite.settings.difficulty === 'medium' ? 'متوسط ٥×٤' : 'سهل ٤×٤'} 🧠`}
                   </p>
                 </div>
               </div>
@@ -225,6 +227,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   // منتقي الدعوات: اللعبة ذات الجولات المختارة + عدد الجولات (الافتراضي ٥)
   const [inviteGame, setInviteGame] = useState<string | null>(null)
   const [inviteRounds, setInviteRounds] = useState<number>(DEFAULT_ROUNDS)
+  const [inviteDifficulty, setInviteDifficulty] = useState<Difficulty>('easy')
   const [showNewestButton, setShowNewestButton] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -315,7 +318,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
 
   const sendInvite = (gameId: string) => {
     // الألعاب ذات الجولات تمر بخطوة اختيار عدد الجولات أولًا
-    if (gameUsesRounds(gameId)) {
+    if (gameUsesRounds(gameId) || gameId === 'memory') {
       sounds.click()
       setInviteGame(gameId)
       return
@@ -328,13 +331,18 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const confirmInvite = () => {
     if (!inviteGame) return
     sounds.pop()
-    chatSendInvite(threadId, inviteGame, { rounds: inviteRounds })
+    chatSendInvite(
+      threadId,
+      inviteGame,
+      inviteGame === 'memory' ? { difficulty: inviteDifficulty } : { rounds: inviteRounds },
+    )
     closeInvitePicker()
   }
 
   const closeInvitePicker = () => {
     setInviteOpen(false)
     setInviteGame(null)
+    setInviteDifficulty('easy')
   }
 
   return (
@@ -465,11 +473,45 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
                 <div className="flex-1">
                   <p className="font-extrabold text-sm">{getGame(inviteGame)?.name}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {inviteGame === 'shakhbata' ? 'كم جولة رسم وتخمين؟' : 'أفضل من كم جولة؟'}
+                    {inviteGame === 'memory'
+                      ? 'اختار حجم لوحة الذاكرة'
+                      : inviteGame === 'shakhbata'
+                        ? 'كم جولة رسم وتخمين؟'
+                        : 'أفضل من كم جولة؟'}
                   </p>
                 </div>
               </div>
-              <RoundsStepper value={inviteRounds} onChange={setInviteRounds} />
+              {inviteGame === 'memory' ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { id: 'easy', label: 'سهل', detail: '٤×٤', pairs: '٨ أزواج' },
+                    { id: 'medium', label: 'متوسط', detail: '٥×٤', pairs: '١٠ أزواج' },
+                    { id: 'hard', label: 'صعب', detail: '٦×٥', pairs: '١٥ زوجًا' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        sounds.click()
+                        setInviteDifficulty(option.id)
+                      }}
+                      aria-pressed={inviteDifficulty === option.id}
+                      className={cn(
+                        'rounded-2xl border px-1.5 py-3 text-center transition-all',
+                        inviteDifficulty === option.id
+                          ? 'border-emerald-400/60 bg-emerald-500/15 glow-emerald'
+                          : 'border-white/10 bg-white/5',
+                      )}
+                    >
+                      <p className={cn('text-xs font-extrabold', inviteDifficulty === option.id && 'text-emerald-300')}>{option.label}</p>
+                      <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">{option.detail}</p>
+                      <p className="text-[9px] text-muted-foreground">{option.pairs}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <RoundsStepper value={inviteRounds} onChange={setInviteRounds} />
+              )}
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={confirmInvite}
@@ -498,6 +540,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
                   <span className="text-3xl">{g.emoji}</span>
                   <span className="font-extrabold text-xs">{g.name}</span>
                   {gameUsesRounds(g.id) && <span className="text-[9px] font-bold text-emerald-300/80">٣/٥/٧ جولات</span>}
+                  {g.id === 'memory' && <span className="text-[9px] font-bold text-emerald-300/80">سهل / متوسط / صعب</span>}
                 </button>
               ))}
             </div>

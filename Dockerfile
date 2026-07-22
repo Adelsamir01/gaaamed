@@ -15,6 +15,7 @@ COPY --chown=node:node server ./server
 COPY --chown=node:node src/data/trivia.ts ./src/data/trivia.ts
 COPY --chown=node:node src/games/match3/engine.js ./src/games/match3/engine.js
 COPY --chown=node:node src/games/chess/engine.js ./src/games/chess/engine.js
+COPY --chown=node:node src/games/memory/config.js ./src/games/memory/config.js
 COPY --chown=node:node tools/backup-server.mjs tools/verify-backup.mjs ./tools/
 COPY --chown=node:node dedos-release.apk ./dedos-release.apk
 

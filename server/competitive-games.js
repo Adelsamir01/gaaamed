@@ -1,9 +1,10 @@
 /** Server-authoritative state machines for the competitive games. */
 
 import { applyMatch3Swap, createMatch3Game } from '../src/games/match3/engine.js'
+import { buildMemoryDeck, memoryLevel, MEMORY_EMOJIS, normalizeMemoryDifficulty } from '../src/games/memory/config.js'
 import { TRIVIA_QUESTIONS, selectTriviaQuestionIds } from '../src/data/trivia.ts'
 
-export const MEMORY_EMOJIS = Object.freeze(['🐪', '🌴', '🕌', '☕', '🌙', '⭐', '🏺', '🐎'])
+export { MEMORY_EMOJIS }
 
 // The server derives its authoritative answers from the exact bank packaged in
 // the app, so adding questions can never shift client/server answer indexes.
@@ -18,20 +19,14 @@ export const MATCH3_LEAD_IN_MS = 1_200
 
 let recentTriviaQuestionIds = []
 
-function shuffled(values, random = Math.random) {
-  const result = [...values]
-  for (let index = result.length - 1; index > 0; index--) {
-    const swapWith = Math.floor(random() * (index + 1))
-    ;[result[index], result[swapWith]] = [result[swapWith], result[index]]
-  }
-  return result
-}
-
-export function createMemoryGame(random = Math.random) {
+export function createMemoryGame(difficulty = 'easy', random = Math.random) {
+  const normalizedDifficulty = normalizeMemoryDifficulty(difficulty)
   return {
-    deck: shuffled([...MEMORY_EMOJIS.keys(), ...MEMORY_EMOJIS.keys()], random),
+    difficulty: normalizedDifficulty,
+    deck: buildMemoryDeck(normalizedDifficulty, random),
     matched: new Set(),
     selected: [],
+    lastPair: [],
     activeSlot: random() < 0.5 ? 1 : 2,
     scores: new Map([[1, 0], [2, 0]]),
     moves: 0,
@@ -42,13 +37,18 @@ export function createMemoryGame(random = Math.random) {
 
 export function memorySnapshot(game) {
   const visible = new Set([...game.matched, ...game.selected])
+  const level = memoryLevel(game.difficulty)
   return {
+    difficulty: level.difficulty,
+    pairs: level.pairs,
+    columns: level.columns,
     cards: game.deck.map((emojiIndex, index) => ({
       index,
       emoji: visible.has(index) ? MEMORY_EMOJIS[emojiIndex] : null,
       matched: game.matched.has(index),
     })),
     selected: [...game.selected],
+    lastPair: [...game.lastPair],
     activeSlot: game.activeSlot,
     scores: { 1: game.scores.get(1) || 0, 2: game.scores.get(2) || 0 },
     moves: game.moves,
@@ -66,10 +66,14 @@ export function applyMemoryFlip(game, slot, rawIndex) {
   ) return { accepted: false }
 
   game.selected.push(index)
-  if (game.selected.length === 1) return { accepted: true, effect: 'flip' }
+  if (game.selected.length === 1) {
+    game.lastPair = []
+    return { accepted: true, effect: 'flip' }
+  }
 
   game.moves += 1
   const [first, second] = game.selected
+  game.lastPair = [first, second]
   if (game.deck[first] === game.deck[second]) {
     game.matched.add(first)
     game.matched.add(second)
@@ -86,6 +90,7 @@ export function applyMemoryFlip(game, slot, rawIndex) {
 export function settleMemoryMiss(game) {
   if (!game.resolving || game.ended) return false
   game.selected = []
+  game.lastPair = []
   game.resolving = false
   game.activeSlot = game.activeSlot === 1 ? 2 : 1
   return true

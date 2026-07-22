@@ -4,7 +4,7 @@ import { ChevronRight, Crown, Loader2, Play, RefreshCw, Wifi, WifiOff } from 'lu
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
 import { getGame } from '@/games'
-import { DEFAULT_ROUNDS, ROUND_OPTIONS, gameUsesRounds, type GameResult } from '@/types'
+import { DEFAULT_ROUNDS, ROUND_OPTIONS, gameUsesRounds, type GameResult, type RoomSettings } from '@/types'
 import { AvatarCircle } from './components'
 import GameResults from './GameResults'
 import { sounds } from '@/lib/sounds'
@@ -18,6 +18,7 @@ interface OnlineLobbyProps {
   onBack: () => void
   /** When present, entering this screen immediately searches for this exact game. */
   quickGameId?: string
+  quickSettings?: RoomSettings
   friendThreadId?: string | null
   onFriendMatchFinished?: (threadId: string) => void
 }
@@ -25,6 +26,7 @@ interface OnlineLobbyProps {
 export default function OnlineLobby({
   onBack,
   quickGameId,
+  quickSettings,
   friendThreadId,
   onFriendMatchFinished,
 }: OnlineLobbyProps) {
@@ -42,10 +44,11 @@ export default function OnlineLobby({
       queuedGameRef.current = null
       return
     }
-    if (queuedGameRef.current === quickGameId) return
-    queuedGameRef.current = quickGameId
-    quickMatch(quickGameId)
-  }, [quickGameId, quickMatch, status])
+    const queueKey = `${quickGameId}:${quickSettings?.difficulty ?? ''}`
+    if (queuedGameRef.current === queueKey) return
+    queuedGameRef.current = queueKey
+    quickMatch(quickGameId, quickSettings)
+  }, [quickGameId, quickMatch, quickSettings, status])
 
   // إعادة اللعب: عند العودة لمرحلة اللعب امسح النتيجة
   useEffect(() => {
@@ -142,7 +145,14 @@ export default function OnlineLobby({
           animate={{ opacity: 1, y: 0 }}
           className={cn('flex-1 px-4', isShakhbata ? 'online-game-body overflow-hidden' : 'pb-8')}
         >
-          <GameComp config={{ mode: 'bot', difficulty: 'medium' }} onFinish={handleGameFinished} onExit={exitOnline} />
+          <GameComp
+            config={{
+              mode: 'bot',
+              difficulty: game.id === 'memory' ? online.roomSettings?.difficulty ?? 'easy' : 'medium',
+            }}
+            onFinish={handleGameFinished}
+            onExit={exitOnline}
+          />
         </motion.div>
       </div>
     )
@@ -285,6 +295,15 @@ export default function OnlineLobby({
           {gameUsesRounds(game.id) && online.roomSettings?.rounds != null && (
             <p className="text-xs font-bold text-emerald-300 -mt-4 mb-6">
               أفضل من {ROUND_AR[online.roomSettings.rounds] ?? online.roomSettings.rounds} جولات 🏆
+            </p>
+          )}
+          {game.id === 'memory' && online.roomSettings?.difficulty && (
+            <p className="text-xs font-bold text-emerald-300 -mt-4 mb-6">
+              {online.roomSettings.difficulty === 'hard'
+                ? 'صعب · لوحة ٦×٥ · ١٥ زوجًا'
+                : online.roomSettings.difficulty === 'medium'
+                  ? 'متوسط · لوحة ٥×٤ · ١٠ أزواج'
+                  : 'سهل · لوحة ٤×٤ · ٨ أزواج'} 🧠
             </p>
           )}
 

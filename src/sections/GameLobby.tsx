@@ -18,7 +18,7 @@ type Mode = 'solo' | 'bot' | 'twoPlayer' | 'online'
 interface Props {
   game: GameDef
   onStart: (config: GameConfig) => void
-  onOnline: () => void
+  onOnline: (difficulty: Difficulty) => void
   onBack: () => void
 }
 
@@ -26,13 +26,13 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
   const { stats } = useApp()
   const onlineOnly = !!game.online && !game.singlePlayer && !game.supportsBot && !game.supportsTwoPlayer
   const [mode, setMode] = useState<Mode>(onlineOnly ? 'online' : game.singlePlayer ? 'solo' : game.supportsBot ? 'bot' : 'twoPlayer')
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium')
+  const [difficulty, setDifficulty] = useState<Difficulty>(game.id === 'memory' ? 'easy' : 'medium')
   const [showHowToPlay, setShowHowToPlay] = useState(false)
   const s = stats[game.id]
 
   const start = () => {
     sounds.pop()
-    if (mode === 'online') onOnline()
+    if (mode === 'online') onOnline(difficulty)
     else onStart({ mode, difficulty })
   }
 
@@ -198,9 +198,9 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
       </div>
 
       {/* الصعوبة */}
-      {game.difficulties && (mode === 'bot' || mode === 'solo') && (
+      {game.difficulties && (mode === 'bot' || mode === 'solo' || (mode === 'online' && game.id === 'memory')) && (
         <div className="glass rounded-3xl p-4 mb-6">
-          <h2 className="font-extrabold mb-3">مستوى الصعوبة</h2>
+          <h2 className="font-extrabold mb-3">{game.id === 'memory' ? 'حجم لوحة الذاكرة' : 'مستوى الصعوبة'}</h2>
           <div className="grid grid-cols-3 gap-2">
             {DIFFICULTIES.map((d) => (
               <button
@@ -216,7 +216,11 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
                 aria-pressed={difficulty === d.id}
               >
                 <p className={cn('font-extrabold text-sm', difficulty === d.id && 'text-emerald-300')}>{d.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{d.hint}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {game.id === 'memory'
+                    ? d.id === 'easy' ? '٤×٤ · ٨ أزواج' : d.id === 'medium' ? '٥×٤ · ١٠ أزواج' : '٦×٥ · ١٥ زوجًا'
+                    : d.hint}
+                </p>
               </button>
             ))}
           </div>

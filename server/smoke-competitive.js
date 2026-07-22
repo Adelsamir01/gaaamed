@@ -30,10 +30,10 @@ async function next(ws, type, after = 0, timeoutMs = 3000) {
   throw new Error(`Timed out waiting for ${type}`)
 }
 
-async function createPair(gameId) {
+async function createPair(gameId, settings) {
   const host = await connect()
   const guest = await connect()
-  send(host, { type: 'create', gameId, name: 'مضيف', avatar: '🐯' })
+  send(host, { type: 'create', gameId, name: 'مضيف', avatar: '🐯', settings })
   const created = await next(host, 'created')
   send(guest, { type: 'join', code: created.code, name: 'ضيف', avatar: '🦋' })
   await next(guest, 'joined')
@@ -42,10 +42,11 @@ async function createPair(gameId) {
 }
 
 async function testMemory() {
-  const { host, guest } = await createPair('memory')
+  const { host, guest } = await createPair('memory', { difficulty: 'medium' })
   send(host, { type: 'action', action: { kind: 'start' } })
   send(host, { type: 'action', action: { kind: 'start' } })
   const stateMessage = await next(host, 'memory_state')
+  if (stateMessage.state.difficulty !== 'medium' || stateMessage.state.cards.length !== 20) throw new Error('Memory difficulty was not applied to both players')
   await wait(80)
   if (host.inbox.filter((message) => message.type === 'memory_state' && message.effect === 'start').length !== 1) throw new Error('Memory accepted a duplicate start')
   const active = stateMessage.state.activeSlot === 1 ? host : guest

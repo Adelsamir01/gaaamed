@@ -39,7 +39,7 @@ test('successive online trivia matches do not repeat recent questions', () => {
 })
 
 test('memory hides cards and enforces turn, matching, and miss handoff', () => {
-  const game = createMemoryGame(() => 0.42)
+  const game = createMemoryGame('easy', () => 0.42)
   const start = memorySnapshot(game)
   assert.equal(start.cards.every((card) => card.emoji === null), true)
   assert.equal(applyMemoryFlip(game, game.activeSlot === 1 ? 2 : 1, 0).accepted, false)
@@ -69,6 +69,25 @@ test('memory hides cards and enforces turn, matching, and miss handoff', () => {
   assert.equal(game.resolving, true)
   assert.equal(settleMemoryMiss(game), true)
   assert.equal(game.activeSlot, active === 1 ? 2 : 1)
+})
+
+test('memory difficulty scales the authoritative board without duplicate overuse', () => {
+  for (const [difficulty, pairs, columns] of [
+    ['easy', 8, 4],
+    ['medium', 10, 5],
+    ['hard', 15, 6],
+  ]) {
+    const game = createMemoryGame(difficulty, () => 0.42)
+    const state = memorySnapshot(game)
+    assert.equal(game.deck.length, pairs * 2)
+    assert.equal(state.difficulty, difficulty)
+    assert.equal(state.pairs, pairs)
+    assert.equal(state.columns, columns)
+    const counts = new Map()
+    for (const emoji of game.deck) counts.set(emoji, (counts.get(emoji) || 0) + 1)
+    assert.equal(counts.size, pairs)
+    assert.equal([...counts.values()].every((count) => count === 2), true)
+  }
 })
 
 test('trivia awards a double-correct question to the faster server timestamp', () => {

@@ -173,7 +173,7 @@ interface OnlineContextValue {
   reportFriendGameResult: (threadId: string, result: GameResult) => void
   refreshSocial: () => void
   // المباراة السريعة
-  quickMatch: (gameId: string) => void
+  quickMatch: (gameId: string, settings?: RoomSettings) => void
   /** الغرفة الحالية جاءت من مباراة سريعة (تُستخدم للبدء التلقائي في بنك الحظ) */
   fromQuickMatch: boolean
   /** غرفة دعوة محادثة فردية: تبدأ تلقائيًا فور اكتمال لاعبَين */
@@ -980,8 +980,14 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   // ---------------- المباراة السريعة ----------------
   const quickMatch = useCallback(
-    (gid: string) => {
-      onlineClient.send({ type: 'quick_match', gameId: gid, name: app.profile.name, avatar: app.profile.avatar })
+    (gid: string, settings?: RoomSettings) => {
+      onlineClient.send({
+        type: 'quick_match',
+        gameId: gid,
+        name: app.profile.name,
+        avatar: app.profile.avatar,
+        ...(settings ? { settings } : {}),
+      })
     },
     [app.profile.name, app.profile.avatar],
   )

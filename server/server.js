@@ -438,6 +438,7 @@ function clearCompetitiveTimers(room) {
 function memoryEndPayload(room) {
   return {
     type: 'memory_end',
+    difficulty: room.memory.difficulty,
     winnerSlot: memoryWinner(room.memory),
     scores: { 1: room.memory.scores.get(1) || 0, 2: room.memory.scores.get(2) || 0 },
     moves: room.memory.moves,
@@ -453,7 +454,7 @@ function startMemoryGame(room) {
   clearCompetitiveTimers(room)
   room.trivia = null
   room.match3 = null
-  room.memory = createMemoryGame()
+  room.memory = createMemoryGame(room.settings?.difficulty)
   broadcastMemoryState(room, 'start')
 }
 
@@ -589,7 +590,11 @@ function sendCompetitiveSync(ws, room) {
 // تطبيع إعدادات الغرفة: rounds خارج {3,5,7} أو غير موجودة → الافتراضي 5
 function normalizeSettings(raw) {
   const rounds = Number(raw && raw.rounds)
-  return { rounds: VALID_ROUNDS.has(rounds) ? rounds : DEFAULT_ROUNDS }
+  const difficulty = raw?.difficulty === 'medium' || raw?.difficulty === 'hard' ? raw.difficulty : 'easy'
+  return {
+    rounds: VALID_ROUNDS.has(rounds) ? rounds : DEFAULT_ROUNDS,
+    difficulty,
+  }
 }
 
 // عدد الانتصارات المطلوب لحسم سلسلة "أفضل من N" (أغلبية الجولات)
@@ -774,8 +779,8 @@ function resolveReportedFriendGameResult(room, ws, msg) {
   }
 }
 
-function tryMatch(gameId) {
-  const queue = matchQueues.get(gameId)
+function tryMatch(gameId, queueKey = gameId) {
+  const queue = matchQueues.get(queueKey)
   if (!queue) return
   // نخلّي الطابور من المتصلين فقط
   const alive = queue.filter((entry) => entry.ws.readyState === 1)
@@ -813,8 +818,8 @@ function tryMatch(gameId) {
     broadcastPlayers(room)
     console.log(`QUICK_MATCH ${room.code} ${gameId} ${first.name} vs ${second.name}`)
   }
-  if (alive.length === 0) matchQueues.delete(gameId)
-  else matchQueues.set(gameId, alive)
+  if (alive.length === 0) matchQueues.delete(queueKey)
+  else matchQueues.set(queueKey, alive)
 }
 
 function otherSlot(slot) {
@@ -1546,18 +1551,20 @@ wss.on('connection', (ws, request) => {
           return
         }
         removeFromQueues(ws)
-        const queue = matchQueues.get(gameId) ?? []
+        const settings = normalizeSettings(msg.settings)
+        const queueKey = gameId === 'memory' ? `${gameId}:${settings.difficulty}` : gameId
+        const queue = matchQueues.get(queueKey) ?? []
         queue.push({
           ws,
           userId: ws._userId ?? null,
           name: String(msg.name || 'لاعب'),
           avatar: String(msg.avatar || '🎮'),
-          settings: msg.settings,
+          settings,
           at: Date.now(),
         })
-        matchQueues.set(gameId, queue)
+        matchQueues.set(queueKey, queue)
         send(ws, { type: 'quick_match_waiting', gameId })
-        tryMatch(gameId)
+        tryMatch(gameId, queueKey)
         break
       }
 
