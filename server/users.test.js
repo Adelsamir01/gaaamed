@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
-import { UserStore } from './users.js'
+import { UserStore, publicCard } from './users.js'
 
 const testRoot = path.resolve('server', '.tmp-user-tests')
 
@@ -13,6 +13,22 @@ test.beforeEach(() => {
 
 test.after(() => {
   rmSync(testRoot, { recursive: true, force: true })
+})
+
+test('player XP is persisted and included in public leaderboard cards', () => {
+  const store = new UserStore(testRoot)
+  try {
+    const created = store.identify({ deviceId: 'xp-device', name: 'Adel', avatar: 'A', xp: 240 }).user
+    assert.equal(publicCard(created).xp, 240)
+
+    const updated = store.identify({ deviceId: 'xp-device', name: 'Adel', avatar: 'A', xp: 515.9 }).user
+    assert.equal(publicCard(updated).xp, 515)
+
+    const legacyClient = store.identify({ deviceId: 'xp-device', name: 'Adel', avatar: 'A' }).user
+    assert.equal(publicCard(legacyClient).xp, 515, 'older clients must not erase stored XP')
+  } finally {
+    store.close()
+  }
 })
 
 test('retries a queued chat message without creating a duplicate', () => {

@@ -21,6 +21,7 @@ export interface ServerFriend {
   handle: string
   name: string
   avatar: string
+  xp: number
   presence: Presence
 }
 
@@ -29,6 +30,7 @@ export interface PublicUserCard {
   handle: string
   name: string
   avatar: string
+  xp: number
 }
 
 export interface GameInvite {

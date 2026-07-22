@@ -49,9 +49,14 @@ class JsonDocument {
   }
 }
 
+function safeXp(value) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100_000_000, Math.floor(numeric))) : 0
+}
+
 export function publicCard(user) {
   return user
-    ? { userId: user.userId, handle: user.handle, name: user.name, avatar: user.avatar }
+    ? { userId: user.userId, handle: user.handle, name: user.name, avatar: user.avatar, xp: safeXp(user.xp) }
     : null
 }
 
@@ -76,7 +81,7 @@ export class UserStore {
   }
 
   // ---------------- الهوية ----------------
-  identify({ deviceId, name, avatar, handle }) {
+  identify({ deviceId, name, avatar, handle, xp }) {
     if (!deviceId || typeof deviceId !== 'string') throw new Error('معرّف الجهاز مفقود.')
     const db = this.usersFile.data
     const cleanName = String(name || '').trim().slice(0, 24) || 'لاعب'
@@ -100,6 +105,7 @@ export class UserStore {
         handle: assigned,
         name: cleanName,
         avatar: cleanAvatar,
+        xp: safeXp(xp),
         createdAt: Date.now(),
         lastSeen: Date.now(),
       }
@@ -110,6 +116,7 @@ export class UserStore {
     } else {
       user.name = cleanName
       user.avatar = cleanAvatar
+      user.xp = xp === undefined ? safeXp(user.xp) : safeXp(xp)
       user.lastSeen = Date.now()
       // تعيين المعرف المطلوب عند أول identify إن لم يكن للمستخدم معرف بعد (حالة نادرة)
       if (handle && !user.handle) {

@@ -1178,6 +1178,7 @@ wss.on('connection', (ws, request) => {
             name: msg.name,
             avatar: msg.avatar,
             handle: msg.handle,
+            xp: msg.xp,
           })
           ws._userId = user.userId
           trackOnline(user.userId, ws)

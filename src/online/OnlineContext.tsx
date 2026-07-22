@@ -691,12 +691,13 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         name: profile.name,
         avatar: profile.avatar,
         handle: profile.handle,
+        xp: profile.xp,
       })
     })
     return () => {
       cancelled = true
     }
-  }, [status, onboarded, profile.name, profile.avatar, profile.handle])
+  }, [status, onboarded, profile.name, profile.avatar, profile.handle, profile.xp])
 
   const acceptGameInvite = useCallback((inviteToken: string, name: string, avatar: string, threadId: string, messageId: string) => {
     setOpponent(null)

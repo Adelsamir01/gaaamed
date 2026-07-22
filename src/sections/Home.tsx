@@ -5,9 +5,9 @@ import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle, CoinChip, LevelBar, SectionTitle, StatusDot } from './components'
 import { GAMES } from '@/games'
 import { levelFromXp } from '@/types'
-import { statusLabel } from '@/data/friends'
 import { sounds } from '@/lib/sounds'
 import { launchConfetti } from '@/lib/confetti'
+import { buildLeaderboard } from '@/lib/leaderboard'
 import type { TabId } from './TabBar'
 
 interface Props {
@@ -29,6 +29,8 @@ export default function Home({ goTab, openGame, openChat }: Props) {
 
   const activeThreads = threads.filter((t) => t.unread > 0).length > 0 ? threads.filter((t) => t.unread > 0) : threads.slice(0, 2)
   const featured = GAMES[0]
+  const leaderboard = buildLeaderboard(profile, friends).slice(0, 5)
+  const rankMarks = ['🥇', '🥈', '🥉']
 
   return (
     <div className="px-4 pt-6 tab-page">
@@ -132,31 +134,38 @@ export default function Home({ goTab, openGame, openChat }: Props) {
       </div>
 
       {/* المتصدرون */}
-      <SectionTitle title="المتصدرون 🏆" />
+      <SectionTitle
+        title="المتصدرون 🏆"
+        action={<span className="text-[10px] font-bold text-muted-foreground">حسب نقاط الخبرة</span>}
+      />
       <div className="glass rounded-3xl p-2">
-        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-400/30">
-          <span className="w-6 text-center font-black text-sm">🥇</span>
-          <AvatarCircle emoji={profile.avatar} size="sm" />
-          <span className="flex-1 font-bold text-sm truncate">{profile.name} (أنت)</span>
-          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1">
-            <Crown className="w-3.5 h-3.5 text-amber-400" />
-            مستوى {levelFromXp(profile.xp)}
-          </span>
-        </div>
-        {friends.slice(0, 4).map((f, i) => (
-          <div key={f.userId} className="flex items-center gap-3 p-2.5 rounded-2xl">
-            <span className="w-6 text-center font-black text-sm text-muted-foreground">{i + 2}</span>
+        {leaderboard.map((player, index) => (
+          <div
+            key={player.userId}
+            className={`flex items-center gap-3 p-2.5 rounded-2xl ${player.isMe ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}
+          >
+            <span className="w-6 text-center font-black text-sm text-muted-foreground">{rankMarks[index] ?? index + 1}</span>
             <div className="relative">
-              <AvatarCircle emoji={f.avatar} size="sm" />
-              <span className="absolute -bottom-0.5 -end-0.5">
-                <StatusDot status={f.presence} />
-              </span>
+              <AvatarCircle emoji={player.avatar} size="sm" />
+              {player.presence && (
+                <span className="absolute -bottom-0.5 -end-0.5">
+                  <StatusDot status={player.presence} />
+                </span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm truncate">{f.name}</p>
-              <p className="text-[10px] text-emerald-300 font-bold" dir="ltr">@{f.handle}</p>
+              <p className="font-bold text-sm truncate">{player.name}{player.isMe ? ' (أنت)' : ''}</p>
+              <p className="text-[10px] text-muted-foreground font-bold" dir={player.handle ? 'ltr' : 'rtl'}>
+                {player.handle ? `@${player.handle}` : 'نقاط الخبرة'}
+              </p>
             </div>
-            <span className="text-[11px] font-bold text-muted-foreground">{statusLabel[f.presence]}</span>
+            <div className="text-end shrink-0">
+              <p className="text-xs font-black text-emerald-300 flex items-center justify-end gap-1">
+                {index === 0 && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                <bdi className="tabular-nums">{player.points.toLocaleString('ar-EG')}</bdi> نقطة
+              </p>
+              <p className="text-[10px] font-bold text-muted-foreground">مستوى {levelFromXp(player.points)}</p>
+            </div>
           </div>
         ))}
         {friends.length === 0 && (
