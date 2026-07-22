@@ -5,6 +5,7 @@ import { useApp } from '@/store/AppContext'
 import type { GameResult, PublicPlayerProfile, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 import { getCurrentPushToken, initializePushNotifications, onPushToken, openNotificationThread } from '@/lib/pushNotifications'
+import { ThreadHistoryQueue } from './threadHistoryQueue'
 
 export interface Opponent {
   name: string
@@ -238,6 +239,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const threadResolverRef = useRef<((t: ServerThread | null) => void) | null>(null)
   const startGameRef = useRef<() => void>(() => {})
   const sentOutboxIdsRef = useRef(new Set<string>())
+  const threadHistoryQueueRef = useRef(new ThreadHistoryQueue())
   const initialProfileUserIdRef = useRef(app.profile.userId)
 
   useEffect(() => {
@@ -274,6 +276,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       }, 700)
     }
     const offStatus = onlineClient.onStatus((nextStatus) => {
+      threadHistoryQueueRef.current.connectionChanged()
       setStatus(nextStatus)
       if (nextStatus !== 'online') setOnlineUserCount(null)
     })
@@ -420,6 +423,9 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           const identity = { userId: user.userId, handle: user.handle }
           setMe(identity)
           app.setIdentity(user.userId, user.handle)
+          threadHistoryQueueRef.current.authenticate((threadId) => {
+            onlineClient.send({ type: 'chat_history', threadId })
+          })
           onlineClient.send({ type: 'friends_list' })
           onlineClient.send({ type: 'chat_list' })
           const pushToken = getCurrentPushToken()
@@ -512,6 +518,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           break
         case 'chat_history': {
           const threadId = msg.threadId as string
+          threadHistoryQueueRef.current.resolve(threadId)
           setMessages((current) => {
             const official = (msg.messages as ServerChatMessage[]) ?? []
             const officialIds = new Set(official.map((message) => message.id))
@@ -933,7 +940,9 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadThread = useCallback((threadId: string) => {
-    onlineClient.send({ type: 'chat_history', threadId })
+    threadHistoryQueueRef.current.request(threadId, (id) => {
+      onlineClient.send({ type: 'chat_history', threadId: id })
+    })
     setThreads((list) => list.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t)))
   }, [])
 

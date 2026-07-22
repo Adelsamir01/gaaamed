@@ -91,20 +91,25 @@ function Shell() {
     setView({ kind: 'tabs' })
   }, [activateTab])
 
+  const openChatFromNotification = useCallback((threadId: string) => {
+    online.loadThread(threadId)
+    openChat(threadId)
+  }, [online.loadThread, openChat])
+
   useEffect(() => {
     if (!onboarded) return
     const handleNotificationChat = (event: Event) => {
       const threadId = (event as CustomEvent<{ threadId?: string }>).detail?.threadId
       if (threadId) {
         consumePendingNotificationThread()
-        openChat(threadId)
+        openChatFromNotification(threadId)
       }
     }
     window.addEventListener(OPEN_NOTIFICATION_CHAT_EVENT, handleNotificationChat)
     const pendingThreadId = consumePendingNotificationThread()
-    if (pendingThreadId) openChat(pendingThreadId)
+    if (pendingThreadId) openChatFromNotification(pendingThreadId)
     return () => window.removeEventListener(OPEN_NOTIFICATION_CHAT_EVENT, handleNotificationChat)
-  }, [onboarded, openChat])
+  }, [onboarded, openChatFromNotification])
 
   const unreadChats = useMemo(() => online.threads.reduce((a, t) => a + t.unread, 0), [online.threads])
 

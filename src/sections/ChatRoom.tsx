@@ -286,10 +286,10 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId])
 
-  // قد يفتح إشعار التطبيق قبل اكتمال WebSocket في التشغيل البارد. حمّل التاريخ
-  // عند الاتصال، وأعد تحميله بعد أي إعادة اتصال كي يظل الرابط العميق موثوقًا.
+  // قد يفتح الإشعار قبل اكتمال تعريف المستخدم. طابور التاريخ يحتفظ بالطلب
+  // حتى يكتمل التعريف، ويعيده بعد انقطاع الاتصال إن لم يصل رد الخادم.
   useEffect(() => {
-    if (status === 'online') loadThread(threadId)
+    loadThread(threadId)
   }, [loadThread, status, threadId])
 
   const scrollToBottom = useCallback(() => {
