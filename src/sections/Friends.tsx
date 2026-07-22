@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Clock3, Gamepad2, MessageCircle, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, ChevronLeft, Clock3, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle, StatusDot } from './components'
 import { statusLabel } from '@/data/friends'
-import { ONLINE_GAMES } from '@/games'
 import { sounds } from '@/lib/sounds'
-import type { PublicUserCard, ServerFriend } from '@/types'
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import type { PublicUserCard } from '@/types'
 
 const HANDLE_RE = /^[a-z0-9_]{3,15}$/
 
@@ -18,13 +14,12 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
   const {
     friends, incomingFriendRequests, outgoingFriendRequests, me, searchUser,
     friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove,
-    createDm, chatSendInvite,
+    createDm,
   } = useOnline()
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [result, setResult] = useState<PublicUserCard | null>(null)
   const [searched, setSearched] = useState(false)
-  const [inviteFor, setInviteFor] = useState<ServerFriend | null>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // بحث بالمعرّف (مؤجل 500ms)
@@ -65,18 +60,6 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
     sounds.click()
     const thread = await createDm(userId)
     if (thread) openChat(thread.id)
-  }
-
-  const sendInvite = async (gameId: string) => {
-    if (!inviteFor) return
-    sounds.pop()
-    const thread = await createDm(inviteFor.userId)
-    if (thread) {
-      chatSendInvite(thread.id, gameId)
-      toast.success(`أرسلت الدعوة إلى ${inviteFor.name} 🎮`)
-      setInviteFor(null)
-      openChat(thread.id)
-    }
   }
 
   return (
@@ -235,50 +218,41 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04 }}
-            className="glass rounded-3xl p-3.5 flex items-center gap-3"
+            className="glass flex items-center gap-1 rounded-3xl p-2.5 transition-colors hover:bg-white/10"
           >
-            <div className="relative">
-              <AvatarCircle emoji={f.avatar} />
-              <span className="absolute -bottom-0.5 -end-0.5">
-                <StatusDot status={f.presence} />
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-sm truncate">{f.name}</p>
-              <p className="text-[11px] text-emerald-300 font-bold" dir="ltr">@{f.handle}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{statusLabel[f.presence]}</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <motion.button
-                whileTap={{ scale: 0.92 }}
-                onClick={() => {
-                  sounds.click()
-                  setInviteFor(f)
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-extrabold hover:bg-emerald-400 transition-colors"
-              >
-                <Gamepad2 className="w-3.5 h-3.5" />
-                دعوة
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.92 }}
-                onClick={() => openDmWith(f.userId)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold hover:bg-white/15 transition-colors"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                دردشة
-              </motion.button>
-            </div>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.985 }}
+              onClick={() => openDmWith(f.userId)}
+              className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl px-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+              aria-label={`افتح دردشة ${f.name}`}
+            >
+              <div className="relative shrink-0">
+                <AvatarCircle emoji={f.avatar} />
+                <span className="absolute -bottom-0.5 -end-0.5">
+                  <StatusDot status={f.presence} />
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-extrabold">{f.name}</p>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px]">
+                  <span className="shrink-0 font-bold text-muted-foreground">{statusLabel[f.presence]}</span>
+                  <span className="truncate font-bold text-emerald-300" dir="ltr">@{f.handle}</span>
+                </div>
+              </div>
+              <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground/70" />
+            </motion.button>
             <button
+              type="button"
               onClick={() => {
                 sounds.click()
                 friendRemove(f.userId)
                 toast.info(`حذفت ${f.name} من الأصدقاء`)
               }}
-              className="self-start p-1.5 rounded-full text-muted-foreground hover:text-red-300 hover:bg-red-500/10 transition-colors"
-              aria-label="حذف الصديق"
+              className="grid min-h-10 min-w-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-300"
+              aria-label={`حذف ${f.name} من الأصدقاء`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </motion.div>
         ))}
@@ -293,27 +267,6 @@ export default function Friends({ openChat }: { openChat: (threadId: string) => 
         )}
       </div>
 
-      {/* منتقي لعبة الدعوة */}
-      <Dialog open={!!inviteFor} onOpenChange={(open) => !open && setInviteFor(null)}>
-        <DialogContent className="max-w-[380px] rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-center">دعوة {inviteFor?.name} للعب 🎮</DialogTitle>
-            <DialogDescription className="text-center">اختر اللعبة — هيوصله تحدي يقدر يقبله من الدردشة</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-2 py-2">
-            {ONLINE_GAMES.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => sendInvite(g.id)}
-                className="glass rounded-2xl p-3.5 flex flex-col items-center gap-1.5 hover:bg-white/10 transition-colors"
-              >
-                <span className="text-3xl">{g.emoji}</span>
-                <span className="font-extrabold text-xs">{g.name}</span>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
