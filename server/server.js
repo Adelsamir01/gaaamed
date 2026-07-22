@@ -39,6 +39,7 @@ import {
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
 import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
+import { onlineUserCount, trackPresence, untrackPresence } from './presence.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -133,6 +134,7 @@ function serviceHealth() {
     version: APP_VERSION,
     uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
     connections: wss?.clients?.size ?? 0,
+    onlineUsers: onlineUserCount(onlineUsers),
     rooms: rooms?.size ?? 0,
     snakeArenas: snakeManager.arenas.size,
     snakePlayers,
@@ -159,6 +161,9 @@ function serviceMetrics() {
     '# HELP dedos_websocket_connections Active WebSocket connections.',
     '# TYPE dedos_websocket_connections gauge',
     `dedos_websocket_connections ${wss.clients.size}`,
+    '# HELP dedos_online_users Unique identified users currently connected.',
+    '# TYPE dedos_online_users gauge',
+    `dedos_online_users ${onlineUserCount(onlineUsers)}`,
     '# HELP dedos_rooms Active game rooms.',
     '# TYPE dedos_rooms gauge',
     `dedos_rooms ${rooms.size}`,
@@ -301,6 +306,7 @@ const httpServer = createServer((req, res) => {
         if (sockets) {
           for (const socket of sockets) socket.close(1000, 'account_deleted')
           onlineUsers.delete(request.userId)
+          broadcastOnlineUserCount()
         }
         sendJson(res, 200, {
           ok: true,
@@ -633,19 +639,20 @@ function pushToUser(userId, obj) {
 }
 
 function trackOnline(userId, ws) {
-  let set = onlineUsers.get(userId)
-  if (!set) {
-    set = new Set()
-    onlineUsers.set(userId, set)
-  }
-  set.add(ws)
+  return trackPresence(onlineUsers, userId, ws)
 }
 
 function untrackOnline(userId, ws) {
-  const set = onlineUsers.get(userId)
-  if (!set) return
-  set.delete(ws)
-  if (set.size === 0) onlineUsers.delete(userId)
+  return untrackPresence(onlineUsers, userId, ws)
+}
+
+function onlineUserCountMessage() {
+  return { type: 'online_user_count', count: onlineUserCount(onlineUsers) }
+}
+
+function broadcastOnlineUserCount() {
+  const message = onlineUserCountMessage()
+  for (const client of wss.clients) send(client, message)
 }
 
 function presenceOf(userId) {
@@ -1249,9 +1256,11 @@ wss.on('connection', (ws, request) => {
             xp: msg.xp,
           })
           ws._userId = user.userId
-          trackOnline(user.userId, ws)
+          const becameOnline = trackOnline(user.userId, ws)
           send(ws, { type: 'identified', user: { ...publicCard(user), createdAt: user.createdAt }, created })
           send(ws, { type: 'session_state', inRoom: Boolean(ws._room), serverStartedAt: STARTED_AT })
+          if (becameOnline) broadcastOnlineUserCount()
+          else send(ws, onlineUserCountMessage())
           broadcastFriendsUpdate(user.userId)
           pushFriendRequestsUpdate(user.userId)
           console.log(`IDENTIFY ${user.handle} (${created ? 'جديد' : 'عائد'})`)
@@ -1592,7 +1601,8 @@ wss.on('connection', (ws, request) => {
     removeFromQueues(ws)
     snakeManager.untrack(ws)
     if (ws._userId) {
-      untrackOnline(ws._userId, ws)
+      const becameOffline = untrackOnline(ws._userId, ws)
+      if (becameOffline) broadcastOnlineUserCount()
       broadcastFriendsUpdate(ws._userId)
     }
   })

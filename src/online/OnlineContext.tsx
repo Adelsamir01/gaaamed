@@ -120,6 +120,7 @@ function showChatNotification(threadId: string, message: ServerChatMessage) {
 
 interface OnlineContextValue {
   status: ConnectionStatus
+  onlineUserCount: number | null
   phase: OnlinePhase
   code: string | null
   slot: number | null
@@ -188,6 +189,7 @@ const OnlineContext = createContext<OnlineContextValue | null>(null)
 export function OnlineProvider({ children }: { children: ReactNode }) {
   const app = useApp()
   const [status, setStatus] = useState<ConnectionStatus>(onlineClient.status)
+  const [onlineUserCount, setOnlineUserCount] = useState<number | null>(null)
   const [phase, setPhase] = useState<OnlinePhase>('idle')
   const [code, setCode] = useState<string | null>(null)
   const [slot, setSlot] = useState<number | null>(null)
@@ -269,7 +271,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         startGameRef.current()
       }, 700)
     }
-    const offStatus = onlineClient.onStatus(setStatus)
+    const offStatus = onlineClient.onStatus((nextStatus) => {
+      setStatus(nextStatus)
+      if (nextStatus !== 'online') setOnlineUserCount(null)
+    })
     const offMsg = onlineClient.onMessage((msg: ServerMessage) => {
       switch (msg.type) {
         case 'joined': {
@@ -417,6 +422,11 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           onlineClient.send({ type: 'chat_list' })
           const pushToken = getCurrentPushToken()
           if (pushToken) onlineClient.send({ type: 'push_register', token: pushToken, platform: 'android' })
+          break
+        }
+        case 'online_user_count': {
+          const count = Number(msg.count)
+          setOnlineUserCount(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : null)
           break
         }
         case 'handle_set': {
@@ -994,7 +1004,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<OnlineContextValue>(
     () => ({
-      status, phase, code, slot, gameId, opponent, players, matchId,
+      status, onlineUserCount, phase, code, slot, gameId, opponent, players, matchId,
       rematchMine, rematchTheirs, serverUrl, roomSettings,
       acceptGameInvite, leaveRoom, startGame,
       sendAction, sendRpsChoice, sendReactTap, sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
@@ -1006,7 +1016,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
     }),
-    [status, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
+    [status, onlineUserCount, phase, code, slot, gameId, opponent, players, matchId, rematchMine, rematchTheirs, serverUrl, roomSettings,
       acceptGameInvite, leaveRoom, startGame, sendAction, sendRpsChoice, sendReactTap,
       sendMemoryFlip, sendTriviaAnswer, requestGameSync, sendRaw,
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,

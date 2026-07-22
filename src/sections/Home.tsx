@@ -16,9 +16,11 @@ interface Props {
   openChat: (id: string) => void
 }
 
+const arabicNumber = new Intl.NumberFormat('ar-EG')
+
 export default function Home({ goTab, openGame, openChat }: Props) {
   const { profile, canClaimDaily, claimDailyReward, stats } = useApp()
-  const { friends, threads, status } = useOnline()
+  const { friends, threads, status, onlineUserCount } = useOnline()
 
   const claim = () => {
     if (claimDailyReward()) {
@@ -41,9 +43,11 @@ export default function Home({ goTab, openGame, openChat }: Props) {
           <p className="text-xs text-muted-foreground">مرحبًا 👋</p>
           <h1 className="text-xl font-extrabold truncate">{profile.name}</h1>
         </div>
-        <span className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground glass rounded-full px-2.5 py-1">
+        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[10px] font-bold text-muted-foreground glass rounded-full px-2.5 py-1">
           <span className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-emerald-400 animate-pulse' : status === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-400'}`} />
-          {status === 'online' ? 'أونلاين' : status === 'connecting' ? 'يتصل…' : 'أوفلاين'}
+          {status === 'online'
+            ? onlineUserCount == null ? '…' : `${arabicNumber.format(onlineUserCount)} متصل`
+            : status === 'connecting' ? 'يتصل…' : 'أوفلاين'}
         </span>
         <CoinChip coins={profile.coins} />
       </div>
