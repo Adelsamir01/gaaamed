@@ -40,8 +40,8 @@ Configuration is in `/etc/dedos/dedos.env`. Never commit the tunnel token, datab
 The app checks `https://dedos.adelsamir.com/api/app-version` at startup and when it returns to the foreground. After a new Play release is available to testers, update these values in `/etc/dedos/dedos.env` and redeploy the app service:
 
 ```bash
-DEDOS_ANDROID_LATEST_VERSION=1.12.3
-DEDOS_ANDROID_LATEST_VERSION_CODE=21
+DEDOS_ANDROID_LATEST_VERSION=1.14.0
+DEDOS_ANDROID_LATEST_VERSION_CODE=23
 ```
 
 Every announced release is mandatory: builds below `DEDOS_ANDROID_LATEST_VERSION_CODE` show a non-dismissible update screen and cannot continue into the app. Never announce a version before Google Play has finished publishing it, otherwise users will be blocked before the update is available.
