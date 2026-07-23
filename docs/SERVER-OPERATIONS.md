@@ -42,10 +42,9 @@ The app checks `https://dedos.adelsamir.com/api/app-version` at startup and when
 ```bash
 DEDOS_ANDROID_LATEST_VERSION=1.12.0
 DEDOS_ANDROID_LATEST_VERSION_CODE=18
-DEDOS_ANDROID_MIN_VERSION_CODE=0
 ```
 
-Keep `DEDOS_ANDROID_MIN_VERSION_CODE=0` for a dismissible update reminder. Set it to a released version code only when older builds must be blocked; never announce a version before Google Play has finished publishing it.
+Every announced release is mandatory: builds below `DEDOS_ANDROID_LATEST_VERSION_CODE` show a non-dismissible update screen and cannot continue into the app. Never announce a version before Google Play has finished publishing it, otherwise users will be blocked before the update is available.
 
 ## Deploy and rollback
 

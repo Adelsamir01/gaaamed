@@ -153,7 +153,9 @@ export default function AppUpdateDialog() {
               تحديث جديد وصل! ✨
             </AlertDialogTitle>
             <AlertDialogDescription className="text-center text-sm font-semibold leading-6 text-white/90">
-              نزّل آخر نسخة من ديدوس عشان تستمتع بأحدث الألعاب والتحسينات.
+              {prompt?.required
+                ? 'لازم تحدّث ديدوس عشان تكمّل وتدخل التطبيق بأحدث نسخة.'
+                : 'نزّل آخر نسخة من ديدوس عشان تستمتع بأحدث الألعاب والتحسينات.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
         </div>

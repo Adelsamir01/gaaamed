@@ -43,7 +43,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Direct and group chat with unread counts, reactions, persistent history, and game invites.
 - Native Android notifications for messages and invites; tapping one opens the exact chat.
 - Foreground notifications stay inside the app, remain clickable, and do not duplicate the system notification.
-- A friendly Android update prompt compares the installed build with the server's latest Google Play release.
+- A friendly mandatory Android update prompt blocks outdated builds and directs users to the latest Google Play release.
 - Finished game cards show the winner, while pending invites can be reopened after leaving the lobby.
 - Player profiles expose game statistics; the leaderboard shows the points used for ranking.
 - The home highlight becomes each player's own favourite game after enough plays.

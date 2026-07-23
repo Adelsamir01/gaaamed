@@ -12,8 +12,6 @@ export function androidReleaseInfo(env = process.env) {
     1,
     integerSetting(env.DEDOS_ANDROID_LATEST_VERSION_CODE, DEFAULT_LATEST_VERSION_CODE),
   )
-  const configuredMinimum = integerSetting(env.DEDOS_ANDROID_MIN_VERSION_CODE, 0)
-  const minimumVersionCode = Math.min(configuredMinimum, latestVersionCode)
   const latestVersion = String(env.DEDOS_ANDROID_LATEST_VERSION || DEFAULT_LATEST_VERSION).trim()
 
   return {
@@ -21,7 +19,9 @@ export function androidReleaseInfo(env = process.env) {
     packageName: 'com.dedos.game',
     latestVersion: latestVersion || DEFAULT_LATEST_VERSION,
     latestVersionCode,
-    minimumVersionCode,
+    // Every published update is mandatory: outdated builds cannot dismiss
+    // the update dialog and continue into the app.
+    minimumVersionCode: latestVersionCode,
     updateUrl: PLAY_STORE_URL,
   }
 }
