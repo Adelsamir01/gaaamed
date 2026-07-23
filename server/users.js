@@ -233,6 +233,47 @@ export class UserStore {
     return user.stats
   }
 
+  leaderboard({ gameId = null, currentUserId = null, limit = 50 } = {}) {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit) || 50)))
+    const users = Object.values(this.usersFile.data.users)
+    const entries = gameId
+      ? users.flatMap((user) => {
+          const stats = sanitizeGameStats(user.stats)[gameId]
+          if (!stats || stats.played <= 0) return []
+          return [{
+            ...publicCard(user),
+            points: stats.won,
+            played: stats.played,
+            won: stats.won,
+            winRate: Math.round((stats.won / stats.played) * 100),
+            ...(stats.bestScore === undefined ? {} : { bestScore: stats.bestScore }),
+          }]
+        }).sort((first, second) => (
+          second.won - first.won
+          || second.winRate - first.winRate
+          || second.played - first.played
+          || second.xp - first.xp
+          || first.name.localeCompare(second.name, 'ar')
+        ))
+      : users.map((user) => ({
+          ...publicCard(user),
+          points: safeXp(user.xp),
+        })).sort((first, second) => (
+          second.points - first.points
+          || first.name.localeCompare(second.name, 'ar')
+          || first.userId.localeCompare(second.userId)
+        ))
+
+    const ranked = entries.map((entry, index) => ({ ...entry, rank: index + 1 }))
+    return {
+      scope: gameId ? 'game' : 'global',
+      ...(gameId ? { gameId } : {}),
+      total: ranked.length,
+      entries: ranked.slice(0, safeLimit),
+      me: ranked.find((entry) => entry.userId === currentUserId) ?? null,
+    }
+  }
+
   // ---------------- إشعارات الهاتف ----------------
   registerPushToken(userId, rawToken, platform = 'android') {
     if (!this.byId(userId)) throw new Error('الحساب غير موجود.')

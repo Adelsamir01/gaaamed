@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bot, ChevronDown, ChevronRight, Globe, Play, UserRound, Users, Info } from 'lucide-react'
+import { Bot, ChevronDown, ChevronLeft, ChevronRight, Globe, Play, Trophy, UserRound, Users, Info } from 'lucide-react'
 import type { GameDef } from '@/games'
 import type { Difficulty, GameConfig } from '@/types'
 import { useApp } from '@/store/AppContext'
 import { sounds } from '@/lib/sounds'
 import { cn } from '@/lib/utils'
+import LeaderboardDialog from './LeaderboardDialog'
 
 const DIFFICULTIES: { id: Difficulty; label: string; hint: string }[] = [
   { id: 'easy', label: 'سهل', hint: 'للمبتدئين' },
@@ -28,6 +29,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
   const [mode, setMode] = useState<Mode>(onlineOnly ? 'online' : game.singlePlayer ? 'solo' : game.supportsBot ? 'bot' : 'twoPlayer')
   const [difficulty, setDifficulty] = useState<Difficulty>(game.id === 'memory' ? 'easy' : 'medium')
   const [showHowToPlay, setShowHowToPlay] = useState(false)
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const s = stats[game.id]
 
   const start = () => {
@@ -69,6 +71,18 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
               {s.bestScore !== undefined && <span>أفضل نتيجة: <bdi className="bidi-number tabular-nums">{s.bestScore}</bdi></span>}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              sounds.click()
+              setLeaderboardOpen(true)
+            }}
+            className="mt-3 flex min-h-10 items-center gap-2 rounded-full border border-amber-300/25 bg-amber-400/10 px-4 text-xs font-black text-amber-200 transition-colors hover:bg-amber-400/15"
+          >
+            <Trophy className="h-4 w-4" />
+            متصدرو {game.name}
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
         </div>
       </motion.div>
 
@@ -238,6 +252,7 @@ export default function GameLobby({ game, onStart, onOnline, onBack }: Props) {
           {mode === 'online' ? (game.publicArena ? 'ادخل الساحة العامة' : 'ابحث عن خصم الآن') : 'ابدأ اللعب'}
         </motion.button>
       </div>
+      <LeaderboardDialog open={leaderboardOpen} onOpenChange={setLeaderboardOpen} game={game} />
     </div>
   )
 }

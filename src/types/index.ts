@@ -57,6 +57,24 @@ export interface PublicPlayerProfile extends PublicUserCard {
   }
 }
 
+export interface ServerLeaderboardEntry extends PublicUserCard {
+  rank: number
+  points: number
+  presence: Presence
+  played?: number
+  won?: number
+  winRate?: number
+  bestScore?: number
+}
+
+export interface ServerLeaderboard {
+  scope: 'global' | 'game'
+  gameId?: string
+  total: number
+  entries: ServerLeaderboardEntry[]
+  me: ServerLeaderboardEntry | null
+}
+
 export interface GameInvite {
   gameId: string
   roomCode: string

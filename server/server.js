@@ -1505,8 +1505,7 @@ wss.on('connection', (ws, request) => {
         if (!ws._userId) return
         const targetUserId = String(msg.userId || '')
         const requestId = String(msg.requestId || '').slice(0, 80)
-        const canView = targetUserId === ws._userId || userStore.areFriends(ws._userId, targetUserId)
-        const user = canView ? userStore.byId(targetUserId) : null
+        const user = userStore.byId(targetUserId)
         const activeGame = user ? activeGameOf(targetUserId) : null
         send(ws, {
           type: 'user_profile',
@@ -1516,6 +1515,31 @@ wss.on('connection', (ws, request) => {
             presence: presenceOf(targetUserId, activeGame),
             ...(activeGame ? { activeGame } : {}),
           } : null,
+        })
+        break
+      }
+
+      case 'leaderboard': {
+        if (!ws._userId) return
+        const requestId = String(msg.requestId || '').slice(0, 80)
+        const requestedGameId = String(msg.gameId || '')
+        const gameId = Object.hasOwn(ACTIVITY_GAMES, requestedGameId) ? requestedGameId : null
+        const board = userStore.leaderboard({
+          gameId,
+          currentUserId: ws._userId,
+          limit: msg.limit,
+        })
+        const withPresence = (entry) => entry
+          ? { ...entry, presence: presenceOf(entry.userId) }
+          : null
+        send(ws, {
+          type: 'leaderboard',
+          requestId,
+          board: {
+            ...board,
+            entries: board.entries.map(withPresence),
+            me: withPresence(board.me),
+          },
         })
         break
       }

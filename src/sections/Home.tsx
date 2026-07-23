@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
-import { useState } from 'react'
-import { Gift, Crown, Flame, ChevronLeft, MessageCircle, UserPlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Gift, Crown, Flame, ChevronLeft, MessageCircle } from 'lucide-react'
 import { useApp } from '@/store/AppContext'
 import { useOnline } from '@/online/OnlineContext'
 import { AvatarCircle, CoinChip, LevelBar, SectionTitle, StatusDot } from './components'
@@ -8,10 +8,11 @@ import { GAMES } from '@/games'
 import { levelFromXp } from '@/types'
 import { sounds } from '@/lib/sounds'
 import { launchConfetti } from '@/lib/confetti'
-import { buildLeaderboard } from '@/lib/leaderboard'
 import { selectFavoriteGame } from '@/lib/favoriteGame'
+import type { ServerLeaderboard, ServerLeaderboardEntry } from '@/types'
 import type { TabId } from './TabBar'
 import PlayerProfileDialog from './PlayerProfileDialog'
+import LeaderboardDialog from './LeaderboardDialog'
 
 interface Props {
   goTab: (t: TabId) => void
@@ -23,8 +24,10 @@ const arabicNumber = new Intl.NumberFormat('ar-EG')
 
 export default function Home({ goTab, openGame, openChat }: Props) {
   const { profile, canClaimDaily, claimDailyReward, stats } = useApp()
-  const { friends, threads, status, onlineUserCount } = useOnline()
+  const { threads, status, onlineUserCount, me, getLeaderboard } = useOnline()
   const [selectedPlayer, setSelectedPlayer] = useState<{ userId: string; isMe: boolean } | null>(null)
+  const [globalBoard, setGlobalBoard] = useState<ServerLeaderboard | null>(null)
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
 
   const claim = () => {
     if (claimDailyReward()) {
@@ -36,8 +39,29 @@ export default function Home({ goTab, openGame, openChat }: Props) {
   const activeThreads = threads.filter((t) => t.unread > 0).length > 0 ? threads.filter((t) => t.unread > 0) : threads.slice(0, 2)
   const favorite = selectFavoriteGame(GAMES, stats)
   const featured = favorite?.game ?? GAMES[0]
-  const leaderboard = buildLeaderboard(profile, friends).slice(0, 5)
+  const fallbackEntry: ServerLeaderboardEntry = {
+    rank: 1,
+    userId: profile.userId ?? 'current-player',
+    handle: profile.handle ?? '',
+    name: profile.name,
+    avatar: profile.avatar,
+    xp: profile.xp,
+    points: profile.xp,
+    presence: status === 'online' ? 'online' : 'offline',
+  }
+  const leaderboard = globalBoard?.entries.slice(0, 5) ?? [fallbackEntry]
   const rankMarks = ['🥇', '🥈', '🥉']
+
+  useEffect(() => {
+    if (status !== 'online' || !me) return
+    let active = true
+    void getLeaderboard().then((board) => {
+      if (active && board) setGlobalBoard(board)
+    })
+    return () => {
+      active = false
+    }
+  }, [getLeaderboard, me, profile.xp, status])
 
   return (
     <div className="px-4 pt-6 tab-page">
@@ -152,50 +176,52 @@ export default function Home({ goTab, openGame, openChat }: Props) {
 
       {/* المتصدرون */}
       <SectionTitle
-        title="المتصدرون 🏆"
-        action={<span className="text-[10px] font-bold text-muted-foreground">حسب نقاط الخبرة</span>}
+        title="متصدرو ديدوس 🏆"
+        action={(
+          <button
+            type="button"
+            onClick={() => setLeaderboardOpen(true)}
+            className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-300"
+          >
+            كل اللاعبين
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+        )}
       />
       <div className="glass rounded-3xl p-2">
-        {leaderboard.map((player, index) => (
+        <p className="px-2 pb-1.5 pt-1 text-[9px] font-bold text-muted-foreground">ترتيب عالمي حسب نقاط الخبرة</p>
+        {leaderboard.map((player) => {
+          const isMe = player.userId === (me?.userId ?? profile.userId)
+          return (
           <button
             type="button"
             key={player.userId}
-            onClick={() => setSelectedPlayer({ userId: player.userId, isMe: player.isMe })}
-            className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-start transition-colors hover:bg-white/5 ${player.isMe ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}
+            onClick={() => setSelectedPlayer({ userId: player.userId, isMe })}
+            className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-start transition-colors hover:bg-white/5 ${isMe ? 'bg-emerald-500/10 border border-emerald-400/30' : ''}`}
           >
-            <span className="w-6 text-center font-black text-sm text-muted-foreground">{rankMarks[index] ?? index + 1}</span>
+            <span className="w-6 text-center font-black text-sm text-muted-foreground">{rankMarks[player.rank - 1] ?? player.rank}</span>
             <div className="relative">
               <AvatarCircle emoji={player.avatar} size="sm" />
-              {player.presence && (
-                <span className="absolute -bottom-0.5 -end-0.5">
-                  <StatusDot status={player.presence} />
-                </span>
-              )}
+              <span className="absolute -bottom-0.5 -end-0.5">
+                <StatusDot status={player.presence} />
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm truncate">{player.name}{player.isMe ? ' (أنت)' : ''}</p>
+              <p className="font-bold text-sm truncate">{player.name}{isMe ? ' (أنت)' : ''}</p>
               <p className="text-[10px] text-muted-foreground font-bold" dir={player.handle ? 'ltr' : 'rtl'}>
-                {player.handle ? `@${player.handle}` : 'نقاط الخبرة'}
+                {player.handle ? `@${player.handle}` : 'جارٍ تحميل الترتيب…'}
               </p>
             </div>
             <div className="text-end shrink-0">
               <p className="text-xs font-black text-emerald-300 flex items-center justify-end gap-1">
-                {index === 0 && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                {player.rank === 1 && <Crown className="w-3.5 h-3.5 text-amber-400" />}
                 <bdi className="tabular-nums">{player.points.toLocaleString('ar-EG')}</bdi> نقطة
               </p>
               <p className="text-[10px] font-bold text-muted-foreground">مستوى {levelFromXp(player.points)}</p>
             </div>
           </button>
-        ))}
-        {friends.length === 0 && (
-          <button
-            onClick={() => goTab('friends')}
-            className="w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-dashed border-white/15 text-muted-foreground text-xs font-bold hover:bg-white/5 transition-colors"
-          >
-            <UserPlus className="w-4 h-4" />
-            ضيف صاحبك بالمعرّف وتحدّوه
-          </button>
-        )}
+          )
+        })}
       </div>
 
       {/* غرف الدردشة النشطة */}
@@ -250,6 +276,7 @@ export default function Home({ goTab, openGame, openChat }: Props) {
         isCurrentUser={selectedPlayer?.isMe}
         onClose={() => setSelectedPlayer(null)}
       />
+      <LeaderboardDialog open={leaderboardOpen} onOpenChange={setLeaderboardOpen} />
     </div>
   )
 }

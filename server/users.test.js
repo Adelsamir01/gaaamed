@@ -57,6 +57,37 @@ test('public profiles persist sanitized per-game statistics and totals', () => {
   }
 })
 
+test('global and per-game leaderboards rank every registered player by visible metrics', () => {
+  const store = new UserStore(testRoot)
+  try {
+    const adel = store.identify({ deviceId: 'leader-adel', name: 'Adel', avatar: 'A', xp: 300 }).user
+    const mona = store.identify({ deviceId: 'leader-mona', name: 'Mona', avatar: 'M', xp: 900 }).user
+    const omar = store.identify({ deviceId: 'leader-omar', name: 'Omar', avatar: 'O', xp: 500 }).user
+    store.updateStats(adel.userId, { chess: { played: 10, won: 7 } })
+    store.updateStats(mona.userId, { chess: { played: 20, won: 7 } })
+    store.updateStats(omar.userId, { chess: { played: 8, won: 6 } })
+
+    const global = store.leaderboard({ currentUserId: adel.userId, limit: 2 })
+    assert.equal(global.scope, 'global')
+    assert.deepEqual(global.entries.map(({ name, points, rank }) => ({ name, points, rank })), [
+      { name: 'Mona', points: 900, rank: 1 },
+      { name: 'Omar', points: 500, rank: 2 },
+    ])
+    assert.equal(global.me.rank, 3)
+
+    const chess = store.leaderboard({ gameId: 'chess', currentUserId: omar.userId })
+    assert.equal(chess.scope, 'game')
+    assert.deepEqual(chess.entries.map(({ name, won, winRate, rank }) => ({ name, won, winRate, rank })), [
+      { name: 'Adel', won: 7, winRate: 70, rank: 1 },
+      { name: 'Mona', won: 7, winRate: 35, rank: 2 },
+      { name: 'Omar', won: 6, winRate: 75, rank: 3 },
+    ])
+    assert.equal(chess.me.rank, 3)
+  } finally {
+    store.close()
+  }
+})
+
 test('retries a queued chat message without creating a duplicate', () => {
   const store = new UserStore(testRoot)
   try {

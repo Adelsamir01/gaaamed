@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 import { onlineClient, getServerUrl, saveServerUrl, getDeviceId, hydrateOnlineClientStorage, type ConnectionStatus, type ServerMessage } from './client'
 import { useApp } from '@/store/AppContext'
-import type { GameResult, PublicPlayerProfile, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerThread } from '@/types'
+import type { GameResult, PublicPlayerProfile, PublicUserCard, RoomSettings, ServerChatMessage, ServerFriend, ServerLeaderboard, ServerThread } from '@/types'
 import { readStoredJson, writeStoredJson } from '@/lib/persistentStorage'
 import { getCurrentPushToken, initializePushNotifications, onPushToken, openNotificationThread } from '@/lib/pushNotifications'
 import { ThreadHistoryQueue } from './threadHistoryQueue'
@@ -170,6 +170,7 @@ interface OnlineContextValue {
   setOpenThreadId: (id: string | null) => void
   searchUser: (handle: string) => Promise<PublicUserCard | null>
   getUserProfile: (userId: string) => Promise<PublicPlayerProfile | null>
+  getLeaderboard: (gameId?: string) => Promise<ServerLeaderboard | null>
   setHandle: (handle: string) => Promise<{ ok: boolean; message?: string }>
   friendAdd: (userId: string) => void
   friendAccept: (userId: string) => void
@@ -244,6 +245,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   openThreadRef.current = openThreadId
   const searchResolversRef = useRef(new Map<string, (card: PublicUserCard | null) => void>())
   const profileResolversRef = useRef(new Map<string, (profile: PublicPlayerProfile | null) => void>())
+  const leaderboardResolversRef = useRef(new Map<string, (board: ServerLeaderboard | null) => void>())
   const handleResolverRef = useRef<((r: { ok: boolean; message?: string }) => void) | null>(null)
   const threadResolverRef = useRef<((t: ServerThread | null) => void) | null>(null)
   const startGameRef = useRef<() => void>(() => {})
@@ -492,6 +494,15 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           if (resolver) {
             profileResolversRef.current.delete(requestId)
             resolver((msg.profile as PublicPlayerProfile | null) ?? null)
+          }
+          break
+        }
+        case 'leaderboard': {
+          const requestId = String(msg.requestId || '')
+          const resolver = leaderboardResolversRef.current.get(requestId)
+          if (resolver) {
+            leaderboardResolversRef.current.delete(requestId)
+            resolver((msg.board as ServerLeaderboard | null) ?? null)
           }
           break
         }
@@ -914,6 +925,22 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const getLeaderboard = useCallback((gameId?: string) => {
+    const requestId = crypto.randomUUID()
+    return new Promise<ServerLeaderboard | null>((resolvePromise) => {
+      leaderboardResolversRef.current.set(requestId, resolvePromise)
+      onlineClient.send({
+        type: 'leaderboard',
+        requestId,
+        ...(gameId ? { gameId } : {}),
+        limit: 50,
+      })
+      window.setTimeout(() => {
+        if (leaderboardResolversRef.current.delete(requestId)) resolvePromise(null)
+      }, 5000)
+    })
+  }, [])
+
   const friendAccept = useCallback((userId: string) => {
     onlineClient.send({ type: 'friend_accept', userId })
   }, [])
@@ -1066,7 +1093,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId, setOpenThreadId,
-      searchUser, getUserProfile, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
+      searchUser, getUserProfile, getLeaderboard, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom,
@@ -1077,7 +1104,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       requestRematch, resetRematch, subscribe, updateServerUrl, reconnect,
       me, friends, incomingFriendRequests, outgoingFriendRequests,
       threads, messages, openThreadId,
-      searchUser, getUserProfile, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
+      searchUser, getUserProfile, getLeaderboard, setHandle, friendAdd, friendAccept, friendReject, friendRequestCancel, friendRemove, createDm, createGroup,
       loadThread, chatSend, chatReact, chatSendInvite, reportFriendGameResult, refreshSocial,
       quickMatch, fromQuickMatch, autoStartRoom,
       ownInviteRoom, clearOwnInviteRoom],

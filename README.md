@@ -46,7 +46,9 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Foreground notifications stay inside the app, remain clickable, and do not duplicate the system notification.
 - A friendly mandatory Android update prompt blocks outdated builds and directs users to the latest Google Play release.
 - Finished game cards show the winner, while pending invites can be reopened after leaving the lobby.
-- Player profiles expose game statistics; the leaderboard shows the points used for ranking.
+- The home screen shows a true global XP leaderboard across all registered players.
+- Every game has its own leaderboard ranked by wins, then visible win rate and match count tie-breakers.
+- Player profiles expose game statistics, including for players opened from the global leaderboards.
 - The home highlight becomes each player's own favourite game after enough plays.
 - Game results update coins, XP, levels, play counts, wins, and leaderboard points.
 
