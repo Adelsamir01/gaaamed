@@ -49,6 +49,41 @@ export function reconcilePaperPosition(current: PaperPoint, authoritative: Paper
   }
 }
 
+/**
+ * Adds evenly spaced points to the visual trail without tying its shape to the
+ * lower-resolution territory grid. The caller can render the live head after
+ * the final sample, so the line always stays centred behind the character.
+ */
+export function appendPaperTrailSamples(
+  points: PaperPoint[],
+  point: PaperPoint,
+  spacing = 5,
+  maximumPoints = 1_600,
+): boolean {
+  const safeSpacing = Math.max(1, spacing)
+  if (points.length === 0) {
+    points.push({ ...point })
+    return true
+  }
+
+  const last = points.at(-1)!
+  const dx = point.x - last.x
+  const dy = point.y - last.y
+  const distance = Math.hypot(dx, dy)
+  if (distance < safeSpacing) return false
+
+  const sampleCount = Math.min(24, Math.floor(distance / safeSpacing))
+  for (let index = 1; index <= sampleCount; index += 1) {
+    const progress = Math.min(1, (index * safeSpacing) / distance)
+    points.push({
+      x: last.x + dx * progress,
+      y: last.y + dy * progress,
+    })
+  }
+  if (points.length > maximumPoints) points.splice(0, points.length - maximumPoints)
+  return true
+}
+
 export function decodeOwnershipRle(encoded: number[], expectedLength: number): Uint16Array {
   const output = new Uint16Array(Math.max(0, expectedLength))
   let cursor = 0

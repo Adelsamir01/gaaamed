@@ -5,8 +5,8 @@ export const PAPER_CELL_SIZE = 28
 export const PAPER_WORLD_SIZE = PAPER_GRID_SIZE * PAPER_CELL_SIZE
 export const PAPER_MAX_PLAYERS = 14
 export const PAPER_BOT_COUNT = 6
-export const PAPER_TICK_MS = 50
-export const PAPER_SNAPSHOT_MS = 150
+export const PAPER_TICK_MS = 33
+export const PAPER_SNAPSHOT_MS = 100
 export const PAPER_SPEED = 150
 export const PAPER_TURN_RATE = 7.4
 
@@ -327,7 +327,7 @@ export class PaperArena {
   updateBotSteering(player, dt) {
     player.botThinkIn -= dt
     if (player.botThinkIn > 0) return
-    player.botThinkIn = 0.22 + this.random() * 0.28
+    player.botThinkIn = 0.34 + this.random() * 0.3
 
     const cell = this.cellAt(player.x, player.y)
     const inside = cell >= 0 && this.owners[cell] === player.slot
@@ -353,11 +353,11 @@ export class PaperArena {
 
     if (inside && player.trail.length === 0) {
       player.botTargetTrail = 7 + Math.floor(this.random() * 18)
-      player.targetAngle += (this.random() - 0.5) * 1.7
+      player.targetAngle += (this.random() - 0.5) * 1.1
       return
     }
 
-    if (this.random() < 0.28) player.targetAngle += (this.random() - 0.5) * 0.7
+    if (this.random() < 0.24) player.targetAngle += (this.random() - 0.5) * 0.45
   }
 
   captureLoop(player) {

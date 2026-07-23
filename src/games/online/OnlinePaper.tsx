@@ -8,6 +8,7 @@ import { sounds } from '@/lib/sounds'
 import {
   advancePaperPosition,
   angleDifference,
+  appendPaperTrailSamples,
   applyTerritoryPatches,
   cellCenter,
   cellIndexAt,
@@ -45,6 +46,7 @@ interface ArenaSnapshot {
   speed: number
   turnRate: number
   revision: number
+  serverTime: number
 }
 
 interface RenderPlayer extends ArenaPlayer {
@@ -53,6 +55,7 @@ interface RenderPlayer extends ArenaPlayer {
   serverAngle: number
   serverTargetAngle: number
   trailSet: Set<number>
+  visualTrail: PaperPoint[]
   lastPredictedCell: number
 }
 
@@ -86,7 +89,14 @@ const DEFAULT_TURN_RATE = 7.4
 const MIN_FRAME_INTERVAL_MS = 1_000 / 60
 const MINIMAP_INTERVAL_MS = 180
 const STALE_SNAPSHOT_MS = 5_000
-const TERRITORY_TEXTURE_SCALE = 8
+const TERRITORY_TRAIL_SPACING = 4.5
+const AUTHORITATIVE_TELEPORT_DISTANCE_CELLS = 8
+const MAX_SNAPSHOT_PROJECTION_SECONDS = 0.28
+const TERRITORY_TEXTURE_LIMIT = {
+  high: 2_048,
+  balanced: 1_536,
+  low: 1_024,
+} satisfies Record<RenderQuality, number>
 
 function preferredPixelRatio(quality: RenderQuality): number {
   const cap = quality === 'low' ? 1.5 : quality === 'balanced' ? 2 : 3
@@ -97,7 +107,7 @@ function normalizeAngle(angle: number): number {
   return Math.atan2(Math.sin(angle), Math.cos(angle))
 }
 
-function copyPlayer(player: ArenaPlayer): RenderPlayer {
+function copyPlayer(player: ArenaPlayer, gridSize: number, cellSize: number): RenderPlayer {
   return {
     ...player,
     trail: [...player.trail],
@@ -106,6 +116,7 @@ function copyPlayer(player: ArenaPlayer): RenderPlayer {
     serverAngle: player.angle,
     serverTargetAngle: player.targetAngle,
     trailSet: new Set(player.trail),
+    visualTrail: player.trail.map((cell) => cellCenter(cell, gridSize, cellSize)),
     lastPredictedCell: -1,
   }
 }
@@ -113,12 +124,42 @@ function copyPlayer(player: ArenaPlayer): RenderPlayer {
 function traceSmoothPath(context: CanvasRenderingContext2D, points: PaperPoint[]): void {
   if (points.length === 0) return
   context.moveTo(points[0].x, points[0].y)
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const point = points[index]
-    const next = points[index + 1]
-    context.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2)
+  if (points.length === 2) {
+    context.lineTo(points[1].x, points[1].y)
+    return
   }
-  if (points.length > 1) context.lineTo(points.at(-1)!.x, points.at(-1)!.y)
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[Math.max(0, index - 1)]
+    const current = points[index]
+    const next = points[index + 1]
+    const following = points[Math.min(points.length - 1, index + 2)]
+    context.bezierCurveTo(
+      current.x + (next.x - previous.x) / 6,
+      current.y + (next.y - previous.y) / 6,
+      next.x - (following.x - current.x) / 6,
+      next.y - (following.y - current.y) / 6,
+      next.x,
+      next.y,
+    )
+  }
+}
+
+function mixHexColor(source: string, target: string, amount: number): string {
+  const parse = (value: string) => {
+    const match = /^#([\da-f]{6})$/i.exec(value)
+    if (!match) return null
+    return [
+      Number.parseInt(match[1].slice(0, 2), 16),
+      Number.parseInt(match[1].slice(2, 4), 16),
+      Number.parseInt(match[1].slice(4, 6), 16),
+    ]
+  }
+  const from = parse(source)
+  const to = parse(target)
+  if (!from || !to) return source
+  const factor = Math.max(0, Math.min(1, amount))
+  const mixed = from.map((channel, index) => Math.round(channel + (to[index] - channel) * factor))
+  return `#${mixed.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
 interface TerritoryEdge {
@@ -128,7 +169,7 @@ interface TerritoryEdge {
   used: boolean
 }
 
-function smoothClosedLoop(points: PaperPoint[], iterations = 3): PaperPoint[] {
+function smoothClosedLoop(points: PaperPoint[], iterations = 4): PaperPoint[] {
   let smoothed = points
   for (let pass = 0; pass < iterations && smoothed.length >= 3; pass += 1) {
     const next: PaperPoint[] = []
@@ -209,9 +250,20 @@ function traceRoundedTerritory(
     if (!last || last.x !== loop[0].x || last.y !== loop[0].y || loop.length < 4) continue
     loop.pop()
     const smoothed = smoothClosedLoop(loop).map((point) => ({ x: point.x * scale, y: point.y * scale }))
-    context.moveTo(smoothed[0].x, smoothed[0].y)
-    for (let index = 1; index < smoothed.length; index += 1) {
-      context.lineTo(smoothed[index].x, smoothed[index].y)
+    const finalPoint = smoothed.at(-1)!
+    context.moveTo(
+      (finalPoint.x + smoothed[0].x) / 2,
+      (finalPoint.y + smoothed[0].y) / 2,
+    )
+    for (let index = 0; index < smoothed.length; index += 1) {
+      const point = smoothed[index]
+      const next = smoothed[(index + 1) % smoothed.length]
+      context.quadraticCurveTo(
+        point.x,
+        point.y,
+        (point.x + next.x) / 2,
+        (point.y + next.y) / 2,
+      )
     }
     context.closePath()
   }
@@ -251,6 +303,7 @@ export default function OnlinePaper({ onExit }: Props) {
     speed: DEFAULT_SPEED,
     turnRate: DEFAULT_TURN_RATE,
     revision: 0,
+    serverTime: 0,
   })
   const renderPlayersRef = useRef(new Map<string, RenderPlayer>())
   const cameraRef = useRef<PaperPoint>({ x: DEFAULT_WORLD_SIZE / 2, y: DEFAULT_WORLD_SIZE / 2 })
@@ -452,6 +505,7 @@ export default function OnlinePaper({ onExit }: Props) {
       speed: Number(message.speed) || snapshotRef.current.speed,
       turnRate: Number(message.turnRate) || snapshotRef.current.turnRate,
       revision: nextRevision,
+      serverTime: Number(message.serverTime) || Date.now(),
     }
     if (nextPlayers.length !== playerCountRef.current) {
       playerCountRef.current = nextPlayers.length
@@ -557,15 +611,23 @@ export default function OnlinePaper({ onExit }: Props) {
   const updateRenderedPlayers = useCallback((elapsed: number) => {
     const targets = snapshotRef.current.players
     const hasNewSnapshot = appliedSnapshotVersionRef.current !== snapshotVersionRef.current
+    const gridSize = gridSizeRef.current
+    const cellSize = cellSizeRef.current
     if (hasNewSnapshot) {
       const targetIds = new Set(targets.map((player) => player.id))
       for (const [id] of renderPlayersRef.current) {
         if (!targetIds.has(id)) renderPlayersRef.current.delete(id)
       }
+      const serverTime = snapshotRef.current.serverTime
+      const rawSnapshotAge = serverTime > 0 ? (Date.now() - serverTime) / 1_000 : 0
+      const snapshotAge = Number.isFinite(rawSnapshotAge) && rawSnapshotAge >= 0 && rawSnapshotAge <= 1
+        ? Math.min(MAX_SNAPSHOT_PROJECTION_SECONDS, rawSnapshotAge)
+        : 0.04
       for (const target of targets) {
         let rendered = renderPlayersRef.current.get(target.id)
+        const isNewPlayer = !rendered
         if (!rendered) {
-          rendered = copyPlayer(target)
+          rendered = copyPlayer(target, gridSize, cellSize)
           renderPlayersRef.current.set(target.id, rendered)
           if (target.id === playerIdRef.current) desiredAngleRef.current = target.targetAngle
         }
@@ -579,13 +641,54 @@ export default function OnlinePaper({ onExit }: Props) {
         rendered.territoryCells = target.territoryCells
         rendered.kills = target.kills
         rendered.lastInputSeq = target.lastInputSeq
-        rendered.serverX = target.x
-        rendered.serverY = target.y
-        rendered.serverAngle = target.angle
+        const mine = target.id === playerIdRef.current
+        const projectedTargetAngle = mine
+          ? predictionTargetAngle(
+              target.targetAngle,
+              desiredAngleRef.current,
+              target.lastInputSeq,
+              inputSequenceRef.current,
+            )
+          : target.targetAngle
+        const projected = advancePaperPosition(
+          target,
+          target.angle,
+          projectedTargetAngle,
+          snapshotRef.current.speed,
+          snapshotRef.current.turnRate,
+          snapshotAge,
+        )
+        rendered.serverX = projected.x
+        rendered.serverY = projected.y
+        rendered.serverAngle = projected.angle
         rendered.serverTargetAngle = target.targetAngle
-        rendered.trail = [...target.trail]
-        rendered.trailSet = new Set(target.trail)
-        rendered.lastPredictedCell = target.trail.at(-1) ?? cellIndexAt(target, gridSizeRef.current, cellSizeRef.current)
+        const projectedCell = cellIndexAt(projected, gridSize, cellSize)
+        const projectedInsideTerritory = projectedCell >= 0 && ownersRef.current[projectedCell] === target.slot
+        const sameTrailRun = (
+          target.trail.length > 0
+          && rendered.trail.length > 0
+          && target.trail[0] === rendered.trail[0]
+        )
+
+        if (target.trail.length > 0) {
+          if (!sameTrailRun || rendered.visualTrail.length === 0) {
+            rendered.visualTrail = target.trail.map((cell) => cellCenter(cell, gridSize, cellSize))
+          }
+          rendered.trail = [...target.trail]
+          rendered.trailSet = new Set(target.trail)
+        } else if (projectedInsideTerritory || isNewPlayer) {
+          rendered.trail = []
+          rendered.trailSet.clear()
+          rendered.visualTrail = []
+        }
+        rendered.lastPredictedCell = rendered.trail.at(-1) ?? projectedCell
+
+        const authoritativeError = Math.hypot(projected.x - rendered.x, projected.y - rendered.y)
+        if (isNewPlayer || authoritativeError >= cellSize * AUTHORITATIVE_TELEPORT_DISTANCE_CELLS) {
+          rendered.x = projected.x
+          rendered.y = projected.y
+          rendered.angle = projected.angle
+        }
       }
       appliedSnapshotVersionRef.current = snapshotVersionRef.current
     }
@@ -617,17 +720,20 @@ export default function OnlinePaper({ onExit }: Props) {
 
       const positionError = Math.hypot(rendered.serverX - rendered.x, rendered.serverY - rendered.y)
       const correctionRate = mine
-        ? Math.min(5, 2.4 + positionError / 55)
-        : Math.min(8, 5.5 + positionError / 45)
+        ? Math.min(4.8, 2.2 + positionError / 70)
+        : Math.min(5.4, 2.8 + positionError / 80)
       const correction = reconcilePaperPosition(
         rendered,
         { x: rendered.serverX, y: rendered.serverY },
         1 - Math.exp(-elapsed * correctionRate),
       )
       const targetAngle = mine ? desiredAngleRef.current : rendered.serverTargetAngle
+      const angleCorrectionRate = mine ? 2.2 : 4.6
+      const correctedAngle = rendered.angle + angleDifference(rendered.angle, rendered.serverAngle)
+        * (1 - Math.exp(-elapsed * angleCorrectionRate))
       const advanced = advancePaperPosition(
         correction,
-        rendered.angle,
+        correctedAngle,
         targetAngle,
         speed,
         turnRate,
@@ -638,17 +744,28 @@ export default function OnlinePaper({ onExit }: Props) {
       rendered.angle = advanced.angle
       rendered.targetAngle = targetAngle
 
-      const currentCell = cellIndexAt(rendered, gridSizeRef.current, cellSizeRef.current)
-      if (currentCell < 0 || currentCell === rendered.lastPredictedCell) continue
-      rendered.lastPredictedCell = currentCell
-      if (ownersRef.current[currentCell] === rendered.slot) {
-        if (rendered.trail.length > 0) {
-          rendered.trail = []
-          rendered.trailSet.clear()
+      const currentCell = cellIndexAt(rendered, gridSize, cellSize)
+      if (currentCell >= 0) {
+        if (currentCell !== rendered.lastPredictedCell) {
+          rendered.lastPredictedCell = currentCell
+          if (ownersRef.current[currentCell] === rendered.slot) {
+            if (rendered.trail.length > 0) {
+              rendered.trail = []
+              rendered.trailSet.clear()
+              rendered.visualTrail = []
+            }
+          } else if (!rendered.trailSet.has(currentCell)) {
+            rendered.trail.push(currentCell)
+            rendered.trailSet.add(currentCell)
+          }
         }
-      } else if (!rendered.trailSet.has(currentCell)) {
-        rendered.trail.push(currentCell)
-        rendered.trailSet.add(currentCell)
+        if (ownersRef.current[currentCell] !== rendered.slot && rendered.trail.length > 0) {
+          appendPaperTrailSamples(
+            rendered.visualTrail,
+            rendered,
+            TERRITORY_TRAIL_SPACING,
+          )
+        }
       }
     }
 
@@ -683,12 +800,17 @@ export default function OnlinePaper({ onExit }: Props) {
   const rebuildTerritoryTexture = useCallback(() => {
     if (!territoryDirtyRef.current) return
     const gridSize = gridSizeRef.current
+    const textureLimit = TERRITORY_TEXTURE_LIMIT[qualityRef.current]
+    const textureScale = Math.max(8, Math.min(
+      cellSizeRef.current,
+      Math.floor(textureLimit / gridSize),
+    ))
     let texture = territoryTextureRef.current
     if (!texture) {
       texture = document.createElement('canvas')
       territoryTextureRef.current = texture
     }
-    const textureSize = gridSize * TERRITORY_TEXTURE_SCALE
+    const textureSize = gridSize * textureScale
     if (texture.width !== textureSize || texture.height !== textureSize) {
       texture.width = textureSize
       texture.height = textureSize
@@ -708,14 +830,24 @@ export default function OnlinePaper({ onExit }: Props) {
       if (owner > 0) ownerIds.add(owner)
     }
     for (const owner of ownerIds) {
+      const color = palette.get(owner) ?? '#64748b'
       textureContext.save()
       textureContext.beginPath()
-      traceRoundedTerritory(textureContext, owners, gridSize, owner, TERRITORY_TEXTURE_SCALE)
-      textureContext.fillStyle = palette.get(owner) ?? '#64748b'
-      textureContext.globalAlpha = 0.88
-      textureContext.shadowColor = palette.get(owner) ?? '#64748b'
-      textureContext.shadowBlur = 1.5
+      traceRoundedTerritory(textureContext, owners, gridSize, owner, textureScale)
+      const gradient = textureContext.createLinearGradient(0, 0, textureSize, textureSize)
+      gradient.addColorStop(0, mixHexColor(color, '#ffffff', 0.22))
+      gradient.addColorStop(0.48, color)
+      gradient.addColorStop(1, mixHexColor(color, '#06101f', 0.14))
+      textureContext.fillStyle = gradient
+      textureContext.globalAlpha = 1
+      textureContext.shadowColor = color
+      textureContext.shadowBlur = qualityRef.current === 'low' ? 0 : textureScale * 0.22
       textureContext.fill('evenodd')
+      textureContext.shadowBlur = 0
+      textureContext.strokeStyle = mixHexColor(color, '#ffffff', 0.34)
+      textureContext.lineWidth = Math.max(1.25, textureScale * 0.11)
+      textureContext.globalAlpha = 0.58
+      textureContext.stroke()
       textureContext.restore()
     }
     territoryDirtyRef.current = false
@@ -774,7 +906,6 @@ export default function OnlinePaper({ onExit }: Props) {
     const zoom = zoomRef.current
     const worldSize = worldSizeRef.current
     const cellSize = cellSizeRef.current
-    const gridSize = gridSizeRef.current
     const halfWidth = viewport.width / (2 * zoom)
     const halfHeight = viewport.height / (2 * zoom)
 
@@ -855,9 +986,9 @@ export default function OnlinePaper({ onExit }: Props) {
       )
       let firstVisibleTrailIndex = -1
       let lastVisibleTrailIndex = -1
-      if (player.trail.length > 0) {
-        for (let index = 0; index < player.trail.length; index += 1) {
-          const point = cellCenter(player.trail[index], gridSize, cellSize)
+      if (player.visualTrail.length > 0) {
+        for (let index = 0; index < player.visualTrail.length; index += 1) {
+          const point = player.visualTrail[index]
           if (
             point.x < camera.x - halfWidth - cellSize
             || point.y < camera.y - halfHeight - cellSize
@@ -868,8 +999,8 @@ export default function OnlinePaper({ onExit }: Props) {
           lastVisibleTrailIndex = index
         }
         if (visible && firstVisibleTrailIndex < 0) {
-          firstVisibleTrailIndex = Math.max(0, player.trail.length - 2)
-          lastVisibleTrailIndex = player.trail.length - 1
+          firstVisibleTrailIndex = Math.max(0, player.visualTrail.length - 3)
+          lastVisibleTrailIndex = player.visualTrail.length - 1
         }
       }
       if (!visible && firstVisibleTrailIndex < 0) continue
@@ -879,24 +1010,22 @@ export default function OnlinePaper({ onExit }: Props) {
         context.lineCap = 'round'
         context.lineJoin = 'round'
         context.beginPath()
-        const sliceStart = Math.max(0, firstVisibleTrailIndex - 1)
-        const sliceEnd = Math.min(player.trail.length, lastVisibleTrailIndex + 2)
-        const trailPoints = player.trail
-          .slice(sliceStart, sliceEnd)
-          .map((cell) => cellCenter(cell, gridSize, cellSize))
-        if (sliceEnd === player.trail.length) trailPoints.push({ x: player.x, y: player.y })
+        const sliceStart = Math.max(0, firstVisibleTrailIndex - 2)
+        const sliceEnd = Math.min(player.visualTrail.length, lastVisibleTrailIndex + 3)
+        const trailPoints = player.visualTrail.slice(sliceStart, sliceEnd)
+        if (sliceEnd === player.visualTrail.length) trailPoints.push({ x: player.x, y: player.y })
         traceSmoothPath(context, trailPoints)
-        context.strokeStyle = 'rgba(2,6,23,0.72)'
-        context.lineWidth = cellSize * 0.78
+        context.strokeStyle = 'rgba(2,6,23,0.82)'
+        context.lineWidth = cellSize * 0.9
         context.stroke()
         context.shadowColor = player.color
-        context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 6 : 11
+        context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 7 : 13
         context.strokeStyle = player.color
-        context.lineWidth = cellSize * 0.55
+        context.lineWidth = cellSize * 0.64
         context.stroke()
         context.shadowBlur = 0
-        context.strokeStyle = 'rgba(255,255,255,0.28)'
-        context.lineWidth = 2.5
+        context.strokeStyle = 'rgba(255,255,255,0.42)'
+        context.lineWidth = 2.25
         context.stroke()
         context.restore()
       }
@@ -910,25 +1039,25 @@ export default function OnlinePaper({ onExit }: Props) {
       context.strokeStyle = 'rgba(2,6,23,0.85)'
       context.lineWidth = 4
       context.beginPath()
-      context.roundRect(-19, -15, 34, 30, 10)
+      context.roundRect(-21, -17, 38, 34, 11)
       context.fill()
       context.stroke()
       context.beginPath()
-      context.moveTo(9, -12)
-      context.quadraticCurveTo(20, -9, 27, 0)
-      context.quadraticCurveTo(20, 9, 9, 12)
+      context.moveTo(11, -14)
+      context.quadraticCurveTo(23, -10, 30, 0)
+      context.quadraticCurveTo(23, 10, 11, 14)
       context.closePath()
       context.fill()
       context.stroke()
       context.shadowBlur = 0
       context.fillStyle = 'rgba(255,255,255,0.86)'
       context.beginPath()
-      context.roundRect(-12, -9, 6, 18, 3)
+      context.roundRect(-14, -10, 7, 20, 3.5)
       context.fill()
       context.fillStyle = '#07111f'
       context.beginPath()
-      context.arc(3, -6, 2.6, 0, Math.PI * 2)
-      context.arc(3, 6, 2.6, 0, Math.PI * 2)
+      context.arc(4, -6.5, 2.8, 0, Math.PI * 2)
+      context.arc(4, 6.5, 2.8, 0, Math.PI * 2)
       context.fill()
       context.restore()
 

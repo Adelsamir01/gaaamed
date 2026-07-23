@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   advancePaperPosition,
+  appendPaperTrailSamples,
   applyTerritoryPatches,
   cellCenter,
   cellIndexAt,
@@ -21,6 +22,30 @@ test('authoritative corrections blend instead of snapping the player', () => {
   const corrected = reconcilePaperPosition({ x: 10, y: 20 }, { x: 30, y: 40 }, 0.25)
 
   assert.deepEqual(corrected, { x: 15, y: 25 })
+})
+
+test('visual paper trails fill movement gaps with stable high-density samples', () => {
+  const points = [{ x: 10, y: 20 }]
+
+  assert.equal(appendPaperTrailSamples(points, { x: 34, y: 20 }, 5), true)
+  assert.deepEqual(points, [
+    { x: 10, y: 20 },
+    { x: 15, y: 20 },
+    { x: 20, y: 20 },
+    { x: 25, y: 20 },
+    { x: 30, y: 20 },
+  ])
+  assert.equal(appendPaperTrailSamples(points, { x: 33, y: 20 }, 5), false)
+})
+
+test('visual paper trails stay memory bounded during long rounds', () => {
+  const points = [{ x: 0, y: 0 }]
+  for (let x = 5; x <= 200; x += 5) {
+    appendPaperTrailSamples(points, { x, y: 0 }, 5, 12)
+  }
+
+  assert.equal(points.length, 12)
+  assert.deepEqual(points.at(-1), { x: 200, y: 0 })
 })
 
 test('unacknowledged steering is predicted instead of fighting the local direction', () => {
