@@ -1,234 +1,172 @@
 # ديدوس — Dedos 🎮
 
-**منصة ألعاب اجتماعية عربية — العب ودردش مع أصدقائك، أونلاين أو على نفس الجهاز.**
+**منصة ألعاب اجتماعية مصرية بالعربي — العب، اتكلم، واتحدى أصحابك أو لاعبين جدد.**
 
-A Plato-style social gaming platform, fully in Arabic (RTL), built as a web app and shipped as a native Android app via Capacitor. Casual games, private rooms with 4-digit codes, realtime multiplayer over WebSocket, chat rooms, friends, coins, XP and levels.
+Dedos is an Arabic-first, RTL social gaming app for Android and the web. It combines polished offline games, realtime multiplayer, direct and group chat, friends, profiles, stats, leaderboards, and native push notifications in one app.
 
----
+The Android release is currently prepared for Google Play closed testing as **1.11.0 (version code 17)**.
 
 ## Screenshots
 
 | شخبطة — الرسام | شخبطة — التخمين | إكس أو أونلاين | النتيجة |
 |---|---|---|---|
-| ![drawer](docs/screenshots/shakhbata-drawer.png) | ![guesser](docs/screenshots/shakhbata-guesser.png) | ![xo](docs/screenshots/tictactoe-online-win.png) | ![result](docs/screenshots/tictactoe-online-result.png) |
-
----
+| ![شاشة الرسام](docs/screenshots/shakhbata-drawer.png) | ![شاشة التخمين](docs/screenshots/shakhbata-guesser.png) | ![إكس أو أونلاين](docs/screenshots/tictactoe-online-win.png) | ![نتيجة المباراة](docs/screenshots/tictactoe-online-result.png) |
 
 ## Games
 
-### 🌐 Online (realtime multiplayer over WebSocket)
-
-| Game | Players | Description |
+| Game | Offline | Multiplayer |
 |---|---|---|
-| **شخبطة** 🎨 | 2–8 | Arabic draw-and-guess party game (Skribbl-style): one player draws, everyone guesses in chat. 420-word Arabic bank, letter hints, speed-based scoring. |
-| **بنك الحظ** 🏦 | 2–6 | Egyptian Monopoly-style board game: dice, properties, rent, jail, chance cards — fully ported and wired into Dedos rooms. |
-| **إكس أو أونلاين** ⭕ | 2 | Tic-tac-toe over the network with turn sync and win-line highlight. |
-| **أربعة تربح** 🔴 | 2 | Connect 4 — drop discs, gravity animation, 4-in-a-row detection. |
-| **حجر ورقة مقص أونلاين** ✂️ | 2 | Best of 5, secret picks revealed simultaneously by the server. |
-| **سباق البرق** ⚡ | 2 | Reaction race — server decides who tapped first each round. |
+| **إكس أو** ⭕ | Computer or two players | Friend invite or quick match |
+| **شطرنج** ♟️ | Computer or two players, three difficulties | Friend invite or quick match, legal-move hints and premoves |
+| **لعبة الذاكرة** 🧠 | Easy, medium, and hard boards | Friend invite or quick match |
+| **أسئلة ثقافية** 📚 | Large rotating Arabic question bank | Fastest correct answer wins |
+| **حلاوة** 🍬 | Animated match-three levels and special pieces | Synchronized competitive board |
+| **حجر ورقة مقص** ✂️ | Computer | Friend invite or quick match |
+| **سرعة البرق** ⚡ | Reaction-time challenge | Realtime reaction race |
+| **الثعبان** 🐍 | Large circular arena | Public drop-in arena with bots, minimap, and leaderboard |
+| **كاسحة الألغام** 💣 | Three difficulties | — |
+| **أربعة تربح** 🔴 | Computer or two players | Friend invite or quick match |
+| **شخبطة** 🎨 | Pass-and-play drawing | Friends, groups, or quick match |
+| **بنك الحظ** 🏦 | Computer or local players | Rich realtime Egyptian board game |
 
-All online games support three ways to play from one unified game card: **غرفة برمز** (4-digit room code), **دعوة في الدردشة** (tap-to-join invite bubble), and **مباراة سريعة** ⚡ (server matchmaking pairs you with a random waiting player).
+Online play no longer uses create-room or join-by-code screens. Players start games through:
 
-### 📱 Offline (vs bot or 2 players on one device)
+- game invites inside a direct or group chat;
+- one-tap quick matching with another player;
+- the public Snake arena.
 
-| Game | Notes |
-|---|---|
-| **إكس أو** | Bot with 3 difficulties — سهل / متوسط / صعب (unbeatable minimax) |
-| **لعبة الذاكرة** 🧠 | 4×4 Arabic-themed memory cards, timer, best score |
-| **أسئلة ثقافية** 📚 | 51 real Arabic trivia questions, 15s per question, streak bonuses |
-| **حجر ورقة مقص** | Best of 5 vs bot |
-| **سرعة البرق** | 5-round reaction test with average/best ms |
+## Social experience
 
-### Platform features
+- Friend requests must be accepted before two people become friends.
+- Compact friends list with live online and currently-playing status.
+- Direct and group chat with unread counts, reactions, persistent history, and game invites.
+- Native Android notifications for messages and invites; tapping one opens the exact chat.
+- Foreground notifications stay inside the app, remain clickable, and do not duplicate the system notification.
+- Finished game cards show the winner, while pending invites can be reopened after leaving the lobby.
+- Player profiles expose game statistics; the leaderboard shows the points used for ranking.
+- The home highlight becomes each player's own favourite game after enough plays.
+- Game results update coins, XP, levels, play counts, wins, and leaderboard points.
 
-- Server-side identity with no signup: device-bound account, editable `@handle`, searchable by friends
-- Real friends system: search by handle, send/accept/reject/cancel requests, remove friends, online presence dots, persisted on the server
-- Real chat: DMs + group chats (3+ friends), unread badges, history persisted server-side
-- Native Android push notifications for messages and game invites, with lock-screen/heads-up delivery and one-tap opening of the exact chat
-- Game invites inside chat: tap 🎮 in any DM/group → friend taps **انضم الآن** → both land in the room (no codes)
-- Quick match (مباراة سريعة ⚡): one tap pairs two waiting players into a game
-- Unified game cards: 🤖 كمبيوتر / 👥 لاعبَين / 🌐 أونلاين modes on a single card
-- Onboarding with username + avatar emoji picker, daily coin reward, coins economy, XP and levels
-- Profile with per-game stats, settings (sound, server URL)
-- WebAudio sound effects, confetti celebrations, framer-motion animations
-- Full Arabic RTL UI — Cairo font, dark theme, glassmorphism
+## Performance and Android release
 
----
+- Games are lazy-loaded so the home screen does not retain every game bundle.
+- Bottom navigation preserves mounted sections to avoid reloading on every tap.
+- Offline game logic and rich game assets are packaged into the Android bundle.
+- Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, and a capped public arena.
+- حلاوة uses transform-based board animation, optimistic online swaps, GPU compositing, cascades, particles, and special-piece effects.
+- Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, release signing, and native-debug metadata configuration.
+- Package: `com.dedos.game`; minimum Android API 24; target API 36.
 
 ## Tech stack
 
-| Layer | Tech |
+| Layer | Technology |
 |---|---|
-| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 3.4, shadcn/ui, framer-motion |
-| Realtime server | Node.js + `ws` (rooms, relay + authoritative game engines) |
-| Notifications | Firebase Cloud Messaging via Capacitor Push Notifications |
-| Android | Capacitor 8 → native APK (min API 24, target API 36) |
-| Build | AGP 9 + Gradle (JDK 21), Android SDK platform 36, R8 shrinking/optimization |
+| Client | React 19, TypeScript, Vite 7, Tailwind CSS, Framer Motion |
+| Android | Capacitor 8, AGP 9, Gradle, JDK 21, R8 |
+| Realtime server | Node.js and `ws`, with authoritative competitive-game engines |
+| Persistence | SQLite in WAL mode with backup and restore tooling |
+| Notifications | Firebase Cloud Messaging and Capacitor Push Notifications |
+| Public site | Arabic landing, privacy, and account-deletion pages served by the Node server |
 
 ## Project structure
 
 ```text
-├── src/                      # React client
-│   ├── sections/             # Screens: Home, Games, Chat, ChatRoom, Friends, Profile, OnlineLobby…
-│   ├── games/                # Offline games + games/index.ts registry
-│   │   └── online/           # Online games: XO, ConnectFour, Rps, Reaction, Shakhbata, bankel7az/
-│   ├── online/               # WS client + OnlineContext (rooms, identity, social, matchmaking)
-│   ├── store/                # AppContext — profile, coins/XP, stats (localStorage)
-│   └── data/                 # Trivia bank, friends/rooms seed
+├── src/
+│   ├── games/                 # Lazy-loaded local and online games
+│   ├── online/                # WebSocket client, matchmaking, presence, social state
+│   ├── sections/              # Home, games, chat, friends, profiles, leaderboards
+│   └── store/                 # Local profile, settings, stats, coins, and XP
 ├── server/
-│   ├── server.js             # WS relay + rooms + social protocol (port 8787)
-│   ├── users.js              # Persistent identity, handles, friends, chats (server/data/*.json)
-│   ├── shakhbata.js          # شخبطة authoritative game engine (420-word bank)
-│   ├── bankel7az.js          # بنك الحظ authoritative engine (ported)
-│   ├── public/               # Public website: landing page, privacy.html, brand assets
-│   ├── smoke-test.js         # 2-player games protocol tests
-│   ├── smoke-shakhbata.js    # شخبطة end-to-end tests
-│   ├── smoke-bankel7az.js    # بنك الحظ end-to-end tests
-│   └── smoke-social.js       # identity/friend requests/chats/invites/quick-match tests (68 checks)
-├── autostart/                # Hidden VBS launchers + HKCU Run registration (server+tunnel at logon)
-├── android/                  # Capacitor Android project (builds the APK)
-├── runtime/                  # Local standalone node.exe for autostart (gitignored)
-├── shakhbata-original/       # Original شخبطة game (reference)
-├── bank-el7az-original/      # Original بنك الحظ game (reference)
-└── docs/                     # Architecture, protocol, development guides
+│   ├── server.js              # HTTP/WebSocket entry point on port 8787
+│   ├── database.js            # Durable SQLite document store
+│   ├── competitive-games.js   # Realtime game orchestration
+│   ├── snake-arena.js         # Public Snake simulation
+│   ├── push-notifications.js  # FCM delivery
+│   └── public/                # Landing, privacy, and deletion pages
+├── android/                   # Capacitor Android project
+├── autostart/                 # Windows server/tunnel supervisor
+├── tools/                     # Backup and verification utilities
+├── tests/                     # Client logic regression tests
+└── docs/                      # Architecture, protocol, development, operations
 ```
 
----
+## Local development
 
-## Quick start
-
-### Web app (development)
+Requirements: Node.js 24+, npm, and (for Android) JDK 21 plus Android SDK 36.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+npm run dev
 ```
 
-### Multiplayer server
+Vite prints the local development URL, normally `http://localhost:5173`.
+
+Run the multiplayer server separately:
 
 ```bash
-npm run server       # ws://0.0.0.0:8787
+npm run server
 ```
 
-- **Production (default)**: the Android app connects to the public server at `wss://dedos.adelsamir.com` — a Cloudflare Tunnel in front of this machine's local server (`HTTP → localhost:8787`). Any phone with the APK can play from anywhere.
-- Web preview connects to `ws://localhost:8787` automatically.
-- Override anytime in **Profile → إعدادات الخادم** (e.g. `ws://192.168.1.20:8787` for LAN play, or `ws://10.0.2.2:8787` for emulator-to-localhost dev).
+The server listens on port `8787`. Production Android builds connect to `wss://dedos.adelsamir.com`; emulator development can use `ws://10.0.2.2:8787`.
 
-#### Push notification setup
-
-Push notifications require one Firebase project with the Android app ID `com.dedos.game`:
-
-1. Download the Android client configuration as `android/app/google-services.json`. This file is packaged into Android builds.
-2. Give the server Firebase Admin credentials using one of these options:
-   - place the service-account JSON at `server/firebase-service-account.json` (gitignored), or
-   - set `FIREBASE_SERVICE_ACCOUNT_FILE`, `FIREBASE_SERVICE_ACCOUNT_JSON`, or `FIREBASE_SERVICE_ACCOUNT_BASE64`, or
-   - configure Application Default Credentials with `GOOGLE_APPLICATION_CREDENTIALS`.
-3. Restart the server, install a freshly built Android app, and accept the notification permission prompt.
-
-Never commit the Firebase service-account JSON. `/health` reports `push.configured` and the number of registered devices so deployment can be verified without exposing credentials.
-
-### Protocol tests
+## Tests
 
 ```bash
-node server/smoke-test.js        # 2-player games protocol
-node server/smoke-shakhbata.js   # شخبطة full match
-node server/smoke-bankel7az.js   # بنك الحظ full match
-node server/smoke-social.js      # identity, friend requests, chats, invites, quick match — 68 checks
+npm run test:client
+npm run test:server
+npm run build
 ```
 
-### Auto-start on Windows logon (production)
-
-The server and tunnel register in `HKCU\...\Run` (no admin needed) and start hidden via VBS launchers:
-
-```bat
-autostart\install-autostart.bat
-```
-
-- `gaaamed-server` → `runtime\node.exe server\server.js` (standalone node copy, immune to tool updates)
-- `gaaamed-tunnel` → `cloudflared … --token` read from `sdk-installer\tunnel-token.txt` (gitignored)
-- To remove: `reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v gaaamed-server /f` (same for `gaaamed-tunnel`)
-
-### Build the Android APK
-
-Requires JDK 21 + Android SDK (platform/build-tools 36):
+Focused reliability and multiplayer smoke commands are also available:
 
 ```bash
-npm run build && npx cap sync android
+npm run smoke:reliability
+npm run smoke:competitive
+npm run smoke:snake
+```
+
+## Build the Android App Bundle
+
+Release signing reads the local, gitignored `android/keystore.properties`. Never commit the upload keystore or its passwords.
+
+```powershell
+npm run build
+npx cap sync android
 cd android
-gradlew.bat assembleDebug        # → android/app/build/outputs/apk/debug/app-debug.apk
-gradlew.bat bundleRelease        # signed, R8-optimized Play Store AAB
+.\gradlew.bat bundleRelease
 ```
 
-If `android/local.properties` is missing, create it with your SDK path:
-`sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk`
+The signed, R8-optimized bundle is generated at:
 
-### Run on emulators
-
-```bash
-emulator -avd gaaamed  -port 5554 &
-emulator -avd gaaamed2 -port 5556 &
-adb -s emulator-5554 install -r app-debug.apk
-adb -s emulator-5556 install -r app-debug.apk
+```text
+android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-### Public tunnel (production server)
+Each Play Console upload must use a higher `versionCode`. Keep the generated R8 mapping and native debug-symbol files with the matching release so crashes and ANRs can be decoded.
 
-The public endpoint `wss://dedos.adelsamir.com` is a Cloudflare Tunnel to this machine:
+## Push notifications
 
-```bash
-# cloudflared (Windows binary) — runs detached, keeps the tunnel alive
-cloudflared.exe tunnel --no-autoupdate --protocol http2 run --token <TUNNEL_TOKEN>
-```
+The Android app ID is `com.dedos.game`. Client configuration lives in `android/app/google-services.json`; server-side Firebase Admin credentials must be supplied through a gitignored service-account file or environment variable. `/health` reports whether push delivery is configured without exposing credentials.
 
-- Dashboard route: Zero Trust → Networks → Tunnels → gaaamed → Public Hostname → `dedos.adelsamir.com` → service `HTTP → localhost:8787` (Cloudflare handles the WS Upgrade automatically).
-- `--protocol http2` is required on networks that block QUIC/UDP.
-- The tunnel token is a secret — keep it in the dashboard / your password manager, never in this repo.
+When the app is backgrounded, a message or game invite can appear on the lock screen or as a heads-up notification. When it is foregrounded, Dedos shows one clickable in-app notification instead of duplicating the native banner.
 
-### Public web pages (landing, privacy, deletion, APK)
+## Public pages and operations
 
-The same Node server also serves a small public website from `server/public/` (static files only — no game logic involved):
-
-| Route | What it serves |
+| Route | Purpose |
 |---|---|
-| `/` | Arabic RTL landing page (`server/public/index.html`) — hero, game cards, download buttons |
-| `/privacy` | Privacy policy page (`server/public/privacy.html`, Arabic + English) — the public URL Play Console requires |
-| `/delete-account` | Public privacy/account-deletion request page with in-app display-name verification |
-| `/api/privacy-request` | Same-origin POST endpoint for verified deletion and privacy requests |
-| `/dedos.apk` | Direct APK download — serves the signed `dedos-release.apk` from the workspace root when it exists, otherwise a friendly JSON 404 |
-| `/health` | JSON health check |
-| `/api/stats` | بنك الحظ stats snapshot (JSON, CORS `*`) |
+| `https://dedos.adelsamir.com/` | Egyptian Arabic landing page |
+| `https://dedos.adelsamir.com/privacy` | Complete Arabic/English privacy policy |
+| `https://dedos.adelsamir.com/delete-account` | Account and privacy-request flow |
+| `https://dedos.adelsamir.com/health` | Server, database, and push health |
 
-Static serving is guarded against path traversal (paths resolve strictly inside `server/public/`) and sets proper content types (html/png/jpg/css/js/ico/apk). The Play Console URLs are `https://dedos.adelsamir.com/privacy` and `https://dedos.adelsamir.com/delete-account`.
-
----
-
-## شخبطة — rules
-
-1. Each player draws **one round**; rounds = number of players (2–8).
-2. The drawer picks 1 of 3 Arabic words within 12s (auto-pick on timeout).
-3. Drawing time: 70s. Guessers type in chat — correct guesses are **never broadcast as text** (only a "أجاب فلان بشكل صحيح! +N" announcement).
-4. Close guesses get a private "قريب جداً" warning.
-5. Letter hints reveal at 35% and 65% of the timer (guessers only).
-6. Scoring: `30 + (timeRemaining / drawTime) × 70` per correct guess; the drawer earns **+20** per correct guesser.
-7. Final leaderboard → Dedos coins/XP by rank.
-
-Arabic answer checking normalizes alef/hamza forms, taa marbuta, yaa/alef maqsura and diacritics.
+Operational setup, backup verification, restart behaviour, and recovery are documented in [docs/SERVER-OPERATIONS.md](docs/SERVER-OPERATIONS.md).
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, components, room lifecycle
-- [docs/PROTOCOL.md](docs/PROTOCOL.md) — full WebSocket message reference
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — environment setup, adding new games, troubleshooting
-
-## Roadmap
-
-- [x] Public server deployment (Cloudflare Tunnel — `wss://dedos.adelsamir.com`)
-- [x] Server-side identity + handles, real friends, DMs & group chats
-- [x] In-chat game invites (tap to join) + quick match matchmaking
-- [x] Windows auto-start for server + tunnel
-- [ ] Voice chat in rooms
-- [ ] More party games (مافيا، تحدي الرسم السريع)
-- [ ] Release-signed APK + Play Store listing
+- [Architecture](docs/ARCHITECTURE.md)
+- [WebSocket protocol](docs/PROTOCOL.md)
+- [Development guide](docs/DEVELOPMENT.md)
+- [Server operations](docs/SERVER-OPERATIONS.md)
 
 ## License
 
