@@ -26,6 +26,7 @@ The Android release is currently prepared for Google Play closed testing as **1.
 | **الثعبان** 🐍 | Large circular arena | Public drop-in arena with bots, minimap, and leaderboard |
 | **سيطر** 🟪 | — | Predictive public territory arena with bots and compact grid updates |
 | **كاسحة الألغام** 💣 | Three difficulties | — |
+| **دومينو** 🁫 | Smart computer or private pass-and-play | Server-authoritative friend invite or quick match |
 | **أربعة تربح** 🔴 | Computer or two players | Friend invite or quick match |
 | **شخبطة** 🎨 | Pass-and-play drawing | Friends, groups, or quick match |
 | **بنك الحظ** 🏦 | Computer or local players | Rich realtime Egyptian board game |
@@ -84,6 +85,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 │   ├── server.js              # HTTP/WebSocket entry point on port 8787
 │   ├── database.js            # Durable SQLite document store
 │   ├── competitive-games.js   # Realtime game orchestration
+│   ├── dominoes-game.js       # Authoritative hands, drawing, passing, and scoring
 │   ├── snake-arena.js         # Public Snake simulation
 │   ├── push-notifications.js  # FCM delivery
 │   └── public/                # Landing, privacy, and deletion pages

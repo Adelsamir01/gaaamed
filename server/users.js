@@ -17,7 +17,7 @@ const FLUSH_DEBOUNCE_MS = 500
 const HANDLE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 const PUBLIC_GAME_IDS = [
   'tictactoe', 'chess', 'memory', 'trivia', 'match3', 'rps',
-  'reaction', 'snake', 'paper', 'minesweeper', 'connect4', 'shakhbata', 'bank-el7az',
+  'reaction', 'snake', 'paper', 'minesweeper', 'connect4', 'dominoes', 'shakhbata', 'bank-el7az',
 ]
 const MAX_PUBLIC_GAME_COUNT = 1_000_000
 

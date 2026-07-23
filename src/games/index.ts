@@ -22,6 +22,8 @@ const OnlineRps = lazy(() => import('./online/OnlineRps'))
 const OnlineReaction = lazy(() => import('./online/OnlineReaction'))
 const OnlineMemory = lazy(() => import('./online/OnlineMemory'))
 const OnlineTrivia = lazy(() => import('./online/OnlineTrivia'))
+const DominoesGame = lazy(() => import('./dominoes/DominoesGame'))
+const OnlineDominoes = lazy(() => import('./dominoes/OnlineDominoes'))
 const ShakhbataLocal = lazy(() => import('./shakhbata/ShakhbataLocal'))
 const OnlineShakhbata = lazy(() => import('./online/Shakhbata'))
 const BankEl7azLocal = lazy(() => import('./bankel7az/BankEl7azLocal'))
@@ -249,6 +251,26 @@ export const GAMES: GameDef[] = [
     component: MinesweeperGame,
   },
   // ===== ألعاب الأونلاين =====
+  {
+    id: 'dominoes',
+    name: 'دومينو',
+    description: 'الدومينو المصري بقواعد كاملة — اسحب واقفل وخلّص حجارتك قبل خصمك',
+    emoji: '🁫',
+    category: 'ذكاء',
+    howToPlay: [
+      'كل لاعب يبدأ بـ٧ حجارة، وصاحب أعلى دبل ينزل أول حجر تلقائيًا',
+      'في دورك نزّل حجر يطابق الرقم المفتوح على اليمين أو الشمال',
+      'لو مفيش حجر مناسب اسحب من السوق لحد ما تلاقي حركة، ولو السوق خلص عدّي الدور',
+      'أول لاعب يخلّص حجاره يكسب؛ ولو اللعب اتقفل يفوز صاحب أقل مجموع نقط',
+      'العب ضد كمبيوتر ذكي، مع صاحبك على نفس الموبايل، أو أونلاين بدعوة ومباراة سريعة',
+    ],
+    supportsBot: true,
+    supportsTwoPlayer: true,
+    difficulties: true,
+    online: true,
+    onlineComponent: OnlineDominoes,
+    component: DominoesGame,
+  },
   {
     id: 'connect4',
     name: 'أربعة تربح',

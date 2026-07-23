@@ -32,6 +32,7 @@ export type GameEvent =
   | { kind: 'trivia'; msg: ServerMessage }
   | { kind: 'match3'; msg: ServerMessage }
   | { kind: 'chess'; msg: ServerMessage }
+  | { kind: 'dominoes'; msg: ServerMessage }
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
   | { kind: 'snake'; msg: ServerMessage }
@@ -402,6 +403,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         case 'chess_state':
         case 'chess_rejected':
           gameHandlersRef.current.forEach((h) => h({ kind: 'chess', msg }))
+          break
+        case 'domino_state':
+        case 'domino_rejected':
+          gameHandlersRef.current.forEach((h) => h({ kind: 'dominoes', msg }))
           break
         case 'rematch': {
           rematchRef.current.theirs = true

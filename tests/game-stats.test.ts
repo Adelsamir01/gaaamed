@@ -22,7 +22,7 @@ test('offline sessions are counted on entry and not counted again on completion'
 })
 
 test('every affected offline game is counted immediately and each replay counts again', () => {
-  const affectedGames = ['shakhbata', 'bank-el7az', 'minesweeper', 'reaction', 'tictactoe']
+  const affectedGames = ['shakhbata', 'bank-el7az', 'minesweeper', 'reaction', 'tictactoe', 'dominoes']
   const once = affectedGames.reduce(recordGameStarted, {})
   const replay = recordGameStarted(once, 'tictactoe')
 

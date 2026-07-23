@@ -150,8 +150,64 @@ async function testChess() {
   guest.close()
 }
 
+async function testDominoes() {
+  const { host, guest } = await createPair('dominoes')
+  send(host, { type: 'action', action: { kind: 'start' } })
+  send(host, { type: 'action', action: { kind: 'start' } })
+  const hostOpening = await next(host, 'domino_state')
+  const guestOpening = await next(guest, 'domino_state')
+  if (hostOpening.effect !== 'start' || guestOpening.effect !== 'start') throw new Error('Dominoes did not start for both players')
+  if ('hands' in hostOpening.state || 'hands' in guestOpening.state) throw new Error('Dominoes leaked a private opponent hand')
+  if (hostOpening.state.handCounts['1'] !== hostOpening.state.hand.length) throw new Error('Dominoes host hand count diverged')
+  if (guestOpening.state.handCounts['2'] !== guestOpening.state.hand.length) throw new Error('Dominoes guest hand count diverged')
+  await wait(80)
+  if (host.inbox.filter((message) => message.type === 'domino_state' && message.effect === 'start').length !== 1) {
+    throw new Error('Dominoes accepted a duplicate start')
+  }
+
+  const activeSlot = hostOpening.state.currentSlot
+  const active = activeSlot === 1 ? host : guest
+  const inactive = active === host ? guest : host
+  const inactiveOpening = active === host ? guestOpening : hostOpening
+  const rejectedAfter = inactive.inbox.length
+  send(inactive, { type: 'domino_play', tileId: inactiveOpening.state.hand[0].id, side: 'left' })
+  const rejected = await next(inactive, 'domino_rejected', rejectedAfter)
+  if (rejected.reason !== 'not_your_turn') throw new Error('Dominoes accepted an out-of-turn stone')
+
+  let current = active === host ? hostOpening : guestOpening
+  for (let draws = 0; draws < 15; draws += 1) {
+    const left = current.state.board[0].left
+    const right = current.state.board.at(-1).right
+    const tile = current.state.hand.find((candidate) => (
+      candidate.a === left || candidate.b === left || candidate.a === right || candidate.b === right
+    ))
+    const hostAfter = host.inbox.length
+    const guestAfter = guest.inbox.length
+    if (tile) {
+      const side = tile.a === left || tile.b === left ? 'left' : 'right'
+      send(active, { type: 'domino_play', tileId: tile.id, side })
+      const movedHost = await next(host, 'domino_state', hostAfter)
+      const movedGuest = await next(guest, 'domino_state', guestAfter)
+      if (movedHost.effect !== 'play' || JSON.stringify(movedHost.state.board) !== JSON.stringify(movedGuest.state.board)) {
+        throw new Error('Dominoes board diverged after an authoritative move')
+      }
+      if (movedHost.state.handCounts['1'] !== movedGuest.state.handCounts['1'] || movedHost.state.handCounts['2'] !== movedGuest.state.handCounts['2']) {
+        throw new Error('Dominoes public hand counts diverged')
+      }
+      host.close()
+      guest.close()
+      return
+    }
+    if (current.state.boneyardCount <= 0) throw new Error('Dominoes could not find a move before the boneyard emptied')
+    send(active, { type: 'domino_draw' })
+    current = await next(active, 'domino_state', active === host ? hostAfter : guestAfter)
+  }
+  throw new Error('Dominoes draw loop exceeded the double-six boneyard')
+}
+
 await testMemory()
 await testTrivia()
 await testMatch3()
 await testChess()
+await testDominoes()
 console.log('✓ competitive multiplayer smoke test passed')
