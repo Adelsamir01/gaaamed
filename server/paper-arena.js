@@ -88,6 +88,34 @@ export function encodeOwnershipRle(owners) {
   return encoded
 }
 
+function compactPaperPlayer(player, arena) {
+  const compactTrail = player.trail.length === 0
+    ? []
+    : [player.trail[0], ...player.trail.slice(1).map((cell, index) => cell - player.trail[index])]
+  return [
+    player.id,
+    player.slot,
+    player.name,
+    player.avatar,
+    player.color,
+    player.isBot ? 1 : 0,
+    player.alive ? 1 : 0,
+    Math.round(player.x * 10),
+    Math.round(player.y * 10),
+    Math.round(player.angle * 10_000),
+    Math.round(player.targetAngle * 10_000),
+    compactTrail,
+    arena.territoryScore(player),
+    arena.territoryCounts.get(player.slot) ?? 0,
+    player.kills,
+    player.lastInputSeq,
+  ]
+}
+
+function compactTerritoryPatch(patch) {
+  return [patch.revision, patch.owner, patch.ranges]
+}
+
 export class PaperArena {
   constructor(id, {
     random = Math.random,
@@ -545,24 +573,39 @@ export class PaperArena {
     if (patches.length > 0) snapshot.patches = patches
     return snapshot
   }
+
+  compactSnapshot(now = Date.now(), includeOwnership = false, patches = []) {
+    const snapshot = {
+      type: 'paper_public_snapshot',
+      compact: 3,
+      t: now,
+      rev: this.revision,
+      p: [...this.players.values()].map((player) => compactPaperPlayer(player, this)),
+    }
+    if (includeOwnership) snapshot.o = encodeOwnershipRle(this.owners)
+    if (patches.length > 0) snapshot.x = patches.map(compactTerritoryPatch)
+    return snapshot
+  }
 }
 
 export class PaperArenaManager {
   constructor({
     send,
+    broadcast = null,
     random = Math.random,
     now = Date.now,
     maxPlayers = PAPER_MAX_PLAYERS,
     botCount = PAPER_BOT_COUNT,
   } = {}) {
     this.send = send
+    this.broadcast = broadcast
     this.random = random
     this.now = now
     this.maxPlayers = maxPlayers
     this.botCount = botCount
     this.arenas = new Map()
     this.memberships = new WeakMap()
-    this.sockets = new Set()
+    this.arenaMembers = new Map()
     this.nextArenaId = 1
     this.nextPlayerId = 1
   }
@@ -590,7 +633,16 @@ export class PaperArenaManager {
       name: profile.name,
       avatar: profile.avatar,
     })
-    this.memberships.set(socket, { arenaId: arena.id, playerId })
+    const requestedSnapshotVersion = Number(profile.snapshotVersion)
+    const snapshotVersion = requestedSnapshotVersion >= 3 ? 3 : 1
+    const membership = { arenaId: arena.id, playerId, snapshotVersion }
+    this.memberships.set(socket, membership)
+    let members = this.arenaMembers.get(arena.id)
+    if (!members) {
+      members = new Map()
+      this.arenaMembers.set(arena.id, members)
+    }
+    members.set(socket, membership)
     this.send(socket, {
       type: 'paper_public_joined',
       arenaId: arena.id,
@@ -600,7 +652,7 @@ export class PaperArenaManager {
       cellSize: arena.cellSize,
       playerCount: arena.players.size,
     })
-    this.send(socket, arena.snapshot(this.now(), true))
+    this.send(socket, snapshotVersion >= 3 ? arena.compactSnapshot(this.now(), true) : arena.snapshot(this.now(), true))
     this.broadcastCount(arena)
     return player
   }
@@ -618,7 +670,7 @@ export class PaperArenaManager {
     const player = arena?.respawn(membership.playerId)
     if (!arena || !player) return false
     this.send(socket, { type: 'paper_public_respawned', playerId: player.id })
-    this.send(socket, arena.snapshot(this.now(), true))
+    this.send(socket, membership.snapshotVersion >= 3 ? arena.compactSnapshot(this.now(), true) : arena.snapshot(this.now(), true))
     return true
   }
 
@@ -627,7 +679,7 @@ export class PaperArenaManager {
     if (!membership) return false
     const arena = this.arenas.get(membership.arenaId)
     if (!arena) return false
-    this.send(socket, arena.snapshot(this.now(), true))
+    this.send(socket, membership.snapshotVersion >= 3 ? arena.compactSnapshot(this.now(), true) : arena.snapshot(this.now(), true))
     return true
   }
 
@@ -635,16 +687,30 @@ export class PaperArenaManager {
     const membership = this.memberships.get(socket)
     if (!membership) return false
     this.memberships.delete(socket)
+    const members = this.arenaMembers.get(membership.arenaId)
+    members?.delete(socket)
     const arena = this.arenas.get(membership.arenaId)
     if (!arena) return false
     arena.removePlayer(membership.playerId)
-    if (arena.humanPlayerCount() === 0) this.arenas.delete(arena.id)
+    if (arena.humanPlayerCount() === 0) {
+      this.arenas.delete(arena.id)
+      this.arenaMembers.delete(arena.id)
+    }
     else this.broadcastCount(arena)
     return true
   }
 
   has(socket) {
     return this.memberships.has(socket)
+  }
+
+  sendMany(members, message) {
+    if (members.length === 0) return
+    if (this.broadcast) {
+      this.broadcast(members.map(([socket]) => socket), message)
+      return
+    }
+    for (const [socket] of members) this.send(socket, message)
   }
 
   tick(dtSeconds = PAPER_TICK_MS / 1_000) {
@@ -669,29 +735,32 @@ export class PaperArenaManager {
     for (const arena of this.arenas.values()) {
       const members = [...this.members(arena.id)]
       if (members.length === 0) continue
-      const snapshot = arena.snapshot(now, false, arena.takePatches())
-      for (const [socket] of members) this.send(socket, snapshot)
+      const patches = arena.takePatches()
+      const compactMembers = members.filter(([, membership]) => membership.snapshotVersion >= 3)
+      const legacyMembers = members.filter(([, membership]) => membership.snapshotVersion < 3)
+      if (compactMembers.length > 0) {
+        const snapshot = arena.compactSnapshot(now, false, patches)
+        this.sendMany(compactMembers, snapshot)
+      }
+      if (legacyMembers.length > 0) {
+        const snapshot = arena.snapshot(now, false, patches)
+        this.sendMany(legacyMembers, snapshot)
+      }
     }
   }
 
   broadcastCount(arena) {
     const message = { type: 'paper_public_count', arenaId: arena.id, playerCount: arena.players.size }
-    for (const [socket] of this.members(arena.id)) this.send(socket, message)
+    this.sendMany([...this.members(arena.id)], message)
   }
 
   *members(arenaId) {
-    for (const socket of this.sockets) {
-      const membership = this.memberships.get(socket)
-      if (membership?.arenaId === arenaId) yield [socket, membership]
-    }
+    yield* (this.arenaMembers.get(arenaId)?.entries() ?? [])
   }
 
-  track(socket) {
-    this.sockets.add(socket)
-  }
+  track() {}
 
   untrack(socket) {
     this.leave(socket)
-    this.sockets.delete(socket)
   }
 }

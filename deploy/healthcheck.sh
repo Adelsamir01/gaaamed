@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ENV_FILE="${DEDOS_ENV_FILE:-/etc/dedos/dedos.env}"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+fi
 APP_DIR="${DEDOS_APP_DIR:-/opt/dedos}"
 COMPOSE_FILE="$APP_DIR/compose.production.yml"
 PUBLIC_URL="${PUBLIC_HEALTH_URL:-https://dedos.adelsamir.com/health}"

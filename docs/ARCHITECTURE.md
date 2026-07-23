@@ -33,9 +33,9 @@ URL resolution lives in `src/online/client.ts` (`Capacitor.isNativePlatform()` c
 | `store/AppContext.tsx` | Profile (name/avatar/level/XP/coins), per-game stats, friends, chat threads, settings. Persisted to `localStorage`. Level = 100 XP per level. |
 | `games/index.ts` | Game registry — every game (offline & online) is an entry: `id, name, description, emoji, category, howToPlay, supportsBot, supportsTwoPlayer, online, component`. Adding a game = one entry + one component. |
 | `games/*` (offline) | Self-contained game components; results reported via `finishGame` (coins/XP/stats). |
-| `online/client.ts` | WebSocket singleton: connect, 3-try reconnect with backoff, typed event emitter, server URL resolution. |
-| `online/OnlineContext.tsx` | Connection status, room actions, friend request/accept/reject/cancel actions, social updates, rematch handshake, and game-event subscription. |
-| `sections/OnlineLobby.tsx` | Online entry: create (game picker) / join (4-digit code), waiting room (2-player card or شخبطة group list up to 8), host start button, opponent-left alerts, results with rematch. |
+| `online/client.ts` | WebSocket singleton with persistent capped-backoff reconnect, typed events, and server URL resolution. |
+| `online/OnlineContext.tsx` | Connection status, quick matching, friend request/accept/reject/cancel actions, social updates, rematch handshake, and game-event subscription. |
+| `sections/OnlineLobby.tsx` | Waiting and active-match presentation reached from chat invites or one-tap quick matching; room-code entry is not exposed. |
 | `games/online/*` | Online game components driven by the shared action stream from the server. |
 
 ### Offline game flow
@@ -48,15 +48,15 @@ Games screen → GameLobby (mode/difficulty) → game component → GameResults
 ### Online game flow
 
 ```text
-OnlineLobby → create(code) / join(code) → waiting room → host: start
-           → game component (server-driven) → results → rematch or lobby
+Game card → quick match → waiting state → game component (server-driven)
+Chat invite → persistent invite lobby → game component → result card → chat
 ```
 
 2-player games synchronize by applying the **same action stream** on both clients (deterministic local logic; server only relays). شخبطة is different — see below.
 
 ## Server (`server/`)
 
-Single Node process, `ws` library, port **8787**, no database (rooms in memory).
+One Node gateway process uses `ws` on port **8787**. PostgreSQL stores durable production data, Redis coordinates shared presence and targeted events, and a configurable worker-thread pool owns public Snake and سيطر simulations. SQLite WAL is retained as the local-development fallback. Active private matches and quick-match queues remain in gateway memory.
 
 - `server.js` — room lifecycle + relay + authoritative handlers for the simultaneous/realtime games:
   - Rooms keyed by 4-digit code; players get slots (1..2, or 1..8 for شخبطة).
@@ -92,10 +92,12 @@ HTTP endpoints on the same port (static files only, no game logic): `/health` (J
 |---|---|
 | Profile, coins, XP, stats, settings, server URL | `localStorage` (per device) |
 | Rooms & matches | Server memory (reset on restart) |
-| Identity, friend graph/requests, chat history | Server JSON files under `server/data/` |
+| Identity, friend graph/requests, chat history | PostgreSQL production store; SQLite fallback locally |
+| Shared presence and cross-instance targeted events | Redis |
 
 ## Testing
 
 - `server/smoke-test.js` — 16 protocol checks for the 2-player games (create/join/relay/reveal/reaction/rematch/leave/full-room).
 - `server/smoke-shakhbata.js` — 51 checks for شخبطة: 3 players, full 3-round match, word privacy, stroke relay rules, guess masking, "قريب جداً", hints not sent to drawer, scoring, leaderboard.
 - `server/smoke-social.js` — 68 checks for identity, pending/accepted/rejected/cancelled friend requests, persistence, chats, invites, and quick match.
+- `npm run load:capacity` — isolated guarded presence, chat, Snake, and سيطر load suite; set `CAPACITY_SCALE=full` for the 1,000-connection regression run.

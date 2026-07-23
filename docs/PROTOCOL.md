@@ -62,18 +62,22 @@ All messages are JSON over a single WebSocket connection. Rooms are identified b
 
 | Direction | Message | Important payload |
 |---|---|---|
-| Client → server | `paper_public_join` | `{name, avatar}` |
+| Client → server | `paper_public_join` | `{name, avatar, snapshotVersion: 3}` |
 | Client → server | `paper_public_steer` | `{angle, sequence}`; input is rate-limited by the client and acknowledged in snapshots |
 | Client → server | `paper_public_respawn` | Respawn the same arena member after death |
 | Client → server | `paper_public_sync` | Request a full ownership grid after a revision gap |
 | Client → server | `paper_public_leave` | Leave the public arena |
 | Server → client | `paper_public_joined` | `{arenaId, playerId, gridSize, cellSize, worldSize, playerCount}` |
-| Server → client | `paper_public_snapshot` | Player transforms/trails plus either one initial `ownerRle` grid or compact `{revision, owner, ranges}` patches |
+| Server → client | `paper_public_snapshot` | Version 3 uses integer player rows, delta-encoded trails, RLE ownership grids, and compact territory patches; older object snapshots remain accepted |
 | Server → client | `paper_public_dead` | `{score, killerId}` |
 | Server → client | `paper_public_respawned` | Respawn confirmation followed by a full snapshot |
 | Server → client | `paper_public_count` | Current humans and bots in the arena |
 
 Movement simulation runs at 20 Hz on the server, while regular snapshots run at roughly 6.7 Hz. Between snapshots, the phone advances all visible players locally, applies input immediately, and blends authoritative corrections instead of snapping.
+
+### الثعبان — public arena
+
+Snake also joins without a private room code. New clients send `snake_public_join` with `snapshotVersion: 3`. Version 3 snapshots encode players and food as compact integer arrays and send food changes as deltas. The client decoder continues to accept version 1/2 object snapshots so an Android rollout can be gradual.
 
 ## Server logs (useful for debugging)
 
@@ -90,4 +94,4 @@ ROOM_CLOSED 7604
 - Turn enforcement for relay games is client-side; both clients apply the same action stream deterministically. Slot 1 is X in XO and moves first.
 - Reaction-race fairness depends on server receipt timestamps only — client clocks are never compared.
 - The شخبطة engine owns all secrets: words, hints and scoring never pass through clients.
-- Reconnect: the client retries 3 times with backoff; there is no session resumption — a dropped socket leaves the room.
+- Reconnect: the client retries indefinitely with capped exponential backoff and wakes immediately on network recovery or foregrounding; a dropped socket still leaves an active in-memory room.

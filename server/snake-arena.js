@@ -122,6 +122,35 @@ function snapshotTrail(points) {
   return sampled
 }
 
+function compactFood(food) {
+  return [
+    food.id,
+    Math.round(food.x),
+    Math.round(food.y),
+    Math.round(food.hue),
+    Math.round(food.radius * 10),
+    Math.round(Number(food.value) || 1),
+    food.source === 'remains' ? 1 : 0,
+  ]
+}
+
+function compactPlayer(player) {
+  return [
+    player.id,
+    player.name,
+    player.avatar,
+    Math.round(player.hue),
+    player.score,
+    Math.round(player.length * 10),
+    Math.round(snakeBodyRadius(player.length) * 100),
+    Math.round(snakeHeadRadius(player.length) * 100),
+    player.isBot ? 1 : 0,
+    player.alive ? 1 : 0,
+    Math.round(player.angle * 10_000),
+    snapshotTrail(player.trail).flatMap((point) => [Math.round(point.x), Math.round(point.y)]),
+  ]
+}
+
 function angleDifference(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
 }
@@ -532,17 +561,37 @@ export class SnakeArena {
     if (includeFoods) snapshot.foods = this.foods
     return snapshot
   }
+
+  compactSnapshot(now = Date.now(), includeFoods = true) {
+    const snapshot = {
+      type: 'snake_public_snapshot',
+      compact: 3,
+      t: now,
+      p: [...this.players.values()].map(compactPlayer),
+    }
+    if (includeFoods) snapshot.f = this.foods.map(compactFood)
+    return snapshot
+  }
 }
 
 export class SnakeArenaManager {
-  constructor({ send, random = Math.random, now = Date.now, maxPlayers = SNAKE_MAX_PLAYERS, botCount = SNAKE_BOT_COUNT } = {}) {
+  constructor({
+    send,
+    broadcast = null,
+    random = Math.random,
+    now = Date.now,
+    maxPlayers = SNAKE_MAX_PLAYERS,
+    botCount = SNAKE_BOT_COUNT,
+  } = {}) {
     this.send = send
+    this.broadcast = broadcast
     this.random = random
     this.now = now
     this.maxPlayers = maxPlayers
     this.botCount = botCount
     this.arenas = new Map()
     this.memberships = new WeakMap()
+    this.arenaMembers = new Map()
     this.nextArenaId = 1
     this.nextPlayerId = 1
   }
@@ -568,8 +617,16 @@ export class SnakeArenaManager {
       avatar: profile.avatar,
       hue: this.random() * 360,
     })
-    const snapshotVersion = Number(profile.snapshotVersion) >= 2 ? 2 : 1
-    this.memberships.set(socket, { arenaId: arena.id, playerId, snapshotVersion })
+    const requestedSnapshotVersion = Number(profile.snapshotVersion)
+    const snapshotVersion = requestedSnapshotVersion >= 3 ? 3 : requestedSnapshotVersion >= 2 ? 2 : 1
+    const membership = { arenaId: arena.id, playerId, snapshotVersion }
+    this.memberships.set(socket, membership)
+    let members = this.arenaMembers.get(arena.id)
+    if (!members) {
+      members = new Map()
+      this.arenaMembers.set(arena.id, members)
+    }
+    members.set(socket, membership)
     this.send(socket, {
       type: 'snake_public_joined',
       arenaId: arena.id,
@@ -578,7 +635,7 @@ export class SnakeArenaManager {
       arenaRadius: arena.radius,
       playerCount: arena.players.size,
     })
-    this.send(socket, arena.snapshot(this.now()))
+    this.send(socket, snapshotVersion >= 3 ? arena.compactSnapshot(this.now()) : arena.snapshot(this.now()))
     this.broadcastCount(arena)
     return player
   }
@@ -596,7 +653,7 @@ export class SnakeArenaManager {
     const player = arena?.respawn(membership.playerId)
     if (!arena || !player) return false
     this.send(socket, { type: 'snake_public_respawned', playerId: player.id })
-    this.send(socket, arena.snapshot(this.now()))
+    this.send(socket, membership.snapshotVersion >= 3 ? arena.compactSnapshot(this.now()) : arena.snapshot(this.now()))
     return true
   }
 
@@ -604,16 +661,30 @@ export class SnakeArenaManager {
     const membership = this.memberships.get(socket)
     if (!membership) return false
     this.memberships.delete(socket)
+    const members = this.arenaMembers.get(membership.arenaId)
+    members?.delete(socket)
     const arena = this.arenas.get(membership.arenaId)
     if (!arena) return false
     arena.removePlayer(membership.playerId)
-    if (arena.humanPlayerCount() === 0) this.arenas.delete(arena.id)
+    if (arena.humanPlayerCount() === 0) {
+      this.arenas.delete(arena.id)
+      this.arenaMembers.delete(arena.id)
+    }
     else this.broadcastCount(arena)
     return true
   }
 
   has(socket) {
     return this.memberships.has(socket)
+  }
+
+  sendMany(members, message) {
+    if (members.length === 0) return
+    if (this.broadcast) {
+      this.broadcast(members.map(([socket]) => socket), message)
+      return
+    }
+    for (const [socket] of members) this.send(socket, message)
   }
 
   tick(dtSeconds = SNAKE_TICK_MS / 1000) {
@@ -637,32 +708,41 @@ export class SnakeArenaManager {
       if (members.length === 0) continue
       const foodChanged = arena.lastBroadcastFoodVersion !== arena.foodVersion
       const initialFoodState = foodChanged && arena.lastBroadcastFoodVersion < 0
+      const compactMembers = members.filter(([, membership]) => membership.snapshotVersion >= 3)
+      const modernMembers = members.filter(([, membership]) => membership.snapshotVersion === 2)
+      const legacyMembers = members.filter(([, membership]) => membership.snapshotVersion < 2)
       if (initialFoodState) {
-        const snapshot = arena.snapshot(now, true)
+        const snapshot = modernMembers.length > 0 || legacyMembers.length > 0 ? arena.snapshot(now, true) : null
+        const compactSnapshot = compactMembers.length > 0 ? arena.compactSnapshot(now, true) : null
         arena.consumeFoodChanges(true)
         arena.lastBroadcastFoodVersion = arena.foodVersion
-        for (const [socket] of members) this.send(socket, snapshot)
+        this.sendMany(compactMembers, compactSnapshot)
+        this.sendMany([...modernMembers, ...legacyMembers], snapshot)
         continue
       }
 
-      const modernMembers = members.filter(([, membership]) => membership.snapshotVersion >= 2)
-      const legacyMembers = members.filter(([, membership]) => membership.snapshotVersion < 2)
       const changes = foodChanged ? arena.consumeFoodChanges(false) : null
-      const sharedSnapshot = !foodChanged || modernMembers.length === 0 || legacyMembers.length === 0
-        ? arena.snapshot(now, foodChanged && legacyMembers.length > 0)
-        : null
+
+      if (compactMembers.length > 0) {
+        const snapshot = arena.compactSnapshot(now, false)
+        if (changes) {
+          if (changes.foodUpserts.length > 0) snapshot.fu = changes.foodUpserts.map(compactFood)
+          if (changes.foodRemovedIds.length > 0) snapshot.fr = changes.foodRemovedIds
+        }
+        this.sendMany(compactMembers, snapshot)
+      }
 
       if (modernMembers.length > 0) {
-        const snapshot = sharedSnapshot ?? arena.snapshot(now, false)
+        const snapshot = arena.snapshot(now, false)
         if (changes) {
           if (changes.foodUpserts.length > 0) snapshot.foodUpserts = changes.foodUpserts
           if (changes.foodRemovedIds.length > 0) snapshot.foodRemovedIds = changes.foodRemovedIds
         }
-        for (const [socket] of modernMembers) this.send(socket, snapshot)
+        this.sendMany(modernMembers, snapshot)
       }
       if (legacyMembers.length > 0) {
-        const snapshot = sharedSnapshot ?? arena.snapshot(now, foodChanged)
-        for (const [socket] of legacyMembers) this.send(socket, snapshot)
+        const snapshot = arena.snapshot(now, foodChanged)
+        this.sendMany(legacyMembers, snapshot)
       }
       arena.lastBroadcastFoodVersion = arena.foodVersion
     }
@@ -670,25 +750,16 @@ export class SnakeArenaManager {
 
   broadcastCount(arena) {
     const message = { type: 'snake_public_count', arenaId: arena.id, playerCount: arena.players.size }
-    for (const [socket] of this.members(arena.id)) this.send(socket, message)
+    this.sendMany([...this.members(arena.id)], message)
   }
 
   *members(arenaId) {
-    // WeakMap is intentionally not enumerable, so the manager only walks the
-    // sockets that the arena already owns through this lightweight side set.
-    for (const socket of this.sockets ?? []) {
-      const membership = this.memberships.get(socket)
-      if (membership?.arenaId === arenaId) yield [socket, membership]
-    }
+    yield* (this.arenaMembers.get(arenaId)?.entries() ?? [])
   }
 
-  track(socket) {
-    if (!this.sockets) this.sockets = new Set()
-    this.sockets.add(socket)
-  }
+  track() {}
 
   untrack(socket) {
     this.leave(socket)
-    this.sockets?.delete(socket)
   }
 }

@@ -19,7 +19,7 @@ import {
 } from './shakhbata.js'
 import { RoomManager, StatsStore, parseClientMessage, resolveStatsFilePath } from './bankel7az.js'
 import { UserStore, resolveDataDir, publicCard, publicProfile } from './users.js'
-import { DocumentDatabase, resolveDatabasePath } from './database.js'
+import { openDatabase } from './storage.js'
 import {
   advanceTriviaQuestion,
   applyMemoryFlip,
@@ -44,6 +44,8 @@ import { createDominoGame, dominoSnapshot, drawDomino, passDomino, playDomino } 
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
 import { activeGameForUser, activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
 import { androidReleaseInfo } from './app-version.js'
+import { openCoordinator } from './coordinator.js'
+import { createArenaWorkerPool } from './arena-worker-pool.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -58,6 +60,7 @@ const MAX_WS_PAYLOAD_BYTES = 128 * 1024
 const MAX_WS_BUFFERED_BYTES = 512 * 1024
 const MESSAGE_RATE_WINDOW_MS = 10_000
 const MESSAGE_RATE_LIMIT = 300
+const ONLINE_COUNT_BROADCAST_MS = 1_000
 const PRIVACY_RATE_WINDOW_MS = 60_000
 const PRIVACY_RATE_LIMIT = 10
 const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
@@ -85,7 +88,7 @@ function recordDuration(name, maximumName, startedAt) {
 
 // بنك الحظ: مخزن الإحصائيات + مدير الغرف (بروتوكول اللعبة الأصلي كما هو)
 const dataDir = resolveDataDir()
-const database = new DocumentDatabase(resolveDatabasePath(dataDir))
+const database = await openDatabase(dataDir)
 const bankStats = new StatsStore(resolveStatsFilePath(), database)
 const bankManager = new RoomManager(bankStats)
 
@@ -128,6 +131,7 @@ const onlineUsers = new Map()
 const matchQueues = new Map()
 const MATCH_SIZE = 2
 const privacyRateLimits = new Map()
+const coordinator = await openCoordinator(process.env, log)
 
 function log(level, event, details = {}) {
   const entry = { level, event, time: new Date().toISOString(), ...details }
@@ -162,28 +166,39 @@ function sendJson(res, status, obj) {
 
 function serviceHealth() {
   const storage = database.health()
-  const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
-  const paperPlayers = [...paperManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
+  const coordination = coordinator?.health() ?? { ok: true, engine: 'local' }
+  const arenaRuntime = arenaWorkers?.health() ?? { ok: true, engine: 'main_thread', workers: 0 }
+  const memory = process.memoryUsage()
+  const snakeStats = publicArenaStats('snake')
+  const paperStats = publicArenaStats('paper')
   return {
-    ok: storage.ok,
+    ok: storage.ok && coordination.ok && arenaRuntime.ok,
     service: 'dedos-server',
     version: APP_VERSION,
     uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
     connections: wss?.clients?.size ?? 0,
-    onlineUsers: onlineUserCount(onlineUsers),
+    onlineUsers: onlineUserCountMessage().count,
     rooms: rooms?.size ?? 0,
-    snakeArenas: snakeManager.arenas.size,
-    snakePlayers,
-    paperArenas: paperManager.arenas.size,
-    paperPlayers,
+    snakeArenas: snakeStats.arenas,
+    snakePlayers: snakeStats.players,
+    paperArenas: paperStats.arenas,
+    paperPlayers: paperStats.players,
+    arenaRuntime,
     push: {
       configured: pushNotifications.configured,
       registeredDevices: userStore.pushRegistrationCount(),
     },
+    coordination,
     performance: {
       eventLoopDelayMeanMs: finiteMetric(eventLoopDelay.mean / 1e6),
       eventLoopDelayP99Ms: finiteMetric(eventLoopDelay.percentile(99) / 1e6),
       ...realtimePerformance,
+    },
+    memory: {
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      heapTotalBytes: memory.heapTotal,
+      externalBytes: memory.external,
     },
     storage,
     time: Date.now(),
@@ -192,13 +207,16 @@ function serviceHealth() {
 
 function serviceMetrics() {
   const storage = database.health()
+  const coordination = coordinator?.health() ?? { ok: true, engine: 'local' }
+  const arenaRuntime = arenaWorkers?.health() ?? { ok: true, engine: 'main_thread', workers: 0 }
+  const serviceOk = storage.ok && coordination.ok && arenaRuntime.ok
   const queueSize = [...matchQueues.values()].reduce((total, queue) => total + queue.length, 0)
-  const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
-  const paperPlayers = [...paperManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
+  const snakeStats = publicArenaStats('snake')
+  const paperStats = publicArenaStats('paper')
   return [
     '# HELP dedos_up Whether the service and its storage are healthy.',
     '# TYPE dedos_up gauge',
-    `dedos_up ${storage.ok ? 1 : 0}`,
+    `dedos_up ${serviceOk ? 1 : 0}`,
     '# HELP dedos_uptime_seconds Process uptime in seconds.',
     '# TYPE dedos_uptime_seconds gauge',
     `dedos_uptime_seconds ${Math.floor((Date.now() - STARTED_AT) / 1000)}`,
@@ -207,7 +225,7 @@ function serviceMetrics() {
     `dedos_websocket_connections ${wss.clients.size}`,
     '# HELP dedos_online_users Unique identified users currently connected.',
     '# TYPE dedos_online_users gauge',
-    `dedos_online_users ${onlineUserCount(onlineUsers)}`,
+    `dedos_online_users ${onlineUserCountMessage().count}`,
     '# HELP dedos_rooms Active game rooms.',
     '# TYPE dedos_rooms gauge',
     `dedos_rooms ${rooms.size}`,
@@ -216,14 +234,17 @@ function serviceMetrics() {
     `dedos_matchmaking_queue_players ${queueSize}`,
     '# HELP dedos_snake_arena_players Players currently in public snake arenas.',
     '# TYPE dedos_snake_arena_players gauge',
-    `dedos_snake_arena_players ${snakePlayers}`,
+    `dedos_snake_arena_players ${snakeStats.players}`,
     '# HELP dedos_paper_arena_players Players currently in public territory arenas.',
     '# TYPE dedos_paper_arena_players gauge',
-    `dedos_paper_arena_players ${paperPlayers}`,
+    `dedos_paper_arena_players ${paperStats.players}`,
     '# HELP dedos_event_loop_delay_seconds Node.js event-loop delay observed by the server.',
     '# TYPE dedos_event_loop_delay_seconds gauge',
     `dedos_event_loop_delay_seconds{quantile="mean"} ${finiteMetric(eventLoopDelay.mean / 1e9)}`,
     `dedos_event_loop_delay_seconds{quantile="p99"} ${finiteMetric(eventLoopDelay.percentile(99) / 1e9)}`,
+    '# HELP dedos_process_resident_memory_bytes Resident memory used by the Node.js gateway.',
+    '# TYPE dedos_process_resident_memory_bytes gauge',
+    `dedos_process_resident_memory_bytes ${process.memoryUsage().rss}`,
     '# HELP dedos_realtime_loop_duration_seconds Latest realtime simulation/broadcast duration.',
     '# TYPE dedos_realtime_loop_duration_seconds gauge',
     `dedos_realtime_loop_duration_seconds{game="snake",phase="tick"} ${realtimePerformance.snakeTickMs / 1_000}`,
@@ -374,7 +395,8 @@ const httpServer = createServer((req, res) => {
         if (sockets) {
           for (const socket of sockets) socket.close(1000, 'account_deleted')
           onlineUsers.delete(request.userId)
-          broadcastOnlineUserCount()
+          coordinator?.setLocalUsers(onlineUsers.keys())
+          scheduleOnlineUserCountBroadcast()
         }
         sendJson(res, 200, {
           ok: true,
@@ -492,8 +514,23 @@ function send(ws, obj) {
 
 // Public Snake uses its own continuously running, server-authoritative arenas.
 // It deliberately does not share the two-player room lifecycle below.
-const snakeManager = new SnakeArenaManager({ send })
-const paperManager = new PaperArenaManager({ send })
+const arenaWorkers = createArenaWorkerPool({
+  send,
+  logger: log,
+  onPerformance: (performanceMetrics) => Object.assign(realtimePerformance, performanceMetrics),
+})
+const snakeManager = arenaWorkers?.snake ?? new SnakeArenaManager({ send })
+const paperManager = arenaWorkers?.paper ?? new PaperArenaManager({ send })
+
+function publicArenaStats(game) {
+  if (arenaWorkers) return arenaWorkers.stats(game)
+  const manager = game === 'snake' ? snakeManager : paperManager
+  return {
+    arenas: manager.arenas.size,
+    players: [...manager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0),
+    humans: [...manager.arenas.values()].reduce((total, arena) => total + arena.humanPlayerCount(), 0),
+  }
+}
 
 function consumeMessageRate(ws) {
   const now = Date.now()
@@ -738,27 +775,52 @@ function bumpSeriesWin(room, table, winnerSlot, endType) {
 }
 
 // ---------------- الهوية والحضور ----------------
-function pushToUser(userId, obj) {
+function pushToUser(userId, obj, { publish = true } = {}) {
   const sockets = onlineUsers.get(userId)
-  if (!sockets) return
-  for (const ws of sockets) send(ws, obj)
+  if (sockets) {
+    for (const ws of sockets) send(ws, obj)
+  }
+  if (publish && coordinator) void coordinator.publishUserEvent(userId, obj)
 }
 
 function trackOnline(userId, ws) {
-  return trackPresence(onlineUsers, userId, ws)
+  const becameOnline = trackPresence(onlineUsers, userId, ws)
+  if (becameOnline && coordinator) coordinator.setLocalUsers(onlineUsers.keys())
+  return becameOnline
 }
 
 function untrackOnline(userId, ws) {
-  return untrackPresence(onlineUsers, userId, ws)
+  const becameOffline = untrackPresence(onlineUsers, userId, ws)
+  if (becameOffline && coordinator) coordinator.setLocalUsers(onlineUsers.keys())
+  return becameOffline
 }
 
 function onlineUserCountMessage() {
-  return { type: 'online_user_count', count: onlineUserCount(onlineUsers) }
+  const localCount = onlineUserCount(onlineUsers)
+  return { type: 'online_user_count', count: coordinator ? Math.max(localCount, coordinator.onlineCount) : localCount }
 }
 
 function broadcastOnlineUserCount() {
   const message = onlineUserCountMessage()
   for (const client of wss.clients) send(client, message)
+}
+
+let onlineCountBroadcastTimer = null
+
+function scheduleOnlineUserCountBroadcast() {
+  if (onlineCountBroadcastTimer) return
+  onlineCountBroadcastTimer = setTimeout(() => {
+    onlineCountBroadcastTimer = null
+    broadcastOnlineUserCount()
+  }, ONLINE_COUNT_BROADCAST_MS)
+  if (onlineCountBroadcastTimer.unref) onlineCountBroadcastTimer.unref()
+}
+
+if (coordinator) {
+  coordinator.on('online-count', () => scheduleOnlineUserCountBroadcast())
+  coordinator.on('user-event', ({ userId, payload }) => {
+    pushToUser(userId, payload, { publish: false })
+  })
 }
 
 function gameIdForSocket(ws) {
@@ -1077,7 +1139,7 @@ wss.on('connection', (ws, request) => {
         handleLeave(ws)
         removeFromQueues(ws)
         snakeManager.leave(ws)
-        paperManager.join(ws, { name: msg.name, avatar: msg.avatar })
+        paperManager.join(ws, { name: msg.name, avatar: msg.avatar, snapshotVersion: msg.snapshotVersion })
         if (ws._userId) broadcastFriendsUpdate(ws._userId)
         break
       }
@@ -1464,12 +1526,13 @@ wss.on('connection', (ws, request) => {
             handle: msg.handle,
             xp: msg.xp,
           })
+          if (ws._userId && ws._userId !== user.userId) untrackOnline(ws._userId, ws)
           ws._userId = user.userId
           const becameOnline = trackOnline(user.userId, ws)
           send(ws, { type: 'identified', user: { ...publicCard(user), createdAt: user.createdAt }, created })
           send(ws, { type: 'session_state', inRoom: Boolean(ws._room), serverStartedAt: STARTED_AT })
-          if (becameOnline) broadcastOnlineUserCount()
-          else send(ws, onlineUserCountMessage())
+          send(ws, onlineUserCountMessage())
+          if (becameOnline) scheduleOnlineUserCountBroadcast()
           broadcastFriendsUpdate(user.userId)
           pushFriendRequestsUpdate(user.userId)
           console.log(`IDENTIFY ${user.handle} (${created ? 'جديد' : 'عائد'})`)
@@ -1870,9 +1933,10 @@ wss.on('connection', (ws, request) => {
     removeFromQueues(ws)
     snakeManager.untrack(ws)
     paperManager.untrack(ws)
+    arenaWorkers?.disconnect(ws)
     if (ws._userId) {
       const becameOffline = untrackOnline(ws._userId, ws)
-      if (becameOffline) broadcastOnlineUserCount()
+      if (becameOffline) scheduleOnlineUserCountBroadcast()
       broadcastFriendsUpdate(ws._userId)
     }
   })
@@ -1912,49 +1976,56 @@ if (heartbeatTimer.unref) heartbeatTimer.unref()
 const bankCleanupTimer = setInterval(() => bankManager.cleanup(), 10 * 60 * 1000)
 if (bankCleanupTimer.unref) bankCleanupTimer.unref()
 
-httpServer.listen(PORT, () => {
+httpServer.listen({ port: PORT, backlog: 2_048 }, () => {
   log('info', 'server_started', { port: PORT, version: APP_VERSION })
 })
 
-let lastSnakeTickAt = performance.now()
-const snakeTickTimer = setInterval(() => {
-  const tickStartedAt = performance.now()
-  const now = performance.now()
-  const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastSnakeTickAt) / 1_000))
-  lastSnakeTickAt = now
-  const maximumStep = SNAKE_TICK_MS / 1_000
-  const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
-  const stepSeconds = elapsedSeconds / stepCount
-  for (let step = 0; step < stepCount; step += 1) snakeManager.tick(stepSeconds)
-  recordDuration('snakeTickMs', 'snakeTickMaxMs', tickStartedAt)
-}, SNAKE_TICK_MS)
-if (snakeTickTimer.unref) snakeTickTimer.unref()
-const snakeSnapshotTimer = setInterval(() => {
-  const startedAt = performance.now()
-  snakeManager.broadcastSnapshots()
-  recordDuration('snakeSnapshotMs', 'snakeSnapshotMaxMs', startedAt)
-}, SNAKE_SNAPSHOT_MS)
-if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()
+let snakeTickTimer = null
+let snakeSnapshotTimer = null
+let paperTickTimer = null
+let paperSnapshotTimer = null
 
-let lastPaperTickAt = performance.now()
-const paperTickTimer = setInterval(() => {
-  const tickStartedAt = performance.now()
-  const now = performance.now()
-  const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastPaperTickAt) / 1_000))
-  lastPaperTickAt = now
-  const maximumStep = PAPER_TICK_MS / 1_000
-  const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
-  const stepSeconds = elapsedSeconds / stepCount
-  for (let step = 0; step < stepCount; step += 1) paperManager.tick(stepSeconds)
-  recordDuration('paperTickMs', 'paperTickMaxMs', tickStartedAt)
-}, PAPER_TICK_MS)
-if (paperTickTimer.unref) paperTickTimer.unref()
-const paperSnapshotTimer = setInterval(() => {
-  const startedAt = performance.now()
-  paperManager.broadcastSnapshots()
-  recordDuration('paperSnapshotMs', 'paperSnapshotMaxMs', startedAt)
-}, PAPER_SNAPSHOT_MS)
-if (paperSnapshotTimer.unref) paperSnapshotTimer.unref()
+if (!arenaWorkers) {
+  let lastSnakeTickAt = performance.now()
+  snakeTickTimer = setInterval(() => {
+    const tickStartedAt = performance.now()
+    const now = performance.now()
+    const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastSnakeTickAt) / 1_000))
+    lastSnakeTickAt = now
+    const maximumStep = SNAKE_TICK_MS / 1_000
+    const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
+    const stepSeconds = elapsedSeconds / stepCount
+    for (let step = 0; step < stepCount; step += 1) snakeManager.tick(stepSeconds)
+    recordDuration('snakeTickMs', 'snakeTickMaxMs', tickStartedAt)
+  }, SNAKE_TICK_MS)
+  if (snakeTickTimer.unref) snakeTickTimer.unref()
+  snakeSnapshotTimer = setInterval(() => {
+    const startedAt = performance.now()
+    snakeManager.broadcastSnapshots()
+    recordDuration('snakeSnapshotMs', 'snakeSnapshotMaxMs', startedAt)
+  }, SNAKE_SNAPSHOT_MS)
+  if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()
+
+  let lastPaperTickAt = performance.now()
+  paperTickTimer = setInterval(() => {
+    const tickStartedAt = performance.now()
+    const now = performance.now()
+    const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastPaperTickAt) / 1_000))
+    lastPaperTickAt = now
+    const maximumStep = PAPER_TICK_MS / 1_000
+    const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
+    const stepSeconds = elapsedSeconds / stepCount
+    for (let step = 0; step < stepCount; step += 1) paperManager.tick(stepSeconds)
+    recordDuration('paperTickMs', 'paperTickMaxMs', tickStartedAt)
+  }, PAPER_TICK_MS)
+  if (paperTickTimer.unref) paperTickTimer.unref()
+  paperSnapshotTimer = setInterval(() => {
+    const startedAt = performance.now()
+    paperManager.broadcastSnapshots()
+    recordDuration('paperSnapshotMs', 'paperSnapshotMaxMs', startedAt)
+  }, PAPER_SNAPSHOT_MS)
+  if (paperSnapshotTimer.unref) paperSnapshotTimer.unref()
+}
 
 httpServer.on('error', (error) => {
   log('error', 'http_server_error', { message: error.message, code: error.code ?? null })
@@ -1967,6 +2038,10 @@ async function shutdown(reason, exitCode = 0) {
   shuttingDown = true
   log('info', 'server_shutdown_started', { reason, connections: wss.clients.size, rooms: rooms.size })
   clearInterval(heartbeatTimer)
+  if (onlineCountBroadcastTimer) {
+    clearTimeout(onlineCountBroadcastTimer)
+    onlineCountBroadcastTimer = null
+  }
   clearInterval(bankCleanupTimer)
   clearInterval(snakeTickTimer)
   clearInterval(snakeSnapshotTimer)
@@ -1993,9 +2068,11 @@ async function shutdown(reason, exitCode = 0) {
   await new Promise((resolve) => httpServer.close(resolve))
   clearTimeout(forceTimer)
   try {
-    userStore.flushAll()
+    await userStore.flushAll()
     bankStats.flush()
-    database.close()
+    await arenaWorkers?.close()
+    await coordinator?.close()
+    await database.close()
     log('info', 'server_shutdown_complete', { reason })
   } catch (error) {
     exitCode = 1

@@ -57,8 +57,11 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Games are lazy-loaded so the home screen does not retain every game bundle.
 - Bottom navigation preserves mounted sections to avoid reloading on every tap.
 - Offline game logic and rich game assets are packaged into the Android bundle.
-- Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, adaptive visual quality, and a capped public arena.
-- The server exposes realtime simulation, snapshot, and event-loop timings through `/health` and `/metrics`.
+- Snake uses interpolated rendering, compact version-3 snapshots, spatial lookup, client prediction, adaptive visual quality, and a capped public arena.
+- Public Snake and سيطر simulations are sharded across worker threads so arena work cannot stall chat, presence, or HTTP traffic.
+- Presence updates are coalesced, and each realtime payload is serialized once per compatible arena group instead of once per player.
+- Production persistence uses PostgreSQL, with Redis coordinating presence and targeted cross-instance events. SQLite remains the zero-configuration local-development fallback.
+- The server exposes realtime simulation, snapshot, event-loop, memory, storage, coordination, and worker health through `/health` and `/metrics`.
 - سيطر renders at native phone density with smooth territory contours, stable touch steering, and 60 FPS client prediction while the server sends compact territory patches and validates captures.
 - حلاوة uses a WebGL renderer with a DOM fallback, optimistic online swaps, cascades, particles, haptics, and special-piece effects.
 - Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, generated baseline/startup profiles, asynchronous WebView warm-up, Game Mode awareness, release signing, and native-debug metadata configuration.
@@ -70,8 +73,8 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 |---|---|
 | Client | React 19, TypeScript, Vite 7, Tailwind CSS, Framer Motion |
 | Android | Capacitor 8, AGP 9, Gradle, JDK 21, R8 |
-| Realtime server | Node.js and `ws`, with authoritative competitive-game engines |
-| Persistence | SQLite in WAL mode with backup and restore tooling |
+| Realtime server | Node.js and `ws`, with authoritative engines and worker-thread arena sharding |
+| Persistence | PostgreSQL in production; SQLite WAL fallback for local development |
 | Notifications | Firebase Cloud Messaging and Capacitor Push Notifications |
 | Public site | Arabic landing, privacy, and account-deletion pages served by the Node server |
 
@@ -85,7 +88,9 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 │   └── store/                 # Local profile, settings, stats, coins, and XP
 ├── server/
 │   ├── server.js              # HTTP/WebSocket entry point on port 8787
-│   ├── database.js            # Durable SQLite document store
+│   ├── storage.js             # PostgreSQL production / SQLite local storage selection
+│   ├── coordinator.js         # Redis presence and cross-instance event coordination
+│   ├── arena-worker-pool.js   # Public-arena worker-thread sharding
 │   ├── competitive-games.js   # Realtime game orchestration
 │   ├── dominoes-game.js       # Authoritative hands, drawing, passing, and scoring
 │   ├── snake-arena.js         # Public Snake simulation
@@ -132,7 +137,10 @@ npm run smoke:reliability
 npm run smoke:competitive
 npm run smoke:snake
 npm run smoke:paper
+npm run load:capacity
 ```
+
+Set `CAPACITY_SCALE=full` to run the guarded 1,000-connection, reconnect-burst, chat, 500-player Snake, and 280-player سيطر capacity suite.
 
 ## Build the Android App Bundle
 

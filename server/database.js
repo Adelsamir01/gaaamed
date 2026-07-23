@@ -13,8 +13,8 @@ import { DatabaseSync } from 'node:sqlite'
 
 const SCHEMA_VERSION = 1
 
-export function resolveDatabasePath(dataDir) {
-  const configured = process.env.DEDOS_DB_PATH
+export function resolveDatabasePath(dataDir, environment = process.env) {
+  const configured = environment.DEDOS_DB_PATH
   if (configured && configured.trim()) return resolve(configured.trim())
   return join(dataDir, 'dedos.sqlite')
 }
@@ -75,6 +75,16 @@ export class DocumentDatabase {
     if (this.closed) throw new Error('Database is closed')
     this.writeStatement.run(name, JSON.stringify(data), Date.now())
   }
+
+  listDocuments() {
+    if (this.closed) throw new Error('Database is closed')
+    return this.db
+      .prepare('SELECT name, json FROM documents ORDER BY name')
+      .all()
+      .map(({ name, json }) => ({ name, data: JSON.parse(json) }))
+  }
+
+  flush() {}
 
   health() {
     try {

@@ -1,6 +1,6 @@
 # Dedos server operations
 
-The production target is one small always-on Linux VM running Docker Compose. SQLite in WAL mode is the durable store for the current single-server architecture; Cloudflare Tunnel exposes it without opening an inbound port. The Windows supervisors remain a working fallback until the VM is provisioned.
+The production target is an always-on Linux VM running Docker Compose. PostgreSQL is the durable production store, Redis coordinates presence and targeted events, and dedicated Node worker threads run the public Snake and سيطر simulations. Cloudflare Tunnel exposes the gateway without opening an inbound application port. SQLite remains the zero-configuration local/Windows fallback.
 
 ## Current Windows fallback
 
@@ -19,7 +19,7 @@ The user-login fallback cannot run while the PC is powered off and only starts a
 
 ## Always-on Linux installation
 
-Requirements: a Debian/Ubuntu-style VM with Docker Engine and the Compose v2 plugin, the repository copied to the VM, and the existing Cloudflare tunnel token available as a file. The VM needs outbound HTTPS access; no inbound application port is required.
+Requirements: a Debian/Ubuntu-style VM with Docker Engine, the Compose v2 plugin, OpenSSL, the repository copied to the VM, and the existing Cloudflare tunnel token available as a file. The VM needs outbound HTTPS access; no inbound application port is required.
 
 From the repository root on the VM:
 
@@ -27,13 +27,13 @@ From the repository root on the VM:
 sudo TUNNEL_TOKEN_FILE=/secure/path/tunnel-token.txt ./deploy/install-linux.sh
 ```
 
-The installer copies the release to `/opt/dedos`, stores the token as `/etc/dedos/tunnel-token.txt` with mode `0600`, builds the container, and enables:
+The installer copies the release to `/opt/dedos`, stores the token as `/etc/dedos/tunnel-token.txt` with mode `0600`, creates a random PostgreSQL password on first installation, builds the containers, and enables:
 
 - `dedos-compose.service` at boot;
 - `dedos-backup.timer` nightly with missed-run catch-up;
 - `dedos-health.timer` every five minutes.
 
-Configuration is in `/etc/dedos/dedos.env`. Never commit the tunnel token or that installed environment file.
+Configuration is in `/etc/dedos/dedos.env`. Never commit the tunnel token, database password, or that installed environment file. The production Compose stack starts PostgreSQL and Redis first and only starts the app after both dependencies are healthy.
 
 ### Publishing an Android update prompt
 
@@ -62,24 +62,41 @@ sudo -E /opt/dedos/deploy/rollback.sh
 
 ## Data and backups
 
-The live database is `/data/dedos.sqlite` inside the app volume. Old JSON files are imported on first startup and left untouched. Writes use SQLite transactions and WAL crash recovery. Bank Elhaz statistics are coalesced into one write per 500 ms instead of rewriting storage for every event.
+Production data lives in the `dedos-postgres` volume. The adapter stores top-level document entries independently, so changing one chat thread or user does not rewrite the entire social database. On the first PostgreSQL startup, `DEDOS_MIGRATE_SQLITE_ON_EMPTY=true` imports an existing `/data/dedos.sqlite` only when PostgreSQL is empty. The source SQLite file is preserved.
 
-Backups are consistent SQLite snapshots written to the host directory configured by `DEDOS_BACKUP_DIR` (default `/var/backups/dedos`). The default policy retains up to 30 snapshots for 30 days, plus a SHA-256 manifest for each.
+Redis uses append-only persistence in the `dedos-redis` volume, but it contains coordination state rather than the source of truth. Losing Redis briefly affects shared presence/event delivery; it does not erase users or chats.
 
-Manual backup and verification:
+Nightly backups are PostgreSQL custom-format dumps written to `DEDOS_BACKUP_DIR` (default `/var/backups/dedos`). Each dump is validated with `pg_restore --list`, receives a SHA-256 manifest, and is subject to both age and count retention.
+
+Manual backup:
 
 ```bash
-docker compose -f /opt/dedos/compose.production.yml exec -T app node tools/backup-server.mjs
-docker compose -f /opt/dedos/compose.production.yml exec -T app node tools/verify-backup.mjs /backups/dedos-TIMESTAMP.sqlite
+sudo -E /opt/dedos/deploy/backup.sh
 ```
 
-Copy `/var/backups/dedos` to a different machine or object-storage bucket. A backup on only the application VM is not a disaster-recovery copy. Restore by stopping the app, preserving the current volume database, copying a verified snapshot to `/data/dedos.sqlite`, and starting the app again.
+Verify and inspect a dump:
+
+```bash
+sha256sum -c <(jq -r '"\(.sha256)  \(.backup)"' /var/backups/dedos/dedos-TIMESTAMP.dump.json)
+docker compose -f /opt/dedos/compose.production.yml exec -T postgres \
+  pg_restore --list </var/backups/dedos/dedos-TIMESTAMP.dump
+```
+
+Restore into an empty maintenance database before using a backup in production:
+
+```bash
+docker compose -f /opt/dedos/compose.production.yml exec -T postgres createdb -U dedos dedos_restore
+docker compose -f /opt/dedos/compose.production.yml exec -T postgres \
+  pg_restore -U dedos -d dedos_restore --clean --if-exists </var/backups/dedos/dedos-TIMESTAMP.dump
+```
+
+Copy `/var/backups/dedos` to a different machine or object-storage bucket. A backup kept only on the application VM is not disaster recovery.
 
 ## Health, metrics, and alerts
 
-- `/health`: liveness and summary data.
-- `/ready`: readiness including storage availability.
-- `/metrics`: Prometheus-format uptime, connections, rooms, queue size, and health.
+- `/health`: liveness plus storage, Redis, arena-worker, memory, and realtime-loop details.
+- `/ready`: readiness across PostgreSQL, Redis, and the arena runtime.
+- `/metrics`: Prometheus-format uptime, health, memory, connections, rooms, queue size, and realtime performance.
 
 The health timer checks both localhost and the public Cloudflare URL. It restarts the app when local readiness fails and logs failures to the system journal. Set `ALERT_WEBHOOK_URL` in `/etc/dedos/dedos.env` to send failure JSON to a Slack-compatible automation or another incident webhook.
 
@@ -93,14 +110,38 @@ curl --fail https://dedos.adelsamir.com/health
 
 ## Capacity and scaling
 
-The WebSocket server caps messages at 128 KiB, disconnects slow clients above 512 KiB buffered output, disables compression overhead, rate-limits message floods, and cleans dead connections every 20 seconds. HTTP requests have bounded header/body/time limits. The app reconnects forever with capped exponential backoff and network/foreground wake-up.
+The WebSocket server caps messages at 128 KiB, disconnects slow clients above 512 KiB buffered output, disables compression overhead, rate-limits message floods, and cleans dead connections every 20 seconds. The listen backlog is 2,048. HTTP requests have bounded header/body/time limits. The app reconnects forever with capped exponential backoff and network/foreground wake-up.
 
-One VM is intentionally the first production topology because active rooms are in memory. Before running more than one app replica, move room state/pub-sub to Redis and replace the document store with PostgreSQL (or introduce sticky sessions plus shared state). Do not load-balance multiple replicas as-is.
+Presence count broadcasts are coalesced to at most once per second, eliminating the previous connect/disconnect broadcast storm. Public arenas keep direct membership indexes, serialize one compatible snapshot per arena group, and use compact version-3 integer/delta/RLE payloads. `DEDOS_ARENA_WORKERS` controls arena worker threads; use `2` as the starting value and keep at least one CPU available for the gateway and OS.
+
+Reproduce the guarded smoke suite:
+
+```bash
+npm run load:capacity
+```
+
+Run the full suite:
+
+```bash
+CAPACITY_SCALE=full npm run load:capacity
+```
+
+The July 2026 local reference run passed:
+
+- 1,000 ramped connections and a separate 1,000-client reconnect burst with zero failures;
+- 200 chat clients with 13 ms p95 measured delivery;
+- 500 simultaneously active Snake clients at 35.6 ms gateway event-loop p99;
+- 280 simultaneously active سيطر clients without stalls.
+
+These are regression gates, not a promise for an undersized VM or slow network. Re-run them on the actual production instance while monitoring CPU, memory, outbound bandwidth, PostgreSQL latency, and Redis latency before a large campaign.
+
+PostgreSQL and Redis make durability, presence, and targeted events shareable, but active private rooms and matchmaking queues still belong to one gateway process. Do not start multiple app replicas behind round-robin load balancing yet. A second phase would move queue/room ownership to Redis or another state service and add connection affinity. The current supported topology is one app gateway with multiple arena workers.
 
 ## Incident sequence
 
 1. Check public `/health`, then local `/ready`.
 2. If local is down, inspect app logs and `docker compose restart app`.
 3. If local works but public is down, inspect/restart `cloudflared`.
-4. If storage reports unhealthy, stop the app, preserve the volume, verify the newest backup, and restore.
-5. If the latest deploy caused the incident, run `deploy/rollback.sh`.
+4. If PostgreSQL reports unhealthy, stop the app, preserve the volume, validate the newest dump in a separate database, and restore.
+5. If Redis reports unhealthy, restart Redis and confirm presence repopulates within 35 seconds.
+6. If the latest deploy caused the incident, run `deploy/rollback.sh`.

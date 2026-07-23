@@ -143,6 +143,22 @@ test('a full 20-character arena remains below the WebSocket payload budget', () 
   assert.ok(regularBytes < 96 * 1024, `regular snapshot was ${regularBytes} bytes`)
 })
 
+test('snapshot version 3 reduces paper arena payload without losing full ownership state', () => {
+  const arena = new PaperArena('compact', { random: () => 0.43 })
+  arena.addBots(6)
+  for (let index = 0; index < 14; index += 1) {
+    const player = arena.addPlayer({ id: `human-${index}`, name: `Player ${index}` })
+    player.trail = Array.from({ length: 240 }, (_, cell) => (player.slot * 431 + cell * 17) % arena.owners.length)
+  }
+
+  const legacyBytes = Buffer.byteLength(JSON.stringify(arena.snapshot(Date.now(), true)))
+  const compact = arena.compactSnapshot(Date.now(), true)
+  const compactBytes = Buffer.byteLength(JSON.stringify(compact))
+
+  assert.ok(Array.isArray(compact.o) && compact.o.length > 0)
+  assert.ok(compactBytes < legacyBytes * 0.78, `compact=${compactBytes}, legacy=${legacyBytes}`)
+})
+
 test('dead players respawn and an empty human arena is destroyed', () => {
   const manager = new PaperArenaManager({ send: () => {}, random: () => 0.31, botCount: 2 })
   const socket = {}

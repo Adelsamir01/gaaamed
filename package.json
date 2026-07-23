@@ -13,12 +13,14 @@
     "server:backup": "node tools/backup-server.mjs",
     "server:verify-backup": "node tools/verify-backup.mjs",
     "smoke:reliability": "node server/smoke-reliability.js",
-    "test:client": "node --test tests/app-version.test.ts tests/chess-engine.test.ts tests/chess-premove.test.ts tests/dominoes-engine.test.ts tests/favorite-game.test.ts tests/frame-budget.test.ts tests/friend-presence.test.ts tests/game-stats.test.ts tests/leaderboard.test.ts tests/memory-config.test.ts tests/paper-motion.test.ts tests/snake-motion.test.ts tests/thread-history-queue.test.ts tests/trivia-selection.test.ts",
-    "test:server": "node --test server/app-version.test.js server/chess-game.test.js server/competitive-games.test.js server/database.test.js server/dominoes-game.test.js server/match3-engine.test.js server/paper-arena.test.js server/presence.test.js server/push-notifications.test.js server/snake-arena.test.js server/users.test.js",
+    "test:client": "node --test tests/app-version.test.ts tests/chess-engine.test.ts tests/chess-premove.test.ts tests/dominoes-engine.test.ts tests/favorite-game.test.ts tests/frame-budget.test.ts tests/friend-presence.test.ts tests/game-stats.test.ts tests/leaderboard.test.ts tests/memory-config.test.ts tests/paper-motion.test.ts tests/realtime-protocol.test.ts tests/snake-motion.test.ts tests/thread-history-queue.test.ts tests/trivia-selection.test.ts",
+    "test:server": "node --test server/app-version.test.js server/arena-worker-pool.test.js server/chess-game.test.js server/competitive-games.test.js server/coordinator.test.js server/database.test.js server/dominoes-game.test.js server/match3-engine.test.js server/paper-arena.test.js server/postgres-database.test.js server/presence.test.js server/push-notifications.test.js server/snake-arena.test.js server/users.test.js",
     "test:competitive": "node --test server/competitive-games.test.js",
     "smoke:competitive": "node server/smoke-competitive.js",
     "smoke:snake": "node server/smoke-snake-public.js",
-    "smoke:paper": "node server/smoke-paper-public.js"
+    "smoke:paper": "node server/smoke-paper-public.js",
+    "load:server": "node tools/load-test.mjs",
+    "load:capacity": "node tools/capacity-suite.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -69,6 +71,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
+    "pg": "^8.22.0",
     "pixi.js": "^8.19.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.13.0",
@@ -77,6 +80,7 @@
     "react-resizable-panels": "^4.2.2",
     "react-router": "^7.6.1",
     "recharts": "^2.15.4",
+    "redis": "^6.1.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "vaul": "^1.1.2",

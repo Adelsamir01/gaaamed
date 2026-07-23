@@ -242,7 +242,9 @@ test('regular arena broadcasts send compact food patches after the initial full 
   manager.track(legacySocket)
   const player = manager.join(socket, { name: 'Player', snapshotVersion: 2 })
   const arena = [...manager.arenas.values()][0]
-  manager.memberships.set(legacySocket, { arenaId: arena.id, playerId: 'legacy-observer', snapshotVersion: 1 })
+  const legacyMembership = { arenaId: arena.id, playerId: 'legacy-observer', snapshotVersion: 1 }
+  manager.memberships.set(legacySocket, legacyMembership)
+  manager.arenaMembers.get(arena.id).set(legacySocket, legacyMembership)
 
   sent.length = 0
   manager.broadcastSnapshots()
@@ -279,4 +281,22 @@ test('long trails are bounded in network snapshots while preserving both ends', 
   assert.ok(trail.length <= 82)
   assert.deepEqual(trail[0], player.trail[0])
   assert.deepEqual(trail.at(-1), player.trail.at(-1))
+})
+
+test('snapshot version 3 is materially smaller while version 2 stays compatible', () => {
+  const arena = new SnakeArena('compact', { random: () => 0.41 })
+  arena.addBots(5)
+  for (let index = 0; index < 18; index += 1) {
+    const player = arena.addPlayer({ id: `human-${index}`, name: `Player ${index}` })
+    player.length = 1_200
+    player.trail = Array.from({ length: 180 }, (_, point) => ({
+      x: 2_800 + index * 2 - point * 5.25,
+      y: 2_800 + Math.sin(point / 8) * 40,
+    }))
+  }
+
+  const legacyBytes = Buffer.byteLength(JSON.stringify(arena.snapshot(Date.now(), false)))
+  const compactBytes = Buffer.byteLength(JSON.stringify(arena.compactSnapshot(Date.now(), false)))
+
+  assert.ok(compactBytes < legacyBytes * 0.58, `compact=${compactBytes}, legacy=${legacyBytes}`)
 })

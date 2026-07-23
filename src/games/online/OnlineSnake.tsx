@@ -17,6 +17,7 @@ import {
   trailLength,
   turnAngleTowards,
 } from './snakeMotion'
+import { decodeCompactSnakeFoods, decodeCompactSnakePlayers } from './realtimeProtocol'
 
 interface Point {
   x: number
@@ -249,11 +250,20 @@ export default function OnlineSnake({ onExit }: Props) {
 
     lastSnapshotReceivedRef.current = performance.now()
     snapshotVersionRef.current += 1
-    const nextPlayers = Array.isArray(message.players) ? message.players as unknown as ArenaPlayer[] : []
+    const compact = Number(message.compact) === 3
+    const nextPlayers = compact
+      ? decodeCompactSnakePlayers(message.p) as ArenaPlayer[]
+      : Array.isArray(message.players) ? message.players as unknown as ArenaPlayer[] : []
     const priorFoods = snapshotRef.current.foods ?? []
-    const fullFoods = Array.isArray(message.foods) ? message.foods as unknown as ArenaFood[] : undefined
-    const foodUpserts = Array.isArray(message.foodUpserts) ? message.foodUpserts as unknown as ArenaFood[] : []
-    const foodRemovedIds = Array.isArray(message.foodRemovedIds) ? message.foodRemovedIds.map(Number) : []
+    const fullFoods = compact
+      ? Array.isArray(message.f) ? decodeCompactSnakeFoods(message.f) as ArenaFood[] : undefined
+      : Array.isArray(message.foods) ? message.foods as unknown as ArenaFood[] : undefined
+    const foodUpserts = compact
+      ? decodeCompactSnakeFoods(message.fu) as ArenaFood[]
+      : Array.isArray(message.foodUpserts) ? message.foodUpserts as unknown as ArenaFood[] : []
+    const foodRemovedIds = compact
+      ? Array.isArray(message.fr) ? message.fr.map(Number) : []
+      : Array.isArray(message.foodRemovedIds) ? message.foodRemovedIds.map(Number) : []
     const nextFoods = mergeFoodSnapshot(priorFoods, fullFoods, foodUpserts, foodRemovedIds)
     snapshotRef.current = {
       players: nextPlayers,
@@ -295,7 +305,7 @@ export default function OnlineSnake({ onExit }: Props) {
   const joinPublicArena = useCallback(() => {
     sendRaw({
       type: 'snake_public_join',
-      snapshotVersion: 2,
+      snapshotVersion: 3,
       name: profile.name || 'لاعب',
       avatar: profile.avatar || '🎮',
     })

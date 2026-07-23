@@ -1,6 +1,45 @@
 name: dedos
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dedos
+      POSTGRES_USER: dedos
+      POSTGRES_PASSWORD: ${DEDOS_POSTGRES_PASSWORD:?Set DEDOS_POSTGRES_PASSWORD in /etc/dedos/dedos.env}
+    volumes:
+      - dedos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dedos -d dedos"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - dedos-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   app:
     image: ${DEDOS_IMAGE:-dedos-server:latest}
     build:
@@ -16,6 +55,11 @@ services:
       DEDOS_ANDROID_LATEST_VERSION_CODE: ${DEDOS_ANDROID_LATEST_VERSION_CODE:-21}
       DEDOS_DATA_DIR: /data
       DEDOS_DB_PATH: /data/dedos.sqlite
+      DEDOS_DATABASE_URL: postgresql://dedos:${DEDOS_POSTGRES_PASSWORD:?Set DEDOS_POSTGRES_PASSWORD in /etc/dedos/dedos.env}@postgres:5432/dedos
+      DEDOS_MIGRATE_SQLITE_ON_EMPTY: "true"
+      DEDOS_REDIS_URL: redis://redis:6379
+      DEDOS_REDIS_REQUIRED: "true"
+      DEDOS_ARENA_WORKERS: ${DEDOS_ARENA_WORKERS:-2}
       DEDOS_BACKUP_DIR: /backups
       DEDOS_BACKUP_RETENTION_DAYS: ${DEDOS_BACKUP_RETENTION_DAYS:-30}
       DEDOS_BACKUP_KEEP: ${DEDOS_BACKUP_KEEP:-30}
@@ -24,6 +68,11 @@ services:
     volumes:
       - dedos-data:/data
       - ${DEDOS_BACKUP_DIR:-./server/backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
@@ -68,3 +117,5 @@ secrets:
 
 volumes:
   dedos-data:
+  dedos-postgres:
+  dedos-redis:

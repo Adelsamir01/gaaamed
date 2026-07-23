@@ -1,6 +1,7 @@
 /**
  * server/users.js — هوية المستخدمين والأصدقاء والدردشات (بيانات دائمة على الخادم)
- * مستندات users/friends/chats/privacy محفوظة ذريًا في SQLite، مع استيراد ملفات JSON القديمة مرة واحدة.
+ * مستندات users/friends/chats/privacy محفوظة في مخزن المستندات المختار:
+ * PostgreSQL في الإنتاج أو SQLite محليًا، مع استيراد ملفات JSON القديمة مرة واحدة.
  * تُجمّع التغييرات المتقاربة لمدة 500ms لتقليل الكتابات مع flush إجباري عند إيقاف الخادم.
  */
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -694,10 +695,15 @@ export class UserStore {
     this.chatsFile.saveSync()
     this.pushTokensFile.saveSync()
     this.privacyRequestsFile.saveSync()
+    return this.database.flush?.()
   }
 
   close() {
-    this.flushAll()
-    if (this.ownsDatabase) this.database.close()
+    const flushed = this.flushAll()
+    const closeOwnedDatabase = () => (this.ownsDatabase ? this.database.close() : undefined)
+    if (flushed && typeof flushed.then === 'function') {
+      return Promise.resolve(flushed).then(closeOwnedDatabase)
+    }
+    return closeOwnedDatabase()
   }
 }

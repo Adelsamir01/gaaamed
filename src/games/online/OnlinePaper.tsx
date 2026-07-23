@@ -18,6 +18,7 @@ import {
   type PaperPoint,
   type TerritoryPatch,
 } from './paperMotion'
+import { decodeCompactPaperPlayers, decodeCompactTerritoryPatches } from './realtimeProtocol'
 
 interface ArenaPlayer {
   id: string
@@ -433,11 +434,14 @@ export default function OnlinePaper({ onExit }: Props) {
 
     lastSnapshotReceivedRef.current = performance.now()
     snapshotVersionRef.current += 1
-    const nextPlayers = Array.isArray(message.players) ? message.players as unknown as ArenaPlayer[] : []
+    const compact = Number(message.compact) === 3
+    const nextPlayers = compact
+      ? decodeCompactPaperPlayers(message.p) as ArenaPlayer[]
+      : Array.isArray(message.players) ? message.players as unknown as ArenaPlayer[] : []
     const nextGridSize = Number(message.gridSize) || gridSizeRef.current
     const nextCellSize = Number(message.cellSize) || cellSizeRef.current
     const nextWorldSize = Number(message.worldSize) || nextGridSize * nextCellSize
-    const nextRevision = Math.max(0, Math.floor(Number(message.revision) || 0))
+    const nextRevision = Math.max(0, Math.floor(Number(compact ? message.rev : message.revision) || 0))
     gridSizeRef.current = nextGridSize
     cellSizeRef.current = nextCellSize
     worldSizeRef.current = nextWorldSize
@@ -450,15 +454,19 @@ export default function OnlinePaper({ onExit }: Props) {
       }
     }
 
-    if (Array.isArray(message.ownerRle)) {
+    const compactOwnership = compact && Array.isArray(message.o) ? message.o : null
+    if (compactOwnership || Array.isArray(message.ownerRle)) {
+      const ownershipValues = compactOwnership ?? (Array.isArray(message.ownerRle) ? message.ownerRle : [])
       ownersRef.current = decodeOwnershipRle(
-        message.ownerRle.map(Number),
+        ownershipValues.map(Number),
         nextGridSize * nextGridSize,
       )
       revisionRef.current = nextRevision
       territoryDirtyRef.current = true
     } else {
-      const patches = (Array.isArray(message.patches) ? message.patches : []) as unknown as TerritoryPatch[]
+      const patches = (compact
+        ? decodeCompactTerritoryPatches(message.x)
+        : Array.isArray(message.patches) ? message.patches : []) as unknown as TerritoryPatch[]
       const freshPatches = patches
         .filter((patch) => Number(patch.revision) > revisionRef.current)
         .sort((first, second) => first.revision - second.revision)
@@ -505,7 +513,7 @@ export default function OnlinePaper({ onExit }: Props) {
       speed: Number(message.speed) || snapshotRef.current.speed,
       turnRate: Number(message.turnRate) || snapshotRef.current.turnRate,
       revision: nextRevision,
-      serverTime: Number(message.serverTime) || Date.now(),
+      serverTime: Number(compact ? message.t : message.serverTime) || Date.now(),
     }
     if (nextPlayers.length !== playerCountRef.current) {
       playerCountRef.current = nextPlayers.length
@@ -550,6 +558,7 @@ export default function OnlinePaper({ onExit }: Props) {
   const joinPublicArena = useCallback(() => {
     sendRaw({
       type: 'paper_public_join',
+      snapshotVersion: 3,
       name: profile.name || 'لاعب',
       avatar: profile.avatar || '🎮',
     })
