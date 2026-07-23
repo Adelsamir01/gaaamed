@@ -6,6 +6,7 @@ import { FrameBudgetController, type RenderQuality } from '@/lib/frameBudget'
 import { getGamePerformanceProfile } from '@/lib/gamePerformance'
 import { sounds } from '@/lib/sounds'
 import {
+  advanceSampledTrail,
   advanceTrail,
   angleDifference,
   bodyRadiusForLength,
@@ -14,6 +15,7 @@ import {
   mergeFoodSnapshot,
   reconcileTrail,
   trailLength,
+  turnAngleTowards,
 } from './snakeMotion'
 
 interface Point {
@@ -77,6 +79,10 @@ const MAX_RENDER_FPS = 60
 const MIN_FRAME_INTERVAL_MS = 1_000 / MAX_RENDER_FPS
 const MINIMAP_INTERVAL_MS = 160
 const STALE_SNAPSHOT_MS = 5_000
+const CLIENT_TURN_RATE = 6.2
+const TRAIL_SAMPLE_SPACING = 5
+const AUTHORITATIVE_TELEPORT_DISTANCE = 240
+const OFFSCREEN_SIMULATION_MARGIN = 420
 
 function preferredPixelRatio(quality: RenderQuality): number {
   const qualityCap = quality === 'low' ? 1 : quality === 'balanced' ? 1.25 : window.innerWidth < 768 ? 1.5 : 2
@@ -101,6 +107,10 @@ function copyPlayer(player: ArenaPlayer): RenderPlayer {
     length: player.length ?? trailLength(player.trail),
     trail: player.trail.map((point) => ({ ...point })),
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 export default function OnlineSnake({ onExit }: Props) {
@@ -136,6 +146,7 @@ export default function OnlineSnake({ onExit }: Props) {
   const lastStallRecoveryRef = useRef(0)
   const lastSteerSentRef = useRef(0)
   const lastSentAngleRef = useRef<number | null>(null)
+  const localTargetAngleRef = useRef<number | null>(null)
   const scoreRef = useRef(0)
   const playerCountRef = useRef(0)
   const lifeRef = useRef(0)
@@ -201,6 +212,7 @@ export default function OnlineSnake({ onExit }: Props) {
       lastSnapshotReceivedRef.current = performance.now()
       cameraReadyRef.current = false
       zoomRef.current = 1
+      localTargetAngleRef.current = null
       setShowGuide(true)
       setPhase('playing')
       return
@@ -214,6 +226,7 @@ export default function OnlineSnake({ onExit }: Props) {
       lastSnapshotReceivedRef.current = performance.now()
       cameraReadyRef.current = false
       zoomRef.current = 1
+      localTargetAngleRef.current = null
       setShowGuide(true)
       setPhase('playing')
       return
@@ -323,6 +336,7 @@ export default function OnlineSnake({ onExit }: Props) {
   }, [phase, showGuide])
 
   const sendSteering = useCallback((angle: number, force = false) => {
+    localTargetAngleRef.current = angle
     const now = performance.now()
     const lastAngle = lastSentAngleRef.current
     if (!force && (now - lastSteerSentRef.current < 50 || (lastAngle != null && Math.abs(angleDifference(lastAngle, angle)) < 0.015))) return
@@ -336,6 +350,11 @@ export default function OnlineSnake({ onExit }: Props) {
     const correctionFactor = 1 - Math.exp(-elapsed * 7.5)
     const turnFactor = 1 - Math.exp(-elapsed * 12)
     const hasNewSnapshot = appliedSnapshotVersionRef.current !== snapshotVersionRef.current
+    const viewport = viewportRef.current
+    const camera = cameraRef.current
+    const zoom = Math.max(0.5, zoomRef.current)
+    const simulationHalfWidth = viewport.width / (2 * zoom) + OFFSCREEN_SIMULATION_MARGIN
+    const simulationHalfHeight = viewport.height / (2 * zoom) + OFFSCREEN_SIMULATION_MARGIN
 
     if (hasNewSnapshot) {
       const targetIds = new Set(targetPlayers.map((player) => player.id))
@@ -345,6 +364,16 @@ export default function OnlineSnake({ onExit }: Props) {
     }
 
     for (const target of targetPlayers) {
+      const isMine = target.id === playerIdRef.current
+      const targetHead = target.trail[0]
+      const shouldSimulate = Boolean(
+        isMine
+        || (
+          targetHead
+          && Math.abs(targetHead.x - camera.x) <= simulationHalfWidth
+          && Math.abs(targetHead.y - camera.y) <= simulationHalfHeight
+        )
+      )
       let rendered = renderPlayersRef.current.get(target.id)
       if (!rendered || rendered.trail.length === 0) {
         rendered = copyPlayer(target)
@@ -370,22 +399,43 @@ export default function OnlineSnake({ onExit }: Props) {
             snapshotRef.current.speed * predictionSeconds,
             targetLength,
           )
-          // Correct once per authoritative snapshot. Re-running full body
-          // reconciliation on every display frame was the largest client CPU
-          // hotspot for long snakes.
-          rendered.trail = reconcileTrail(rendered.trail, predictedTrail, 0.46)
+          const renderedHead = rendered.trail[0]
+          const predictedHead = predictedTrail[0]
+          const headError = renderedHead && predictedHead
+            ? Math.hypot(predictedHead.x - renderedHead.x, predictedHead.y - renderedHead.y)
+            : AUTHORITATIVE_TELEPORT_DISTANCE
+
+          if (!shouldSimulate || headError >= AUTHORITATIVE_TELEPORT_DISTANCE) {
+            rendered.trail = predictedTrail
+          } else {
+            // Small corrections prevent the visible 10 Hz body snap that made
+            // online movement look robotic. Larger drift still converges
+            // faster, while a true discontinuity is handled above.
+            const reconciliationFactor = isMine
+              ? clamp(0.045 + headError / 900, 0.045, 0.14)
+              : clamp(0.075 + headError / 620, 0.075, 0.24)
+            rendered.trail = reconcileTrail(rendered.trail, predictedTrail, reconciliationFactor)
+          }
         }
       }
       rendered.length += (targetLength - rendered.length) * correctionFactor
-      rendered.angle += angleDifference(rendered.angle, target.angle) * turnFactor
+      if (isMine) {
+        const desiredAngle = localTargetAngleRef.current ?? target.angle
+        rendered.angle = turnAngleTowards(rendered.angle, desiredAngle, CLIENT_TURN_RATE * elapsed)
+      } else {
+        rendered.angle += angleDifference(rendered.angle, target.angle) * turnFactor
+      }
       if (!target.alive) continue
 
-      rendered.trail = advanceTrail(
-        rendered.trail,
-        rendered.angle,
-        snapshotRef.current.speed * elapsed,
-        rendered.length,
-      )
+      if (shouldSimulate) {
+        rendered.trail = advanceSampledTrail(
+          rendered.trail,
+          rendered.angle,
+          snapshotRef.current.speed * elapsed,
+          rendered.length,
+          TRAIL_SAMPLE_SPACING,
+        )
+      }
     }
 
     if (hasNewSnapshot) appliedSnapshotVersionRef.current = snapshotVersionRef.current

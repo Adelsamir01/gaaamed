@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  advanceSampledTrail,
   advanceTrail,
   bodyRadiusForLength,
   cameraZoomForLength,
@@ -8,6 +9,7 @@ import {
   mergeFoodSnapshot,
   reconcileTrail,
   trailLength,
+  turnAngleTowards,
 } from '../src/games/online/snakeMotion.ts'
 
 test('advancing a snake moves the head continuously while preserving body length', () => {
@@ -21,6 +23,35 @@ test('advancing a snake moves the head continuously while preserving body length
   assert.deepEqual(moved[0], { x: 102, y: 100 })
   assert.ok(Math.abs(trailLength(moved) - 100) < 0.0001)
   assert.ok(moved.length > trail.length)
+})
+
+test('sampled rendering keeps trail density bounded across high refresh rate frames', () => {
+  let trail = [
+    { x: 100, y: 100 },
+    { x: 94, y: 100 },
+    { x: 88, y: 100 },
+    { x: 82, y: 100 },
+  ]
+
+  for (let frame = 0; frame < 240; frame += 1) {
+    trail = advanceSampledTrail(trail, 0, 2, 120, 5)
+  }
+
+  assert.ok(trail.length <= 27)
+  assert.ok(Math.abs(trailLength(trail) - 120) < 0.0001)
+  assert.equal(trail[0].x, 580)
+})
+
+test('local steering prediction turns immediately while respecting the server turn rate', () => {
+  const frameTurn = 6.2 / 60
+  const firstFrame = turnAngleTowards(0, Math.PI / 2, frameTurn)
+  assert.equal(firstFrame, frameTurn)
+
+  let angle = 0
+  for (let frame = 0; frame < 120; frame += 1) {
+    angle = turnAngleTowards(angle, Math.PI / 2, frameTurn)
+  }
+  assert.ok(Math.abs(angle - Math.PI / 2) < 0.0001)
 })
 
 test('reconciliation corrects snapshots gradually instead of snapping the whole body', () => {

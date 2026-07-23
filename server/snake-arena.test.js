@@ -276,7 +276,7 @@ test('long trails are bounded in network snapshots while preserving both ends', 
   player.trail = Array.from({ length: 500 }, (_, index) => ({ x: 2_000 - index * 6, y: 2_000 }))
 
   const trail = arena.snapshot().players[0].trail
-  assert.ok(trail.length <= 122)
+  assert.ok(trail.length <= 82)
   assert.deepEqual(trail[0], player.trail[0])
   assert.deepEqual(trail.at(-1), player.trail.at(-1))
 })

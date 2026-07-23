@@ -28,6 +28,11 @@ export function angleDifference(from: number, to: number): number {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
 }
 
+export function turnAngleTowards(current: number, target: number, maximumTurn: number): number {
+  const safeMaximumTurn = Math.max(0, Number(maximumTurn) || 0)
+  return current + clamp(angleDifference(current, target), -safeMaximumTurn, safeMaximumTurn)
+}
+
 export function trailLength(points: SnakePoint[]): number {
   let total = 0
   for (let index = 1; index < points.length; index += 1) {
@@ -68,6 +73,39 @@ export function advanceTrail(points: SnakePoint[], angle: number, distance: numb
     x: head.x + Math.cos(angle) * distance,
     y: head.y + Math.sin(angle) * distance,
   }, ...points], maximumLength)
+}
+
+/**
+ * Advances a rendered trail without inserting a body point every display
+ * frame. At 60-120 Hz that otherwise makes long multiplayer snakes grow
+ * hundreds of points denser than the authoritative server trail.
+ */
+export function advanceSampledTrail(
+  points: SnakePoint[],
+  angle: number,
+  distance: number,
+  maximumLength: number,
+  sampleSpacing = 5,
+): SnakePoint[] {
+  const head = points[0]
+  if (!head || distance <= 0) return points.map((point) => ({ ...point }))
+
+  const nextHead = {
+    x: head.x + Math.cos(angle) * distance,
+    y: head.y + Math.sin(angle) * distance,
+  }
+  if (points.length === 1) return trimTrail([nextHead, { ...head }], maximumLength)
+
+  const spacing = Math.max(1, sampleSpacing)
+  const second = points[1]
+  const distanceToSecond = Math.hypot(nextHead.x - second.x, nextHead.y - second.y)
+  // Insert the previous head only after it is at least one full sample away
+  // from the existing body. Including this frame's travel avoids settling at
+  // a spacing smaller than requested.
+  const nextTrail = distanceToSecond >= spacing + distance
+    ? [nextHead, { ...head }, ...points.slice(1)]
+    : [nextHead, ...points.slice(1)]
+  return trimTrail(nextTrail, maximumLength)
 }
 
 export function reconcileTrail(current: SnakePoint[], target: SnakePoint[], factor: number): SnakePoint[] {
