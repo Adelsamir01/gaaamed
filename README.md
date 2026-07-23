@@ -4,7 +4,7 @@
 
 Dedos is an Arabic-first, RTL social gaming app for Android and the web. It combines polished offline games, realtime multiplayer, direct and group chat, friends, profiles, stats, leaderboards, and native push notifications in one app.
 
-The Android release is currently prepared for Google Play closed testing as **1.12.3 (version code 21)**.
+The Android release is currently prepared for Google Play closed testing as **1.13.0 (version code 22)**.
 
 ## Screenshots
 
