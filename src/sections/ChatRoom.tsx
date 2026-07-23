@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight, Gamepad2, Heart, Loader2, Send, Trophy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Gamepad2, Heart, Loader2, Search, Send, Trophy } from 'lucide-react'
 import { useOnline, type ChatMessage } from '@/online/OnlineContext'
 import { AvatarCircle, StatusDot } from './components'
 import { ONLINE_GAMES, getGame } from '@/games'
@@ -244,6 +244,16 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 
+function normalizeGameSearch(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase('ar')
+    .normalize('NFKD')
+    .replace(/[\u064b-\u065f\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+}
+
 export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const { status, me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatReact, chatSendInvite } = useOnline()
   const thread = threads.find((t) => t.id === threadId)
@@ -254,6 +264,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const [inviteGame, setInviteGame] = useState<string | null>(null)
   const [inviteRounds, setInviteRounds] = useState<number>(DEFAULT_ROUNDS)
   const [inviteDifficulty, setInviteDifficulty] = useState<Difficulty>('easy')
+  const [inviteSearch, setInviteSearch] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
   const [showNewestButton, setShowNewestButton] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -264,6 +275,13 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const dmPresence = status === 'online' ? dmFriend?.presence : 'offline'
   const isGroup = thread?.kind === 'group'
   const myId = me?.userId
+  const filteredInviteGames = useMemo(() => {
+    const query = normalizeGameSearch(inviteSearch)
+    if (!query) return ONLINE_GAMES
+    return ONLINE_GAMES.filter((game) => normalizeGameSearch(
+      `${game.name} ${game.description} ${game.category} ${game.id}`,
+    ).includes(query))
+  }, [inviteSearch])
 
   // مرجع ثابت لزر قبول التحدي حتى لا تُكسر مذكرة الفقاعات
   const handleJoin = useCallback(
@@ -371,6 +389,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
     setInviteOpen(false)
     setInviteGame(null)
     setInviteDifficulty('easy')
+    setInviteSearch('')
   }
 
   return (
@@ -530,14 +549,16 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
 
       {/* منتقي لعبة الدعوة */}
       <Dialog open={inviteOpen} onOpenChange={(open) => (open ? setInviteOpen(true) : closeInvitePicker())}>
-        <DialogContent className="max-w-[380px] rounded-3xl">
+        <DialogContent className="max-h-[min(86dvh,640px)] max-w-[380px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-3xl p-4">
           <DialogHeader>
             <DialogTitle className="text-center">تحدّاهم في لعبة 🎮</DialogTitle>
-            <DialogDescription className="text-center">هتوصلهم دعوة بزر انضمام مباشر</DialogDescription>
+            <DialogDescription className="text-center">
+              {inviteGame ? 'ظبّط التحدي وابعت الدعوة' : 'اختار لعبة — والدعوة هتوصل بزر انضمام مباشر'}
+            </DialogDescription>
           </DialogHeader>
           {inviteGame ? (
             // خطوة عدد الجولات للألعاب ذات السلاسل (حجر ورقة مقص / سرعة البرق / شخبطة)
-            <div className="py-2">
+            <div className="min-h-0 overflow-y-auto py-2">
               <div className="glass rounded-2xl p-3.5 mb-3 flex items-center gap-3">
                 <span className="text-3xl">{getGame(inviteGame)?.emoji}</span>
                 <div className="flex-1">
@@ -600,19 +621,67 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 py-2">
-              {ONLINE_GAMES.map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => sendInvite(g.id)}
-                  className="glass rounded-2xl p-3.5 flex flex-col items-center gap-1.5 hover:bg-white/10 transition-colors"
-                >
-                  <span className="text-3xl">{g.emoji}</span>
-                  <span className="font-extrabold text-xs">{g.name}</span>
-                  {gameUsesRounds(g.id) && <span className="text-[9px] font-bold text-emerald-300/80">٣/٥/٧ جولات</span>}
-                  {g.id === 'memory' && <span className="text-[9px] font-bold text-emerald-300/80">سهل / متوسط / صعب</span>}
-                </button>
-              ))}
+            <div className="flex min-h-0 flex-col gap-2.5 py-1">
+              <div className="relative shrink-0">
+                <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={inviteSearch}
+                  onChange={(event) => setInviteSearch(event.target.value)}
+                  placeholder="دوّر على لعبة…"
+                  aria-label="ابحث عن لعبة"
+                  className="h-11 w-full rounded-2xl border border-white/10 bg-white/5 pe-3 ps-10 text-sm font-bold outline-none placeholder:text-muted-foreground/60 focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/10"
+                />
+              </div>
+
+              <div className="flex shrink-0 items-center justify-between px-1 text-[10px] font-bold text-muted-foreground">
+                <span>{filteredInviteGames.length.toLocaleString('ar-EG')} لعبة</span>
+                <span>اضغط على اللعبة لإرسال الدعوة</span>
+              </div>
+
+              <div className="min-h-0 space-y-1.5 overflow-y-auto overscroll-contain pe-1 [scrollbar-width:thin]">
+                {filteredInviteGames.map((game) => {
+                  const optionLabel = gameUsesRounds(game.id)
+                    ? 'اختيار الجولات'
+                    : game.id === 'memory'
+                      ? 'اختيار المستوى'
+                      : 'دعوة مباشرة'
+                  return (
+                    <motion.button
+                      key={game.id}
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => sendInvite(game.id)}
+                      aria-label={`ادعُ للعب ${game.name}`}
+                      className="group flex min-h-14 w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.035] px-3 text-start transition-colors hover:border-emerald-400/25 hover:bg-emerald-400/[0.07]"
+                    >
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-black/15 text-2xl">
+                        {game.emoji}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-extrabold">{game.name}</span>
+                        <span className="mt-0.5 block truncate text-[9px] font-bold text-muted-foreground">
+                          {game.category} · {optionLabel}
+                        </span>
+                      </span>
+                      <ChevronLeft className="h-4 w-4 shrink-0 text-white/25 transition-transform group-hover:-translate-x-0.5 group-hover:text-emerald-300" />
+                    </motion.button>
+                  )
+                })}
+                {filteredInviteGames.length === 0 && (
+                  <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 text-center">
+                    <span className="text-3xl">🎮</span>
+                    <p className="mt-2 text-xs font-extrabold">مفيش لعبة بالاسم ده</p>
+                    <button
+                      type="button"
+                      onClick={() => setInviteSearch('')}
+                      className="mt-1 min-h-9 px-3 text-[10px] font-bold text-emerald-300"
+                    >
+                      اعرض كل الألعاب
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
