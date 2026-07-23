@@ -35,6 +35,7 @@ export type GameEvent =
   | { kind: 'sh'; msg: ServerMessage }
   | { kind: 'bank'; msg: ServerMessage }
   | { kind: 'snake'; msg: ServerMessage }
+  | { kind: 'paper'; msg: ServerMessage }
 
 type GameEventHandler = (ev: GameEvent) => void
 
@@ -45,6 +46,13 @@ const SNAKE_PUBLIC_MSGS = new Set([
   'snake_public_snapshot',
   'snake_public_dead',
   'snake_public_count',
+])
+const PAPER_PUBLIC_MSGS = new Set([
+  'paper_public_joined',
+  'paper_public_respawned',
+  'paper_public_snapshot',
+  'paper_public_dead',
+  'paper_public_count',
 ])
 
 export interface MeIdentity {
@@ -617,6 +625,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         default:
           if (SNAKE_PUBLIC_MSGS.has(msg.type)) {
             gameHandlersRef.current.forEach((h) => h({ kind: 'snake', msg }))
+            break
+          }
+          if (PAPER_PUBLIC_MSGS.has(msg.type)) {
+            gameHandlersRef.current.forEach((h) => h({ kind: 'paper', msg }))
             break
           }
           // رسائل شخبطة تمر لشاشة اللعبة

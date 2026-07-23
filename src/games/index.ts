@@ -10,6 +10,7 @@ const TriviaGame = lazy(() => import('./trivia/TriviaGame'))
 const RpsGame = lazy(() => import('./rps/RpsGame'))
 const ReactionGame = lazy(() => import('./reaction/ReactionGame'))
 const SnakeGame = lazy(() => import('./snake/SnakeGame'))
+const PaperGame = lazy(() => import('./paper/PaperGame'))
 const MinesweeperGame = lazy(() => import('./minesweeper/MinesweeperGame'))
 const Match3Game = lazy(() => import('./match3/Match3Game'))
 const OnlineMatch3 = lazy(() => import('./match3/OnlineMatch3'))
@@ -209,6 +210,25 @@ export const GAMES: GameDef[] = [
     online: true,
     publicArena: true,
     component: SnakeGame,
+  },
+  {
+    id: 'paper',
+    name: 'سيطر',
+    description: 'لوّن أكبر مساحة، اقفل خطوطك، واقطع طريق المنافسين في ساحة عامة سريعة',
+    emoji: '🟪',
+    category: 'أونلاين',
+    howToPlay: [
+      'اسحب في أي اتجاه — شخصيتك تتحرك باستمرار وبسلاسة',
+      'اخرج من أرضك الملونة وارسم مسارًا، ثم ارجع للونك عشان تضم المساحة المحاصرة',
+      'لو منافس لمس خطك المكشوف قبل ما تقفله، تخرج من الجولة وتبدأ من جديد',
+      'اقطع خطوط المنافسين وهم خارج أرضهم، وخليك صاحب أكبر نسبة على الخريطة',
+      'الموبايل يتوقع ويرسم الحركة فورًا؛ الخادم يراجع الالتقاط والاصطدامات في الخلفية',
+    ],
+    supportsBot: false,
+    supportsTwoPlayer: false,
+    online: true,
+    publicArena: true,
+    component: PaperGame,
   },
   {
     id: 'minesweeper',

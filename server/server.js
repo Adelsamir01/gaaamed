@@ -37,6 +37,7 @@ import {
   triviaQuestionSnapshot,
 } from './competitive-games.js'
 import { SnakeArenaManager, SNAKE_SNAPSHOT_MS, SNAKE_TICK_MS } from './snake-arena.js'
+import { PaperArenaManager, PAPER_SNAPSHOT_MS, PAPER_TICK_MS } from './paper-arena.js'
 import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
 import { activeGameForUser, activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
@@ -91,6 +92,7 @@ const INVITE_GAMES = {
 const ACTIVITY_GAMES = {
   ...INVITE_GAMES,
   snake: { name: 'الثعبان', emoji: '🐍' },
+  paper: { name: 'سيطر', emoji: '🟪' },
   minesweeper: { name: 'كاسحة الألغام', emoji: '💣' },
 }
 
@@ -135,6 +137,7 @@ function sendJson(res, status, obj) {
 function serviceHealth() {
   const storage = database.health()
   const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
+  const paperPlayers = [...paperManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
   return {
     ok: storage.ok,
     service: 'dedos-server',
@@ -145,6 +148,8 @@ function serviceHealth() {
     rooms: rooms?.size ?? 0,
     snakeArenas: snakeManager.arenas.size,
     snakePlayers,
+    paperArenas: paperManager.arenas.size,
+    paperPlayers,
     push: {
       configured: pushNotifications.configured,
       registeredDevices: userStore.pushRegistrationCount(),
@@ -158,6 +163,7 @@ function serviceMetrics() {
   const storage = database.health()
   const queueSize = [...matchQueues.values()].reduce((total, queue) => total + queue.length, 0)
   const snakePlayers = [...snakeManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
+  const paperPlayers = [...paperManager.arenas.values()].reduce((total, arena) => total + arena.players.size, 0)
   return [
     '# HELP dedos_up Whether the service and its storage are healthy.',
     '# TYPE dedos_up gauge',
@@ -180,6 +186,9 @@ function serviceMetrics() {
     '# HELP dedos_snake_arena_players Players currently in public snake arenas.',
     '# TYPE dedos_snake_arena_players gauge',
     `dedos_snake_arena_players ${snakePlayers}`,
+    '# HELP dedos_paper_arena_players Players currently in public territory arenas.',
+    '# TYPE dedos_paper_arena_players gauge',
+    `dedos_paper_arena_players ${paperPlayers}`,
     '# HELP dedos_push_configured Whether Firebase Cloud Messaging credentials are configured.',
     '# TYPE dedos_push_configured gauge',
     `dedos_push_configured ${pushNotifications.configured ? 1 : 0}`,
@@ -432,6 +441,7 @@ function send(ws, obj) {
 // Public Snake uses its own continuously running, server-authoritative arenas.
 // It deliberately does not share the two-player room lifecycle below.
 const snakeManager = new SnakeArenaManager({ send })
+const paperManager = new PaperArenaManager({ send })
 
 function consumeMessageRate(ws) {
   const now = Date.now()
@@ -679,6 +689,7 @@ function gameIdForSocket(ws) {
   const room = rooms.get(ws._room)
   if (room?.players.get(ws._slot) === ws && Object.hasOwn(ACTIVITY_GAMES, room.gameId)) return room.gameId
   if (snakeManager.has(ws)) return 'snake'
+  if (paperManager.has(ws)) return 'paper'
   return Object.hasOwn(ACTIVITY_GAMES, ws._activityGameId) ? ws._activityGameId : null
 }
 
@@ -933,6 +944,7 @@ wss.on('connection', (ws, request) => {
   ws._ip = request.socket.remoteAddress || 'unknown'
   ws._messageRate = { startedAt: Date.now(), count: 0, violations: 0 }
   snakeManager.track(ws)
+  paperManager.track(ws)
   ws.on('pong', () => {
     ws.isAlive = true
   })
@@ -962,6 +974,7 @@ wss.on('connection', (ws, request) => {
       case 'snake_public_join': {
         handleLeave(ws)
         removeFromQueues(ws)
+        paperManager.leave(ws)
         snakeManager.join(ws, { name: msg.name, avatar: msg.avatar, snapshotVersion: msg.snapshotVersion })
         if (ws._userId) broadcastFriendsUpdate(ws._userId)
         break
@@ -983,8 +996,39 @@ wss.on('connection', (ws, request) => {
         break
       }
 
+      case 'paper_public_join': {
+        handleLeave(ws)
+        removeFromQueues(ws)
+        snakeManager.leave(ws)
+        paperManager.join(ws, { name: msg.name, avatar: msg.avatar })
+        if (ws._userId) broadcastFriendsUpdate(ws._userId)
+        break
+      }
+
+      case 'paper_public_steer': {
+        paperManager.steer(ws, msg.angle, msg.sequence)
+        break
+      }
+
+      case 'paper_public_respawn': {
+        paperManager.respawn(ws)
+        break
+      }
+
+      case 'paper_public_sync': {
+        paperManager.sync(ws)
+        break
+      }
+
+      case 'paper_public_leave': {
+        const leftPaper = paperManager.leave(ws)
+        if (leftPaper && ws._userId) broadcastFriendsUpdate(ws._userId)
+        break
+      }
+
       case 'create': {
         snakeManager.leave(ws)
+        paperManager.leave(ws)
         const room = createRoomRecord(msg.gameId || 'unknown', msg.drawTime, msg.settings)
         addRoomPlayer(room, 1, ws, { name: msg.name, avatar: msg.avatar })
         ws._room = room.code
@@ -998,6 +1042,7 @@ wss.on('connection', (ws, request) => {
 
       case 'join': {
         snakeManager.leave(ws)
+        paperManager.leave(ws)
         const requestedCode = String(msg.code || '')
         let room = rooms.get(requestedCode)
         let inviteRecord = null
@@ -1284,6 +1329,7 @@ wss.on('connection', (ws, request) => {
 
       case 'leave': {
         snakeManager.leave(ws)
+        paperManager.leave(ws)
         const room = rooms.get(ws._room)
         if (room && room.gameId === 'bank-el7az' && ws._bankVws) {
           // مغادرة صريحة: تمرير LEAVE_ROOM لبروتوكول البنك ثم الفصل
@@ -1636,6 +1682,7 @@ wss.on('connection', (ws, request) => {
       // ---------------- المباراة السريعة ----------------
       case 'quick_match': {
         snakeManager.leave(ws)
+        paperManager.leave(ws)
         if (ws._room) return
         const gameId = String(msg.gameId || '')
         if (!INVITE_GAMES[gameId]) {
@@ -1684,6 +1731,7 @@ wss.on('connection', (ws, request) => {
     handleLeave(ws)
     removeFromQueues(ws)
     snakeManager.untrack(ws)
+    paperManager.untrack(ws)
     if (ws._userId) {
       const becameOffline = untrackOnline(ws._userId, ws)
       if (becameOffline) broadcastOnlineUserCount()
@@ -1744,6 +1792,20 @@ if (snakeTickTimer.unref) snakeTickTimer.unref()
 const snakeSnapshotTimer = setInterval(() => snakeManager.broadcastSnapshots(), SNAKE_SNAPSHOT_MS)
 if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()
 
+let lastPaperTickAt = performance.now()
+const paperTickTimer = setInterval(() => {
+  const now = performance.now()
+  const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastPaperTickAt) / 1_000))
+  lastPaperTickAt = now
+  const maximumStep = PAPER_TICK_MS / 1_000
+  const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
+  const stepSeconds = elapsedSeconds / stepCount
+  for (let step = 0; step < stepCount; step += 1) paperManager.tick(stepSeconds)
+}, PAPER_TICK_MS)
+if (paperTickTimer.unref) paperTickTimer.unref()
+const paperSnapshotTimer = setInterval(() => paperManager.broadcastSnapshots(), PAPER_SNAPSHOT_MS)
+if (paperSnapshotTimer.unref) paperSnapshotTimer.unref()
+
 httpServer.on('error', (error) => {
   log('error', 'http_server_error', { message: error.message, code: error.code ?? null })
   if (error.code === 'EADDRINUSE' || error.code === 'EACCES') void shutdown('http_server_error', 1)
@@ -1758,6 +1820,8 @@ async function shutdown(reason, exitCode = 0) {
   clearInterval(bankCleanupTimer)
   clearInterval(snakeTickTimer)
   clearInterval(snakeSnapshotTimer)
+  clearInterval(paperTickTimer)
+  clearInterval(paperSnapshotTimer)
 
   for (const room of rooms.values()) clearCompetitiveTimers(room)
   for (const ws of wss.clients) {

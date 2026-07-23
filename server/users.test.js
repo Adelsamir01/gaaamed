@@ -38,6 +38,7 @@ test('public profiles persist sanitized per-game statistics and totals', () => {
     store.updateStats(user.userId, {
       memory: { played: 18.9, won: 7.8, bestScore: 420.7 },
       chess: { played: 3, won: 99 },
+      paper: { played: 4, won: 2, bestScore: 87 },
       unknown: { played: 999, won: 999 },
       snake: { played: 'bad', won: -4, bestScore: Number.NaN },
     })
@@ -47,8 +48,9 @@ test('public profiles persist sanitized per-game statistics and totals', () => {
       stats: {
         chess: { played: 3, won: 3 },
         memory: { played: 18, won: 7, bestScore: 420 },
+        paper: { played: 4, won: 2, bestScore: 87 },
       },
-      totals: { played: 21, won: 10, winRate: 48 },
+      totals: { played: 25, won: 12, winRate: 48 },
     })
   } finally {
     store.close()

@@ -13,11 +13,12 @@
     "server:backup": "node tools/backup-server.mjs",
     "server:verify-backup": "node tools/verify-backup.mjs",
     "smoke:reliability": "node server/smoke-reliability.js",
-    "test:client": "node --test tests/chess-engine.test.ts tests/chess-premove.test.ts tests/favorite-game.test.ts tests/friend-presence.test.ts tests/game-stats.test.ts tests/leaderboard.test.ts tests/memory-config.test.ts tests/snake-motion.test.ts tests/thread-history-queue.test.ts tests/trivia-selection.test.ts",
-    "test:server": "node --test server/chess-game.test.js server/competitive-games.test.js server/database.test.js server/match3-engine.test.js server/presence.test.js server/push-notifications.test.js server/snake-arena.test.js server/users.test.js",
+    "test:client": "node --test tests/chess-engine.test.ts tests/chess-premove.test.ts tests/favorite-game.test.ts tests/friend-presence.test.ts tests/game-stats.test.ts tests/leaderboard.test.ts tests/memory-config.test.ts tests/paper-motion.test.ts tests/snake-motion.test.ts tests/thread-history-queue.test.ts tests/trivia-selection.test.ts",
+    "test:server": "node --test server/chess-game.test.js server/competitive-games.test.js server/database.test.js server/match3-engine.test.js server/paper-arena.test.js server/presence.test.js server/push-notifications.test.js server/snake-arena.test.js server/users.test.js",
     "test:competitive": "node --test server/competitive-games.test.js",
     "smoke:competitive": "node server/smoke-competitive.js",
-    "smoke:snake": "node server/smoke-snake-public.js"
+    "smoke:snake": "node server/smoke-snake-public.js",
+    "smoke:paper": "node server/smoke-paper-public.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",

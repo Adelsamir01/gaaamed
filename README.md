@@ -24,6 +24,7 @@ The Android release is currently prepared for Google Play closed testing as **1.
 | **حجر ورقة مقص** ✂️ | Computer | Friend invite or quick match |
 | **سرعة البرق** ⚡ | Reaction-time challenge | Realtime reaction race |
 | **الثعبان** 🐍 | Large circular arena | Public drop-in arena with bots, minimap, and leaderboard |
+| **سيطر** 🟪 | — | Predictive public territory arena with bots and compact grid updates |
 | **كاسحة الألغام** 💣 | Three difficulties | — |
 | **أربعة تربح** 🔴 | Computer or two players | Friend invite or quick match |
 | **شخبطة** 🎨 | Pass-and-play drawing | Friends, groups, or quick match |
@@ -33,7 +34,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 
 - game invites inside a direct or group chat;
 - one-tap quick matching with another player;
-- the public Snake arena.
+- the public Snake and سيطر arenas.
 
 ## Social experience
 
@@ -53,6 +54,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Bottom navigation preserves mounted sections to avoid reloading on every tap.
 - Offline game logic and rich game assets are packaged into the Android bundle.
 - Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, and a capped public arena.
+- سيطر renders and predicts movement on the phone at 60 FPS while the server sends compact territory patches and validates captures.
 - حلاوة uses transform-based board animation, optimistic online swaps, GPU compositing, cascades, particles, and special-piece effects.
 - Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, release signing, and native-debug metadata configuration.
 - Package: `com.dedos.game`; minimum Android API 24; target API 36.
@@ -123,6 +125,7 @@ Focused reliability and multiplayer smoke commands are also available:
 npm run smoke:reliability
 npm run smoke:competitive
 npm run smoke:snake
+npm run smoke:paper
 ```
 
 ## Build the Android App Bundle

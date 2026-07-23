@@ -19,6 +19,7 @@ const GameLobby = lazy(() => import('@/sections/GameLobby'))
 const GameResults = lazy(() => import('@/sections/GameResults'))
 const OnlineLobby = lazy(() => import('@/sections/OnlineLobby'))
 const OnlineSnake = lazy(() => import('@/games/online/OnlineSnake'))
+const OnlinePaper = lazy(() => import('@/games/online/OnlinePaper'))
 const Chat = lazy(() => import('@/sections/Chat'))
 const ChatRoom = lazy(() => import('@/sections/ChatRoom'))
 const Friends = lazy(() => import('@/sections/Friends'))
@@ -41,7 +42,7 @@ type View =
   | { kind: 'playing'; gameId: string; config: GameConfig }
   | { kind: 'results'; result: GameResult; config: GameConfig }
   | { kind: 'online'; quickGameId?: string; quickSettings?: RoomSettings }
-  | { kind: 'snake-online' }
+  | { kind: 'public-online'; gameId: string }
 
 function Shell() {
   const { onboarded, profile, startGame, finishGame } = useApp()
@@ -71,8 +72,8 @@ function Shell() {
 
   const changeTab = useCallback((nextTab: TabId) => activateTab(nextTab), [activateTab])
 
-  // Online rooms are server-owned; local games report only while this app is in the foreground.
-  const localActivityGameId = view.kind === 'playing' ? view.gameId : null
+  // Room/public-arena presence is server-owned; local games report only while this app is in the foreground.
+  const localActivityGameId = view.kind === 'playing' || view.kind === 'public-online' ? view.gameId : null
   useEffect(() => {
     const syncActivity = () => {
       sendOnline({
@@ -155,8 +156,8 @@ function Shell() {
       activateTab('games', false)
       return
     }
-    if (view.kind === 'snake-online') {
-      setView({ kind: 'lobby', gameId: 'snake' })
+    if (view.kind === 'public-online') {
+      setView({ kind: 'lobby', gameId: view.gameId })
       return
     }
     if (chatRoomId) {
@@ -227,10 +228,11 @@ function Shell() {
   }
 
   // شاشة اللعب
-  if (view.kind === 'snake-online') {
+  if (view.kind === 'public-online') {
+    const PublicArena = view.gameId === 'paper' ? OnlinePaper : OnlineSnake
     return (
       <div className="mx-auto h-dvh max-w-[420px] overflow-hidden safe-top">
-        <OnlineSnake onExit={() => setView({ kind: 'lobby', gameId: 'snake' })} />
+        <PublicArena onExit={() => setView({ kind: 'lobby', gameId: view.gameId })} />
       </div>
     )
   }
@@ -307,8 +309,8 @@ function Shell() {
           onStart={(config) => startOfflineGame(view.gameId, config)}
           onOnline={(difficulty) => {
             setFriendMatchThreadId(null)
-            setView(view.gameId === 'snake'
-              ? { kind: 'snake-online' }
+            setView(game.publicArena
+              ? { kind: 'public-online', gameId: view.gameId }
               : {
                   kind: 'online',
                   quickGameId: view.gameId,
