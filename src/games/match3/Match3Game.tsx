@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { Move, Sparkles, Star, Target } from 'lucide-react'
 import type { GameProps } from '@/games'
+import { haptics } from '@/lib/haptics'
 import { sounds } from '@/lib/sounds'
 import Match3Board, { CandyPiece, SWEET_NAMES } from './Match3Board'
 import { applyMatch3Swap, createMatch3Game, type Match3Cell } from './engine.js'
@@ -64,8 +65,12 @@ export default function Match3Game({ config, onFinish }: GameProps) {
     const won = ending === 'win'
     if (won) {
       sounds.win()
+      haptics.success()
       void confetti({ particleCount: 120, spread: 74, origin: { y: 0.62 }, colors: ['#ff5f91', '#ffbf3f', '#42d99a', '#a86cf7'] })
-    } else sounds.lose()
+    } else {
+      sounds.lose()
+      haptics.warning()
+    }
 
     const timer = window.setTimeout(() => {
       onFinish({
@@ -92,6 +97,7 @@ export default function Match3Game({ config, onFinish }: GameProps) {
     feedbackIdRef.current += 1
     if (!result.accepted) {
       sounds.wrong()
+      haptics.warning()
       setFeedback({ id: feedbackIdRef.current, text: 'لازم تكوّن ٣ قطع', score: 0, good: false })
       window.setTimeout(() => setFeedback(null), 650)
       return
@@ -100,6 +106,8 @@ export default function Match3Game({ config, onFinish }: GameProps) {
     if (result.createdSpecial === 'rainbow') sounds.win()
     else if (result.cascades >= 2 || result.createdSpecial) sounds.correct()
     else sounds.pop()
+    if (result.createdSpecial || result.cascades >= 2) haptics.success()
+    else haptics.move()
     const comboText = result.createdSpecial === 'rainbow'
       ? 'دوامة ألوان! 🌈'
       : result.createdSpecial === 'bomb'

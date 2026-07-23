@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Clock3, Crown, Sparkles, Swords } from 'lucide-react'
 import type { GameProps } from '@/games'
+import { haptics } from '@/lib/haptics'
 import { sounds } from '@/lib/sounds'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
@@ -95,6 +96,8 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
     if (move.createdSpecial === 'rainbow') sounds.win()
     else if (move.cascades >= 2 || move.createdSpecial) sounds.correct()
     else sounds.pop()
+    if (move.createdSpecial || move.cascades >= 2) haptics.success()
+    else haptics.move()
   }, [])
 
   const finish = useCallback((result: Match3EndMessage) => {
@@ -109,6 +112,8 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
     if (outcome === 'win') sounds.win()
     else if (outcome === 'loss') sounds.lose()
     else sounds.pop()
+    if (outcome === 'win') haptics.success()
+    else if (outcome === 'loss') haptics.warning()
     finishTimerRef.current = setTimeout(() => {
       onFinish({
         gameId: 'match3',
@@ -181,6 +186,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
         if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current)
         if (gameRef.current) syncState(gameRef.current)
         sounds.wrong()
+        haptics.warning()
       } else if (event.msg.type === 'match3_end') {
         finish(event.msg as unknown as Match3EndMessage)
       }
@@ -229,6 +235,7 @@ export default function OnlineMatch3({ onFinish }: GameProps) {
     const result = applyMatch3Swap(game, first, second)
     if (!result.accepted) {
       sounds.wrong()
+      haptics.warning()
       return
     }
     const optimistic: OptimisticMove = {

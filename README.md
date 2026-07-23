@@ -54,10 +54,11 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Games are lazy-loaded so the home screen does not retain every game bundle.
 - Bottom navigation preserves mounted sections to avoid reloading on every tap.
 - Offline game logic and rich game assets are packaged into the Android bundle.
-- Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, and a capped public arena.
+- Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, adaptive visual quality, and a capped public arena.
+- The server exposes realtime simulation, snapshot, and event-loop timings through `/health` and `/metrics`.
 - سيطر renders and predicts movement on the phone at 60 FPS while the server sends compact territory patches and validates captures.
-- حلاوة uses transform-based board animation, optimistic online swaps, GPU compositing, cascades, particles, and special-piece effects.
-- Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, release signing, and native-debug metadata configuration.
+- حلاوة uses a WebGL renderer with a DOM fallback, optimistic online swaps, cascades, particles, haptics, and special-piece effects.
+- Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, generated baseline/startup profiles, asynchronous WebView warm-up, Game Mode awareness, release signing, and native-debug metadata configuration.
 - Package: `com.dedos.game`; minimum Android API 24; target API 36.
 
 ## Tech stack

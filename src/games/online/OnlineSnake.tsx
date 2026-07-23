@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { ChevronRight, RefreshCw, Users, WifiOff } from 'lucide-react'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
+import { FrameBudgetController, type RenderQuality } from '@/lib/frameBudget'
+import { getGamePerformanceProfile } from '@/lib/gamePerformance'
 import { sounds } from '@/lib/sounds'
 import {
   advanceTrail,
@@ -76,8 +78,9 @@ const MIN_FRAME_INTERVAL_MS = 1_000 / MAX_RENDER_FPS
 const MINIMAP_INTERVAL_MS = 160
 const STALE_SNAPSHOT_MS = 5_000
 
-function preferredPixelRatio(): number {
-  const mobileCap = window.innerWidth < 768 ? 1.5 : 2
+function preferredPixelRatio(quality: RenderQuality): number {
+  const qualityCap = quality === 'low' ? 1 : quality === 'balanced' ? 1.25 : window.innerWidth < 768 ? 1.5 : 2
+  const mobileCap = window.innerWidth < 768 ? qualityCap : Math.min(2, qualityCap)
   return Math.min(window.devicePixelRatio || 1, mobileCap)
 }
 
@@ -114,6 +117,9 @@ export default function OnlineSnake({ onExit }: Props) {
   const backgroundGradientRef = useRef<CanvasGradient | null>(null)
   const viewportRef = useRef({ width: 0, height: 0 })
   const pixelRatioRef = useRef(1)
+  const qualityRef = useRef<RenderQuality>('high')
+  const frameBudgetRef = useRef(new FrameBudgetController())
+  const resizeSceneRef = useRef<(() => void) | null>(null)
   const worldSizeRef = useRef(DEFAULT_WORLD_SIZE)
   const arenaRadiusRef = useRef(DEFAULT_ARENA_RADIUS)
   const playerIdRef = useRef<string | null>(null)
@@ -141,6 +147,24 @@ export default function OnlineSnake({ onExit }: Props) {
     origin: { x: 0, y: 0 },
     current: { x: 0, y: 0 },
   })
+
+  useEffect(() => {
+    let active = true
+    void getGamePerformanceProfile().then((profile) => {
+      if (!active) return
+      const initialQuality: RenderQuality = profile.mode === 'battery'
+        ? 'low'
+        : profile.lowRamDevice
+          ? 'balanced'
+          : 'high'
+      qualityRef.current = initialQuality
+      frameBudgetRef.current.reset(initialQuality)
+      resizeSceneRef.current?.()
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const finishRun = useCallback((finalScore: number) => {
     if (rewardedLifeRef.current === lifeRef.current) return
@@ -389,7 +413,8 @@ export default function OnlineSnake({ onExit }: Props) {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
-    const ratio = preferredPixelRatio()
+    const quality = qualityRef.current
+    const ratio = preferredPixelRatio(quality)
     const width = rect.width
     const height = rect.height
     const targetWidth = Math.round(width * ratio)
@@ -432,7 +457,7 @@ export default function OnlineSnake({ onExit }: Props) {
       const y = center.y + ((head.y - worldCenter) / arenaRadius) * mapRadius
       const mine = player.id === playerIdRef.current
       context.shadowColor = mine ? '#ffffff' : `hsl(${player.hue}, 88%, 62%)`
-      context.shadowBlur = mine ? 8 : 5
+      context.shadowBlur = quality === 'low' ? 0 : mine ? 8 : 5
       context.fillStyle = mine ? '#f8fafc' : `hsl(${player.hue}, 82%, 58%)`
       context.beginPath()
       context.arc(x, y, mine ? 4.2 : 3, 0, Math.PI * 2)
@@ -450,7 +475,7 @@ export default function OnlineSnake({ onExit }: Props) {
     context.strokeStyle = 'rgba(167, 243, 208, 0.8)'
     context.lineWidth = 2
     context.shadowColor = 'rgba(52, 211, 153, 0.55)'
-    context.shadowBlur = 8
+    context.shadowBlur = quality === 'low' ? 0 : 8
     context.beginPath()
     context.arc(center.x, center.y, mapRadius, 0, Math.PI * 2)
     context.stroke()
@@ -465,6 +490,7 @@ export default function OnlineSnake({ onExit }: Props) {
     const ratio = pixelRatioRef.current
     const camera = cameraRef.current
     const zoom = zoomRef.current
+    const quality = qualityRef.current
     const worldSize = worldSizeRef.current
     const arenaRadius = arenaRadiusRef.current
 
@@ -473,7 +499,7 @@ export default function OnlineSnake({ onExit }: Props) {
     context.fillStyle = backgroundGradientRef.current ?? '#052a25'
     context.fillRect(0, 0, viewport.width, viewport.height)
 
-    const dotSpacing = 38 * zoom
+    const dotSpacing = (quality === 'low' ? 54 : quality === 'balanced' ? 46 : 38) * zoom
     const dotOffsetX = ((viewport.width / 2 - camera.x * zoom) % dotSpacing + dotSpacing) % dotSpacing
     const dotOffsetY = ((viewport.height / 2 - camera.y * zoom) % dotSpacing + dotSpacing) % dotSpacing
     context.fillStyle = 'rgba(167, 243, 208, 0.065)'
@@ -504,7 +530,7 @@ export default function OnlineSnake({ onExit }: Props) {
       context.arc(arenaCenter.x, arenaCenter.y, arenaRadius, 0, Math.PI * 2, true)
       context.fill('evenodd')
       context.shadowColor = 'rgba(251, 113, 133, 0.8)'
-      context.shadowBlur = 18
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 10 : 18
       context.strokeStyle = 'rgba(251, 113, 133, 0.72)'
       context.lineWidth = 18
       context.beginPath()
@@ -526,7 +552,7 @@ export default function OnlineSnake({ onExit }: Props) {
     ))
     for (const food of visibleFoods) {
       context.shadowColor = `hsla(${food.hue}, 95%, 62%, 0.95)`
-      context.shadowBlur = 9
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 5 : 9
       context.fillStyle = `hsl(${food.hue}, 90%, 54%)`
       context.beginPath()
       context.arc(food.x, food.y, food.radius, 0, Math.PI * 2)
@@ -572,7 +598,7 @@ export default function OnlineSnake({ onExit }: Props) {
       context.lineWidth = bodyWidth + 7
       context.stroke()
       context.shadowColor = `hsla(${player.hue}, 88%, 58%, 0.68)`
-      context.shadowBlur = 14
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 7 : 14
       context.strokeStyle = `hsl(${player.hue}, 78%, 52%)`
       context.lineWidth = bodyWidth
       context.stroke()
@@ -582,7 +608,7 @@ export default function OnlineSnake({ onExit }: Props) {
       context.stroke()
 
       context.shadowColor = `hsla(${player.hue}, 90%, 60%, 0.7)`
-      context.shadowBlur = 12
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 6 : 12
       context.fillStyle = `hsl(${player.hue}, 82%, 54%)`
       context.beginPath()
       context.arc(head.x, head.y, headRadius, 0, Math.PI * 2)
@@ -610,7 +636,7 @@ export default function OnlineSnake({ onExit }: Props) {
         context.save()
         context.translate(head.x, crownY)
         context.shadowColor = 'rgba(250, 204, 21, 0.85)'
-        context.shadowBlur = 8
+        context.shadowBlur = quality === 'low' ? 0 : 8
         context.fillStyle = '#facc15'
         context.strokeStyle = '#854d0e'
         context.lineWidth = 1.25
@@ -634,14 +660,17 @@ export default function OnlineSnake({ onExit }: Props) {
         context.restore()
       }
 
-      context.globalAlpha = player.alive ? 0.96 : 0.42
-      context.font = `800 ${11 / zoom}px Cairo, sans-serif`
-      context.textAlign = 'center'
-      context.fillStyle = '#f8fafc'
-      context.shadowColor = 'rgba(0,0,0,0.95)'
-      context.shadowBlur = 7
-      const labelOffset = (player.id === leaderId ? headRadius + 27 : headRadius + 10) / zoom
-      context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - labelOffset)
+      const drawLabel = quality !== 'low' || player.id === playerIdRef.current || player.id === leaderId
+      if (drawLabel) {
+        context.globalAlpha = player.alive ? 0.96 : 0.42
+        context.font = `800 ${11 / zoom}px Cairo, sans-serif`
+        context.textAlign = 'center'
+        context.fillStyle = '#f8fafc'
+        context.shadowColor = 'rgba(0,0,0,0.95)'
+        context.shadowBlur = quality === 'low' ? 0 : 7
+        const labelOffset = (player.id === leaderId ? headRadius + 27 : headRadius + 10) / zoom
+        context.fillText(`${player.avatar} ${player.name} · ${player.score}`, head.x, head.y - labelOffset)
+      }
       context.restore()
     }
 
@@ -676,7 +705,7 @@ export default function OnlineSnake({ onExit }: Props) {
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return
-      const ratio = preferredPixelRatio()
+      const ratio = preferredPixelRatio(qualityRef.current)
       viewportRef.current = { width: rect.width, height: rect.height }
       pixelRatioRef.current = ratio
       canvas.width = Math.round(rect.width * ratio)
@@ -691,10 +720,14 @@ export default function OnlineSnake({ onExit }: Props) {
       }
       renderScene()
     }
+    resizeSceneRef.current = resize
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
-    return () => observer.disconnect()
+    return () => {
+      if (resizeSceneRef.current === resize) resizeSceneRef.current = null
+      observer.disconnect()
+    }
   }, [renderScene])
 
   useEffect(() => {
@@ -704,13 +737,26 @@ export default function OnlineSnake({ onExit }: Props) {
         frame = requestAnimationFrame(loop)
         return
       }
-      const elapsed = Math.min(0.05, (timestamp - (lastFrameRef.current || timestamp)) / 1000)
+      const frameInterval = timestamp - (lastFrameRef.current || timestamp)
+      const elapsed = Math.min(0.05, frameInterval / 1000)
       lastFrameRef.current = timestamp
       updateRenderedPlayers(elapsed)
       renderScene()
       if (timestamp - lastMinimapFrameRef.current >= MINIMAP_INTERVAL_MS) {
         lastMinimapFrameRef.current = timestamp
         renderMinimap()
+      }
+      const budgetSample = frameBudgetRef.current.record(frameInterval)
+      if (budgetSample?.changed) {
+        qualityRef.current = budgetSample.quality
+        resizeSceneRef.current?.()
+        window.dispatchEvent(new CustomEvent('dedos-render-quality', {
+          detail: {
+            game: 'snake',
+            quality: budgetSample.quality,
+            p95FrameMs: Math.round(budgetSample.p95FrameMs * 10) / 10,
+          },
+        }))
       }
       frame = requestAnimationFrame(loop)
     }

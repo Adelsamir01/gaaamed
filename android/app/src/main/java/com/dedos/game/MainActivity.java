@@ -21,6 +21,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(GameDisplayPlugin.class);
+        registerPlugin(GamePerformancePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Capacitor's WebView owns the app navigation. Forward Android's system

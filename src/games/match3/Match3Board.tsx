@@ -1,13 +1,14 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { findMatch3Move, MATCH3_SIZE, type Match3Cell, type Match3State } from './engine.js'
+import PixiMatch3Board from './PixiMatch3Board'
 import type { Match3VisualEffect } from './useMatch3Animator'
 import './match3.css'
 
 export const SWEET_NAMES = ['ملبن ورد', 'برتقالة', 'فستقية', 'توتة', 'نعناية', 'ليمونة'] as const
 
-interface Match3BoardProps {
+export interface Match3BoardProps {
   state: Match3State
   disabled?: boolean
   onSwap: (first: number, second: number) => void
@@ -69,7 +70,7 @@ export function CandyPiece({ cell, mini = false }: { cell: Match3Cell; mini?: bo
   )
 }
 
-function Match3Board({ state, disabled = false, onSwap, celebration = false, visual = null }: Match3BoardProps) {
+function DomMatch3Board({ state, disabled = false, onSwap, celebration = false, visual = null }: Match3BoardProps) {
   const [selection, setSelection] = useState<{ index: number; boardKey: string } | null>(null)
   const [hint, setHint] = useState<{ pair: [number, number]; boardKey: string } | null>(null)
   const [interaction, setInteraction] = useState(0)
@@ -232,6 +233,25 @@ function Match3Board({ state, disabled = false, onSwap, celebration = false, vis
       </div>
     </div>
   )
+}
+
+function webGlAvailable(): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    return Boolean(canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) || canvas.getContext('webgl'))
+  } catch {
+    return false
+  }
+}
+
+function Match3Board(props: Match3BoardProps) {
+  const [gpuFailed, setGpuFailed] = useState(false)
+  const [useGpu] = useState(webGlAvailable)
+  const handleRendererError = useCallback(() => setGpuFailed(true), [])
+  if (useGpu && !gpuFailed) {
+    return <PixiMatch3Board {...props} onRendererError={handleRendererError} />
+  }
+  return <DomMatch3Board {...props} />
 }
 
 export default memo(Match3Board)

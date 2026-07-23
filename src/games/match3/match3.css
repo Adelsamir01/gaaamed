@@ -90,6 +90,48 @@
   box-shadow: inset 0 0 30px rgba(5, 3, 24, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.13);
 }
 
+.match3-pixi-surface {
+  isolation: isolate;
+  background: #171033;
+}
+
+.match3-pixi-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  pointer-events: none;
+}
+
+.match3-pixi-input {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  touch-action: none;
+}
+
+.match3-pixi-input button {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: transparent;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.match3-pixi-input button:focus-visible {
+  outline: 2px solid rgba(255, 246, 184, 0.96);
+  outline-offset: -4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .match3-board-cells {
   position: absolute;
   inset: 0;

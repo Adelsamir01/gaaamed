@@ -1,0 +1,24 @@
+apply plugin: 'com.android.test'
+apply plugin: 'androidx.baselineprofile'
+
+android {
+    namespace = "com.dedos.game.baselineprofile"
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        minSdk = 28
+        targetSdk = rootProject.ext.targetSdkVersion
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    targetProjectPath = ":app"
+}
+
+baselineProfile {
+    useConnectedDevices = true
+}
+
+dependencies {
+    implementation "androidx.test.ext:junit:$androidxJunitVersion"
+    implementation "androidx.benchmark:benchmark-macro-junit4:1.5.0-alpha07"
+}

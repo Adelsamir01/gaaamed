@@ -10,6 +10,7 @@
 import { createServer } from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
@@ -58,6 +59,28 @@ const MESSAGE_RATE_WINDOW_MS = 10_000
 const MESSAGE_RATE_LIMIT = 300
 const PRIVACY_RATE_WINDOW_MS = 60_000
 const PRIVACY_RATE_LIMIT = 10
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
+eventLoopDelay.enable()
+const realtimePerformance = {
+  snakeTickMs: 0,
+  snakeTickMaxMs: 0,
+  snakeSnapshotMs: 0,
+  snakeSnapshotMaxMs: 0,
+  paperTickMs: 0,
+  paperTickMaxMs: 0,
+  paperSnapshotMs: 0,
+  paperSnapshotMaxMs: 0,
+}
+
+function finiteMetric(value, fallback = 0) {
+  return Number.isFinite(value) ? value : fallback
+}
+
+function recordDuration(name, maximumName, startedAt) {
+  const duration = Math.max(0, performance.now() - startedAt)
+  realtimePerformance[name] = duration
+  realtimePerformance[maximumName] = Math.max(realtimePerformance[maximumName], duration)
+}
 
 // بنك الحظ: مخزن الإحصائيات + مدير الغرف (بروتوكول اللعبة الأصلي كما هو)
 const dataDir = resolveDataDir()
@@ -155,6 +178,11 @@ function serviceHealth() {
       configured: pushNotifications.configured,
       registeredDevices: userStore.pushRegistrationCount(),
     },
+    performance: {
+      eventLoopDelayMeanMs: finiteMetric(eventLoopDelay.mean / 1e6),
+      eventLoopDelayP99Ms: finiteMetric(eventLoopDelay.percentile(99) / 1e6),
+      ...realtimePerformance,
+    },
     storage,
     time: Date.now(),
   }
@@ -190,6 +218,22 @@ function serviceMetrics() {
     '# HELP dedos_paper_arena_players Players currently in public territory arenas.',
     '# TYPE dedos_paper_arena_players gauge',
     `dedos_paper_arena_players ${paperPlayers}`,
+    '# HELP dedos_event_loop_delay_seconds Node.js event-loop delay observed by the server.',
+    '# TYPE dedos_event_loop_delay_seconds gauge',
+    `dedos_event_loop_delay_seconds{quantile="mean"} ${finiteMetric(eventLoopDelay.mean / 1e9)}`,
+    `dedos_event_loop_delay_seconds{quantile="p99"} ${finiteMetric(eventLoopDelay.percentile(99) / 1e9)}`,
+    '# HELP dedos_realtime_loop_duration_seconds Latest realtime simulation/broadcast duration.',
+    '# TYPE dedos_realtime_loop_duration_seconds gauge',
+    `dedos_realtime_loop_duration_seconds{game="snake",phase="tick"} ${realtimePerformance.snakeTickMs / 1_000}`,
+    `dedos_realtime_loop_duration_seconds{game="snake",phase="snapshot"} ${realtimePerformance.snakeSnapshotMs / 1_000}`,
+    `dedos_realtime_loop_duration_seconds{game="paper",phase="tick"} ${realtimePerformance.paperTickMs / 1_000}`,
+    `dedos_realtime_loop_duration_seconds{game="paper",phase="snapshot"} ${realtimePerformance.paperSnapshotMs / 1_000}`,
+    '# HELP dedos_realtime_loop_max_duration_seconds Maximum realtime simulation/broadcast duration since startup.',
+    '# TYPE dedos_realtime_loop_max_duration_seconds gauge',
+    `dedos_realtime_loop_max_duration_seconds{game="snake",phase="tick"} ${realtimePerformance.snakeTickMaxMs / 1_000}`,
+    `dedos_realtime_loop_max_duration_seconds{game="snake",phase="snapshot"} ${realtimePerformance.snakeSnapshotMaxMs / 1_000}`,
+    `dedos_realtime_loop_max_duration_seconds{game="paper",phase="tick"} ${realtimePerformance.paperTickMaxMs / 1_000}`,
+    `dedos_realtime_loop_max_duration_seconds{game="paper",phase="snapshot"} ${realtimePerformance.paperSnapshotMaxMs / 1_000}`,
     '# HELP dedos_push_configured Whether Firebase Cloud Messaging credentials are configured.',
     '# TYPE dedos_push_configured gauge',
     `dedos_push_configured ${pushNotifications.configured ? 1 : 0}`,
@@ -1786,6 +1830,7 @@ httpServer.listen(PORT, () => {
 
 let lastSnakeTickAt = performance.now()
 const snakeTickTimer = setInterval(() => {
+  const tickStartedAt = performance.now()
   const now = performance.now()
   const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastSnakeTickAt) / 1_000))
   lastSnakeTickAt = now
@@ -1793,13 +1838,19 @@ const snakeTickTimer = setInterval(() => {
   const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
   const stepSeconds = elapsedSeconds / stepCount
   for (let step = 0; step < stepCount; step += 1) snakeManager.tick(stepSeconds)
+  recordDuration('snakeTickMs', 'snakeTickMaxMs', tickStartedAt)
 }, SNAKE_TICK_MS)
 if (snakeTickTimer.unref) snakeTickTimer.unref()
-const snakeSnapshotTimer = setInterval(() => snakeManager.broadcastSnapshots(), SNAKE_SNAPSHOT_MS)
+const snakeSnapshotTimer = setInterval(() => {
+  const startedAt = performance.now()
+  snakeManager.broadcastSnapshots()
+  recordDuration('snakeSnapshotMs', 'snakeSnapshotMaxMs', startedAt)
+}, SNAKE_SNAPSHOT_MS)
 if (snakeSnapshotTimer.unref) snakeSnapshotTimer.unref()
 
 let lastPaperTickAt = performance.now()
 const paperTickTimer = setInterval(() => {
+  const tickStartedAt = performance.now()
   const now = performance.now()
   const elapsedSeconds = Math.min(0.15, Math.max(0.001, (now - lastPaperTickAt) / 1_000))
   lastPaperTickAt = now
@@ -1807,9 +1858,14 @@ const paperTickTimer = setInterval(() => {
   const stepCount = Math.max(1, Math.ceil(elapsedSeconds / maximumStep))
   const stepSeconds = elapsedSeconds / stepCount
   for (let step = 0; step < stepCount; step += 1) paperManager.tick(stepSeconds)
+  recordDuration('paperTickMs', 'paperTickMaxMs', tickStartedAt)
 }, PAPER_TICK_MS)
 if (paperTickTimer.unref) paperTickTimer.unref()
-const paperSnapshotTimer = setInterval(() => paperManager.broadcastSnapshots(), PAPER_SNAPSHOT_MS)
+const paperSnapshotTimer = setInterval(() => {
+  const startedAt = performance.now()
+  paperManager.broadcastSnapshots()
+  recordDuration('paperSnapshotMs', 'paperSnapshotMaxMs', startedAt)
+}, PAPER_SNAPSHOT_MS)
 if (paperSnapshotTimer.unref) paperSnapshotTimer.unref()
 
 httpServer.on('error', (error) => {
@@ -1826,6 +1882,7 @@ async function shutdown(reason, exitCode = 0) {
   clearInterval(bankCleanupTimer)
   clearInterval(snakeTickTimer)
   clearInterval(snakeSnapshotTimer)
+  eventLoopDelay.disable()
   clearInterval(paperTickTimer)
   clearInterval(paperSnapshotTimer)
 
