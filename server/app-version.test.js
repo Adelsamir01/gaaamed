@@ -6,9 +6,9 @@ test('publishes the current Android release by default', () => {
   assert.deepEqual(androidReleaseInfo({}), {
     platform: 'android',
     packageName: 'com.dedos.game',
-    latestVersion: '1.11.0',
-    latestVersionCode: 17,
-    minimumVersionCode: 17,
+    latestVersion: '1.12.0',
+    latestVersionCode: 18,
+    minimumVersionCode: 18,
     updateUrl: 'https://play.google.com/store/apps/details?id=com.dedos.game',
   })
 })

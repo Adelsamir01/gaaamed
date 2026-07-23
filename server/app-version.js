@@ -1,5 +1,5 @@
-const DEFAULT_LATEST_VERSION = '1.11.0'
-const DEFAULT_LATEST_VERSION_CODE = 17
+const DEFAULT_LATEST_VERSION = '1.12.0'
+const DEFAULT_LATEST_VERSION_CODE = 18
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.dedos.game'
 
 function integerSetting(value, fallback) {
