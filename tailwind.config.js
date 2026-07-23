@@ -7,6 +7,7 @@ module.exports = {
     './index.html',
     './src/{App,main}.{ts,tsx}',
     './src/{data,games,lib,online,sections,store,types}/**/*.{ts,tsx}',
+    './src/components/AppUpdateDialog.tsx',
     './src/components/ui/{alert-dialog,button,dialog,switch}.tsx',
   ],
   theme: {
