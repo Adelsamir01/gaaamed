@@ -35,6 +35,18 @@ The installer copies the release to `/opt/dedos`, stores the token as `/etc/dedo
 
 Configuration is in `/etc/dedos/dedos.env`. Never commit the tunnel token or that installed environment file.
 
+### Publishing an Android update prompt
+
+The app checks `https://dedos.adelsamir.com/api/app-version` at startup and when it returns to the foreground. After a new Play release is available to testers, update these values in `/etc/dedos/dedos.env` and redeploy the app service:
+
+```bash
+DEDOS_ANDROID_LATEST_VERSION=1.12.0
+DEDOS_ANDROID_LATEST_VERSION_CODE=18
+DEDOS_ANDROID_MIN_VERSION_CODE=0
+```
+
+Keep `DEDOS_ANDROID_MIN_VERSION_CODE=0` for a dismissible update reminder. Set it to a released version code only when older builds must be blocked; never announce a version before Google Play has finished publishing it.
+
 ## Deploy and rollback
 
 Copy the new release tree into `/opt/dedos`, then run:

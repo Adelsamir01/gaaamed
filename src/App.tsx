@@ -9,6 +9,7 @@ import { getGame } from '@/games'
 import { TabBar, type TabId } from '@/sections/TabBar'
 import { sounds } from '@/lib/sounds'
 import { consumePendingNotificationThread, OPEN_NOTIFICATION_CHAT_EVENT } from '@/lib/pushNotifications'
+import AppUpdateDialog from '@/components/AppUpdateDialog'
 
 // Only the shell and active screen are needed at startup. The rest are fetched
 // from the local app bundle on demand, reducing parse time and peak JS memory.
@@ -388,6 +389,7 @@ export default function App() {
           <Shell />
         </Suspense>
       </OnlineProvider>
+      <AppUpdateDialog />
       <Toaster position="top-center" richColors dir="rtl" toastOptions={{ style: { fontFamily: 'Cairo, sans-serif' } }} />
     </AppProvider>
   )

@@ -41,6 +41,7 @@ import { PaperArenaManager, PAPER_SNAPSHOT_MS, PAPER_TICK_MS } from './paper-are
 import { applyChessMove, chessClock, chessSnapshot, createChessGame, expireChessClock, resignChessGame } from './chess-game.js'
 import { createFirebaseMessaging, PushNotificationService } from './push-notifications.js'
 import { activeGameForUser, activeInviteForUser, onlineUserCount, trackPresence, untrackPresence } from './presence.js'
+import { androidReleaseInfo } from './app-version.js'
 
 const PORT = Number(process.env.PORT) || 8787
 const SHAKHBATA_MAX = 8
@@ -278,6 +279,11 @@ const httpServer = createServer((req, res) => {
       'access-control-allow-origin': '*',
     })
     res.end(JSON.stringify(bankStats.getSnapshot(bankManager.getLiveStats())))
+    return
+  }
+  if (url === '/api/app-version') {
+    res.setHeader('access-control-allow-origin', '*')
+    sendJson(res, 200, androidReleaseInfo())
     return
   }
 

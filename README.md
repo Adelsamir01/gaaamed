@@ -43,6 +43,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Direct and group chat with unread counts, reactions, persistent history, and game invites.
 - Native Android notifications for messages and invites; tapping one opens the exact chat.
 - Foreground notifications stay inside the app, remain clickable, and do not duplicate the system notification.
+- A friendly Android update prompt compares the installed build with the server's latest Google Play release.
 - Finished game cards show the winner, while pending invites can be reopened after leaving the lobby.
 - Player profiles expose game statistics; the leaderboard shows the points used for ranking.
 - The home highlight becomes each player's own favourite game after enough plays.
@@ -161,6 +162,7 @@ When the app is backgrounded, a message or game invite can appear on the lock sc
 | `https://dedos.adelsamir.com/privacy` | Complete Arabic/English privacy policy |
 | `https://dedos.adelsamir.com/delete-account` | Account and privacy-request flow |
 | `https://dedos.adelsamir.com/health` | Server, database, and push health |
+| `https://dedos.adelsamir.com/api/app-version` | Latest Android release used by the in-app update prompt |
 
 Operational setup, backup verification, restart behaviour, and recovery are documented in [docs/SERVER-OPERATIONS.md](docs/SERVER-OPERATIONS.md).
 
