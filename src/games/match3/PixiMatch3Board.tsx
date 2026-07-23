@@ -22,6 +22,7 @@ interface PixiMatch3BoardProps {
 
 interface PointerStart {
   index: number
+  pointerId: number
   x: number
   y: number
 }
@@ -82,6 +83,21 @@ function swipeTarget(index: number, dx: number, dy: number): number | null {
   else nextRow += dy > 0 ? 1 : -1
   if (nextRow < 0 || nextRow >= MATCH3_SIZE || nextCol < 0 || nextCol >= MATCH3_SIZE) return null
   return nextRow * MATCH3_SIZE + nextCol
+}
+
+function preferredCanvasResolution(): number {
+  return Math.max(1, Math.min(window.devicePixelRatio || 1, 3))
+}
+
+function cellIndexAtPoint(host: HTMLElement, clientX: number, clientY: number): number | null {
+  const bounds = host.getBoundingClientRect()
+  if (bounds.width <= 0 || bounds.height <= 0) return null
+  const relativeX = clientX - bounds.left
+  const relativeY = clientY - bounds.top
+  if (relativeX < 0 || relativeY < 0 || relativeX >= bounds.width || relativeY >= bounds.height) return null
+  const col = Math.min(MATCH3_SIZE - 1, Math.floor((relativeX / bounds.width) * MATCH3_SIZE))
+  const row = Math.min(MATCH3_SIZE - 1, Math.floor((relativeY / bounds.height) * MATCH3_SIZE))
+  return row * MATCH3_SIZE + col
 }
 
 function candySignature(cell: Match3Cell): string {
@@ -213,6 +229,7 @@ export default function PixiMatch3Board({
   const cellIndexRef = useRef(new Map<number, number>())
   const particlesRef = useRef<BurstParticle[]>([])
   const boardSizeRef = useRef(0)
+  const renderResolutionRef = useRef(0)
   const latestStateRef = useRef(state)
   const latestVisualRef = useRef(visual)
   const lastBurstKeyRef = useRef(-1)
@@ -371,6 +388,8 @@ export default function PixiMatch3Board({
 
     const start = async () => {
       try {
+        const initialSize = Math.max(1, Math.min(host.clientWidth, host.clientHeight))
+        const initialResolution = preferredCanvasResolution()
         const app = new Application()
         await app.init({
           antialias: true,
@@ -378,8 +397,9 @@ export default function PixiMatch3Board({
           backgroundAlpha: 0,
           preference: 'webgl',
           powerPreference: 'high-performance',
-          resolution: Math.min(window.devicePixelRatio || 1, window.innerWidth < 768 ? 1.5 : 2),
-          resizeTo: host,
+          width: initialSize,
+          height: initialSize,
+          resolution: initialResolution,
         })
         if (cancelled) {
           app.destroy(true)
@@ -401,8 +421,17 @@ export default function PixiMatch3Board({
 
         const resize = () => {
           const size = Math.min(host.clientWidth, host.clientHeight)
-          if (size <= 0 || Math.abs(size - boardSizeRef.current) < 0.5) return
+          const resolution = preferredCanvasResolution()
+          if (
+            size <= 0
+            || (
+              Math.abs(size - boardSizeRef.current) < 0.5
+              && Math.abs(resolution - renderResolutionRef.current) < 0.01
+            )
+          ) return
           boardSizeRef.current = size
+          renderResolutionRef.current = resolution
+          app.renderer.resize(size, size, resolution)
           drawBoardBackground(background, size)
           const cellSize = size / MATCH3_SIZE
           for (const view of viewsRef.current.values()) {
@@ -541,25 +570,37 @@ export default function PixiMatch3Board({
     else setSelection({ index, boardKey })
   }
 
-  const pointerDown = (event: ReactPointerEvent<HTMLButtonElement>, index: number) => {
-    if (disabled) return
-    pointerRef.current = { index, x: event.clientX, y: event.clientY }
+  const pointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (disabled || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const index = cellIndexAtPoint(event.currentTarget, event.clientX, event.clientY)
+    if (index === null || !latestStateRef.current.board[index]) return
+    event.preventDefault()
+    pointerRef.current = {
+      index,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
-  const pointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const pointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = pointerRef.current
+    if (!start || start.pointerId !== event.pointerId) return
     pointerRef.current = null
-    if (!start || disabled) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (disabled || !latestStateRef.current.board[start.index]) return
+    event.preventDefault()
     const dx = event.clientX - start.x
     const dy = event.clientY - start.y
-    if (Math.hypot(dx, dy) >= 14) {
+    if (Math.hypot(dx, dy) >= 9) {
       const target = swipeTarget(start.index, dx, dy)
-      if (target !== null) attempt(start.index, target)
+      if (target !== null && latestStateRef.current.board[target]) attempt(start.index, target)
     } else {
       tap(start.index)
     }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
   return (
@@ -570,7 +611,19 @@ export default function PixiMatch3Board({
       visual?.phase === 'burst' && visual.cascade >= 2 && 'match3-board-impact',
     )}>
       <div ref={hostRef} className="match3-board match3-pixi-surface">
-        <div className="match3-pixi-input" role="grid" aria-label="لوحة الحلوى ٨ في ٨">
+        <div
+          className="match3-pixi-input"
+          role="grid"
+          aria-label="لوحة الحلوى ٨ في ٨"
+          onPointerDown={pointerDown}
+          onPointerUp={pointerUp}
+          onPointerCancel={(event) => {
+            if (pointerRef.current?.pointerId === event.pointerId) pointerRef.current = null
+          }}
+          onLostPointerCapture={() => {
+            pointerRef.current = null
+          }}
+        >
           {state.board.map((cell, index) => {
             const row = Math.floor(index / MATCH3_SIZE)
             const col = index % MATCH3_SIZE
@@ -582,11 +635,6 @@ export default function PixiMatch3Board({
                 disabled={disabled || !cell}
                 aria-label={`حلوى، الصف ${row + 1} العمود ${col + 1}`}
                 aria-selected={selected === index}
-                onPointerDown={(event) => pointerDown(event, index)}
-                onPointerUp={pointerUp}
-                onPointerCancel={() => {
-                  pointerRef.current = null
-                }}
                 onClick={(event) => {
                   if (event.detail === 0) tap(index)
                 }}
