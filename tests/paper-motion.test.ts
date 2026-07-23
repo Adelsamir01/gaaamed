@@ -6,6 +6,7 @@ import {
   cellCenter,
   cellIndexAt,
   decodeOwnershipRle,
+  predictionTargetAngle,
   reconcilePaperPosition,
 } from '../src/games/online/paperMotion.ts'
 
@@ -20,6 +21,11 @@ test('authoritative corrections blend instead of snapping the player', () => {
   const corrected = reconcilePaperPosition({ x: 10, y: 20 }, { x: 30, y: 40 }, 0.25)
 
   assert.deepEqual(corrected, { x: 15, y: 25 })
+})
+
+test('unacknowledged steering is predicted instead of fighting the local direction', () => {
+  assert.equal(predictionTargetAngle(0, Math.PI / 2, 4, 5), Math.PI / 2)
+  assert.equal(predictionTargetAngle(0, Math.PI / 2, 5, 5), 0)
 })
 
 test('ownership full states and compact patches produce the same local grid', () => {

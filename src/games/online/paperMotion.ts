@@ -13,6 +13,15 @@ export function angleDifference(from: number, to: number): number {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
 }
 
+export function predictionTargetAngle(
+  authoritativeTarget: number,
+  desiredTarget: number,
+  acknowledgedSequence: number,
+  latestInputSequence: number,
+): number {
+  return latestInputSequence > acknowledgedSequence ? desiredTarget : authoritativeTarget
+}
+
 export function advancePaperPosition(
   point: PaperPoint,
   angle: number,

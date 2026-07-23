@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { ChevronRight, RefreshCw, Users, WifiOff } from 'lucide-react'
 import { useOnline } from '@/online/OnlineContext'
 import { useApp } from '@/store/AppContext'
+import { FrameBudgetController, type RenderQuality } from '@/lib/frameBudget'
+import { getGamePerformanceProfile } from '@/lib/gamePerformance'
 import { sounds } from '@/lib/sounds'
 import {
   advancePaperPosition,
@@ -10,6 +12,7 @@ import {
   cellCenter,
   cellIndexAt,
   decodeOwnershipRle,
+  predictionTargetAngle,
   reconcilePaperPosition,
   type PaperPoint,
   type TerritoryPatch,
@@ -55,9 +58,9 @@ interface RenderPlayer extends ArenaPlayer {
 
 interface PointerState {
   active: boolean
-  start: PaperPoint
-  last: PaperPoint
-  travelled: number
+  pointerId: number | null
+  origin: PaperPoint
+  current: PaperPoint
 }
 
 interface CaptureBurst {
@@ -83,23 +86,15 @@ const DEFAULT_TURN_RATE = 7.4
 const MIN_FRAME_INTERVAL_MS = 1_000 / 60
 const MINIMAP_INTERVAL_MS = 180
 const STALE_SNAPSHOT_MS = 5_000
+const TERRITORY_TEXTURE_SCALE = 8
 
-function preferredPixelRatio(): number {
-  const mobileCap = window.innerWidth < 768 ? 1.5 : 2
-  return Math.min(window.devicePixelRatio || 1, mobileCap)
+function preferredPixelRatio(quality: RenderQuality): number {
+  const cap = quality === 'low' ? 1.5 : quality === 'balanced' ? 2 : 3
+  return Math.max(1, Math.min(window.devicePixelRatio || 1, cap))
 }
 
 function normalizeAngle(angle: number): number {
   return Math.atan2(Math.sin(angle), Math.cos(angle))
-}
-
-function colorToRgb(color: string): [number, number, number] {
-  const value = /^#[0-9a-f]{6}$/i.test(color) ? color.slice(1) : '22c55e'
-  return [
-    Number.parseInt(value.slice(0, 2), 16),
-    Number.parseInt(value.slice(2, 4), 16),
-    Number.parseInt(value.slice(4, 6), 16),
-  ]
 }
 
 function copyPlayer(player: ArenaPlayer): RenderPlayer {
@@ -126,6 +121,102 @@ function traceSmoothPath(context: CanvasRenderingContext2D, points: PaperPoint[]
   if (points.length > 1) context.lineTo(points.at(-1)!.x, points.at(-1)!.y)
 }
 
+interface TerritoryEdge {
+  from: PaperPoint
+  to: PaperPoint
+  direction: number
+  used: boolean
+}
+
+function smoothClosedLoop(points: PaperPoint[], iterations = 3): PaperPoint[] {
+  let smoothed = points
+  for (let pass = 0; pass < iterations && smoothed.length >= 3; pass += 1) {
+    const next: PaperPoint[] = []
+    for (let index = 0; index < smoothed.length; index += 1) {
+      const point = smoothed[index]
+      const following = smoothed[(index + 1) % smoothed.length]
+      next.push(
+        { x: point.x * 0.75 + following.x * 0.25, y: point.y * 0.75 + following.y * 0.25 },
+        { x: point.x * 0.25 + following.x * 0.75, y: point.y * 0.25 + following.y * 0.75 },
+      )
+    }
+    smoothed = next
+  }
+  return smoothed
+}
+
+function traceRoundedTerritory(
+  context: CanvasRenderingContext2D,
+  owners: Uint16Array,
+  gridSize: number,
+  owner: number,
+  scale: number,
+): void {
+  const edges: TerritoryEdge[] = []
+  const byStart = new Map<string, TerritoryEdge[]>()
+  const addEdge = (from: PaperPoint, to: PaperPoint, direction: number) => {
+    const edge = { from, to, direction, used: false }
+    edges.push(edge)
+    const key = `${from.x},${from.y}`
+    const starting = byStart.get(key)
+    if (starting) starting.push(edge)
+    else byStart.set(key, [edge])
+  }
+
+  for (let index = 0; index < owners.length; index += 1) {
+    if (owners[index] !== owner) continue
+    const column = index % gridSize
+    const row = Math.floor(index / gridSize)
+    if (row === 0 || owners[index - gridSize] !== owner) {
+      addEdge({ x: column, y: row }, { x: column + 1, y: row }, 0)
+    }
+    if (column + 1 === gridSize || owners[index + 1] !== owner) {
+      addEdge({ x: column + 1, y: row }, { x: column + 1, y: row + 1 }, 1)
+    }
+    if (row + 1 === gridSize || owners[index + gridSize] !== owner) {
+      addEdge({ x: column + 1, y: row + 1 }, { x: column, y: row + 1 }, 2)
+    }
+    if (column === 0 || owners[index - 1] !== owner) {
+      addEdge({ x: column, y: row + 1 }, { x: column, y: row }, 3)
+    }
+  }
+
+  for (const firstEdge of edges) {
+    if (firstEdge.used) continue
+    const loop: PaperPoint[] = [firstEdge.from]
+    let edge: TerritoryEdge | undefined = firstEdge
+    while (edge && !edge.used && loop.length <= edges.length + 1) {
+      edge.used = true
+      loop.push(edge.to)
+      const candidates: TerritoryEdge[] = (byStart.get(`${edge.to.x},${edge.to.y}`) ?? [])
+        .filter((candidate) => !candidate.used)
+      if (candidates.length === 0) break
+      const incomingDirection: number = edge.direction
+      let nextEdge: TerritoryEdge = candidates[0]
+      const nextDelta: number = (nextEdge.direction - incomingDirection + 4) % 4
+      let nextRank: number = nextDelta === 1 ? 0 : nextDelta === 0 ? 1 : nextDelta === 3 ? 2 : 3
+      for (let index = 1; index < candidates.length; index += 1) {
+        const candidate: TerritoryEdge = candidates[index]
+        const delta: number = (candidate.direction - incomingDirection + 4) % 4
+        const rank: number = delta === 1 ? 0 : delta === 0 ? 1 : delta === 3 ? 2 : 3
+        if (rank >= nextRank) continue
+        nextEdge = candidate
+        nextRank = rank
+      }
+      edge = nextEdge
+    }
+    const last = loop.at(-1)
+    if (!last || last.x !== loop[0].x || last.y !== loop[0].y || loop.length < 4) continue
+    loop.pop()
+    const smoothed = smoothClosedLoop(loop).map((point) => ({ x: point.x * scale, y: point.y * scale }))
+    context.moveTo(smoothed[0].x, smoothed[0].y)
+    for (let index = 1; index < smoothed.length; index += 1) {
+      context.lineTo(smoothed[index].x, smoothed[index].y)
+    }
+    context.closePath()
+  }
+}
+
 export default function OnlinePaper({ onExit }: Props) {
   const { reconnect, sendRaw, status, subscribe } = useOnline()
   const { profile, finishGame } = useApp()
@@ -142,6 +233,9 @@ export default function OnlinePaper({ onExit }: Props) {
   const backgroundGradientRef = useRef<CanvasGradient | null>(null)
   const viewportRef = useRef({ width: 0, height: 0 })
   const pixelRatioRef = useRef(1)
+  const qualityRef = useRef<RenderQuality>('high')
+  const frameBudgetRef = useRef(new FrameBudgetController())
+  const resizeSceneRef = useRef<(() => void) | null>(null)
   const gridSizeRef = useRef(DEFAULT_GRID_SIZE)
   const cellSizeRef = useRef(DEFAULT_CELL_SIZE)
   const worldSizeRef = useRef(DEFAULT_WORLD_SIZE)
@@ -182,10 +276,29 @@ export default function OnlinePaper({ onExit }: Props) {
   const captureBurstsRef = useRef<CaptureBurst[]>([])
   const pointerRef = useRef<PointerState>({
     active: false,
-    start: { x: 0, y: 0 },
-    last: { x: 0, y: 0 },
-    travelled: 0,
+    pointerId: null,
+    origin: { x: 0, y: 0 },
+    current: { x: 0, y: 0 },
   })
+
+  useEffect(() => {
+    let active = true
+    void getGamePerformanceProfile().then((performanceProfile) => {
+      if (!active) return
+      const initialQuality: RenderQuality = performanceProfile.mode === 'battery'
+        ? 'low'
+        : performanceProfile.lowRamDevice
+          ? 'balanced'
+          : 'high'
+      qualityRef.current = initialQuality
+      frameBudgetRef.current.reset(initialQuality)
+      territoryDirtyRef.current = true
+      resizeSceneRef.current?.()
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const finishRun = useCallback((finalScore: number) => {
     if (rewardedLifeRef.current === lifeRef.current) return
@@ -481,10 +594,19 @@ export default function OnlinePaper({ onExit }: Props) {
     const turnRate = snapshotRef.current.turnRate
     for (const rendered of renderPlayersRef.current.values()) {
       if (!rendered.alive) continue
+      const mine = rendered.id === playerIdRef.current
+      const authoritativePredictionTarget = mine
+        ? predictionTargetAngle(
+            rendered.serverTargetAngle,
+            desiredAngleRef.current,
+            rendered.lastInputSeq,
+            inputSequenceRef.current,
+          )
+        : rendered.serverTargetAngle
       const serverAdvanced = advancePaperPosition(
         { x: rendered.serverX, y: rendered.serverY },
         rendered.serverAngle,
-        rendered.serverTargetAngle,
+        authoritativePredictionTarget,
         speed,
         turnRate,
         elapsed,
@@ -493,11 +615,14 @@ export default function OnlinePaper({ onExit }: Props) {
       rendered.serverY = serverAdvanced.y
       rendered.serverAngle = serverAdvanced.angle
 
-      const mine = rendered.id === playerIdRef.current
+      const positionError = Math.hypot(rendered.serverX - rendered.x, rendered.serverY - rendered.y)
+      const correctionRate = mine
+        ? Math.min(5, 2.4 + positionError / 55)
+        : Math.min(8, 5.5 + positionError / 45)
       const correction = reconcilePaperPosition(
         rendered,
         { x: rendered.serverX, y: rendered.serverY },
-        1 - Math.exp(-elapsed * (mine ? 5.2 : 8.5)),
+        1 - Math.exp(-elapsed * correctionRate),
       )
       const targetAngle = mine ? desiredAngleRef.current : rendered.serverTargetAngle
       const advanced = advancePaperPosition(
@@ -563,32 +688,36 @@ export default function OnlinePaper({ onExit }: Props) {
       texture = document.createElement('canvas')
       territoryTextureRef.current = texture
     }
-    if (texture.width !== gridSize || texture.height !== gridSize) {
-      texture.width = gridSize
-      texture.height = gridSize
+    const textureSize = gridSize * TERRITORY_TEXTURE_SCALE
+    if (texture.width !== textureSize || texture.height !== textureSize) {
+      texture.width = textureSize
+      texture.height = textureSize
     }
-    const context = texture.getContext('2d')
-    if (!context) return
-    const image = context.createImageData(gridSize, gridSize)
+    const textureContext = texture.getContext('2d')
+    if (!textureContext) return
     const owners = ownersRef.current
     const palette = paletteRef.current
-    for (let index = 0; index < owners.length; index += 1) {
-      const offset = index * 4
-      const owner = owners[index]
-      if (owner === 0) {
-        image.data[offset] = 12
-        image.data[offset + 1] = 22
-        image.data[offset + 2] = 38
-        image.data[offset + 3] = 255
-        continue
-      }
-      const [red, green, blue] = colorToRgb(palette.get(owner) ?? '#64748b')
-      image.data[offset] = red
-      image.data[offset + 1] = green
-      image.data[offset + 2] = blue
-      image.data[offset + 3] = 225
+    textureContext.setTransform(1, 0, 0, 1, 0, 0)
+    textureContext.fillStyle = '#0c1626'
+    textureContext.fillRect(0, 0, textureSize, textureSize)
+    textureContext.imageSmoothingEnabled = true
+    textureContext.imageSmoothingQuality = 'high'
+
+    const ownerIds = new Set<number>()
+    for (const owner of owners) {
+      if (owner > 0) ownerIds.add(owner)
     }
-    context.putImageData(image, 0, 0)
+    for (const owner of ownerIds) {
+      textureContext.save()
+      textureContext.beginPath()
+      traceRoundedTerritory(textureContext, owners, gridSize, owner, TERRITORY_TEXTURE_SCALE)
+      textureContext.fillStyle = palette.get(owner) ?? '#64748b'
+      textureContext.globalAlpha = 0.88
+      textureContext.shadowColor = palette.get(owner) ?? '#64748b'
+      textureContext.shadowBlur = 1.5
+      textureContext.fill('evenodd')
+      textureContext.restore()
+    }
     territoryDirtyRef.current = false
   }, [])
 
@@ -597,7 +726,7 @@ export default function OnlinePaper({ onExit }: Props) {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
-    const ratio = preferredPixelRatio()
+    const ratio = preferredPixelRatio(qualityRef.current)
     const targetWidth = Math.round(rect.width * ratio)
     const targetHeight = Math.round(rect.height * ratio)
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -609,7 +738,8 @@ export default function OnlinePaper({ onExit }: Props) {
     if (!context || !texture) return
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, rect.width, rect.height)
-    context.imageSmoothingEnabled = false
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
     context.drawImage(texture, 0, 0, rect.width, rect.height)
     context.strokeStyle = 'rgba(255,255,255,0.55)'
     context.lineWidth = 1.5
@@ -639,6 +769,7 @@ export default function OnlinePaper({ onExit }: Props) {
     rebuildTerritoryTexture()
     const texture = territoryTextureRef.current
     const ratio = pixelRatioRef.current
+    const quality = qualityRef.current
     const camera = cameraRef.current
     const zoom = zoomRef.current
     const worldSize = worldSizeRef.current
@@ -652,7 +783,7 @@ export default function OnlinePaper({ onExit }: Props) {
     context.fillStyle = backgroundGradientRef.current ?? '#07111f'
     context.fillRect(0, 0, viewport.width, viewport.height)
 
-    const dotSpacing = 32 * zoom
+    const dotSpacing = (quality === 'low' ? 52 : quality === 'balanced' ? 40 : 32) * zoom
     const dotOffsetX = ((viewport.width / 2 - camera.x * zoom) % dotSpacing + dotSpacing) % dotSpacing
     const dotOffsetY = ((viewport.height / 2 - camera.y * zoom) % dotSpacing + dotSpacing) % dotSpacing
     context.fillStyle = 'rgba(255,255,255,0.045)'
@@ -672,28 +803,18 @@ export default function OnlinePaper({ onExit }: Props) {
 
     context.save()
     context.shadowColor = 'rgba(14,165,233,0.3)'
-    context.shadowBlur = 30
+    context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 14 : 24
     context.fillStyle = '#0c1626'
     context.fillRect(0, 0, worldSize, worldSize)
     context.restore()
     if (texture) {
-      context.imageSmoothingEnabled = false
-      context.drawImage(texture, 0, 0, gridSize, gridSize, 0, 0, worldSize, worldSize)
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = quality === 'high' ? 'high' : 'medium'
+      context.drawImage(texture, 0, 0, worldSize, worldSize)
     }
 
-    context.strokeStyle = 'rgba(255,255,255,0.045)'
-    context.lineWidth = 1
-    context.beginPath()
-    for (let cell = 0; cell <= gridSize; cell += 4) {
-      const coordinate = cell * cellSize
-      context.moveTo(coordinate, 0)
-      context.lineTo(coordinate, worldSize)
-      context.moveTo(0, coordinate)
-      context.lineTo(worldSize, coordinate)
-    }
-    context.stroke()
     context.shadowColor = 'rgba(248,113,113,0.75)'
-    context.shadowBlur = 22
+    context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 11 : 19
     context.strokeStyle = 'rgba(251,113,133,0.95)'
     context.lineWidth = 12
     context.strokeRect(0, 0, worldSize, worldSize)
@@ -712,7 +833,7 @@ export default function OnlinePaper({ onExit }: Props) {
       context.strokeStyle = burst.color
       context.lineWidth = 7 * (1 - progress) + 1
       context.shadowColor = burst.color
-      context.shadowBlur = 18
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 9 : 16
       context.beginPath()
       context.arc(burst.x, burst.y, 10 + burst.size * progress, 0, Math.PI * 2)
       context.stroke()
@@ -732,21 +853,44 @@ export default function OnlinePaper({ onExit }: Props) {
         && player.x <= camera.x + halfWidth + 120
         && player.y <= camera.y + halfHeight + 120
       )
-      if (!visible && player.trail.length === 0) continue
-
+      let firstVisibleTrailIndex = -1
+      let lastVisibleTrailIndex = -1
       if (player.trail.length > 0) {
+        for (let index = 0; index < player.trail.length; index += 1) {
+          const point = cellCenter(player.trail[index], gridSize, cellSize)
+          if (
+            point.x < camera.x - halfWidth - cellSize
+            || point.y < camera.y - halfHeight - cellSize
+            || point.x > camera.x + halfWidth + cellSize
+            || point.y > camera.y + halfHeight + cellSize
+          ) continue
+          if (firstVisibleTrailIndex < 0) firstVisibleTrailIndex = index
+          lastVisibleTrailIndex = index
+        }
+        if (visible && firstVisibleTrailIndex < 0) {
+          firstVisibleTrailIndex = Math.max(0, player.trail.length - 2)
+          lastVisibleTrailIndex = player.trail.length - 1
+        }
+      }
+      if (!visible && firstVisibleTrailIndex < 0) continue
+
+      if (firstVisibleTrailIndex >= 0) {
         context.save()
         context.lineCap = 'round'
         context.lineJoin = 'round'
         context.beginPath()
-        const trailPoints = player.trail.map((cell) => cellCenter(cell, gridSize, cellSize))
-        trailPoints.push({ x: player.x, y: player.y })
+        const sliceStart = Math.max(0, firstVisibleTrailIndex - 1)
+        const sliceEnd = Math.min(player.trail.length, lastVisibleTrailIndex + 2)
+        const trailPoints = player.trail
+          .slice(sliceStart, sliceEnd)
+          .map((cell) => cellCenter(cell, gridSize, cellSize))
+        if (sliceEnd === player.trail.length) trailPoints.push({ x: player.x, y: player.y })
         traceSmoothPath(context, trailPoints)
         context.strokeStyle = 'rgba(2,6,23,0.72)'
         context.lineWidth = cellSize * 0.78
         context.stroke()
         context.shadowColor = player.color
-        context.shadowBlur = 12
+        context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 6 : 11
         context.strokeStyle = player.color
         context.lineWidth = cellSize * 0.55
         context.stroke()
@@ -761,36 +905,36 @@ export default function OnlinePaper({ onExit }: Props) {
       context.translate(player.x, player.y)
       context.rotate(player.angle)
       context.shadowColor = player.color
-      context.shadowBlur = 16
+      context.shadowBlur = quality === 'low' ? 0 : quality === 'balanced' ? 8 : 14
       context.fillStyle = player.color
       context.strokeStyle = 'rgba(2,6,23,0.85)'
       context.lineWidth = 4
       context.beginPath()
-      context.roundRect(-14, -12, 27, 24, 7)
+      context.roundRect(-19, -15, 34, 30, 10)
       context.fill()
       context.stroke()
       context.beginPath()
-      context.moveTo(11, -8)
-      context.lineTo(21, 0)
-      context.lineTo(11, 8)
+      context.moveTo(9, -12)
+      context.quadraticCurveTo(20, -9, 27, 0)
+      context.quadraticCurveTo(20, 9, 9, 12)
       context.closePath()
       context.fill()
       context.stroke()
       context.shadowBlur = 0
       context.fillStyle = 'rgba(255,255,255,0.86)'
       context.beginPath()
-      context.roundRect(-8, -7, 5, 14, 2)
+      context.roundRect(-12, -9, 6, 18, 3)
       context.fill()
       context.fillStyle = '#07111f'
       context.beginPath()
-      context.arc(5, -5, 2.2, 0, Math.PI * 2)
-      context.arc(5, 5, 2.2, 0, Math.PI * 2)
+      context.arc(3, -6, 2.6, 0, Math.PI * 2)
+      context.arc(3, 6, 2.6, 0, Math.PI * 2)
       context.fill()
       context.restore()
 
       if (player.id === leaderIdRef.current) {
         context.save()
-        context.translate(player.x, player.y - 29)
+        context.translate(player.x, player.y - 35)
         context.font = '18px sans-serif'
         context.textAlign = 'center'
         context.shadowColor = 'rgba(250,204,21,0.85)'
@@ -799,16 +943,43 @@ export default function OnlinePaper({ onExit }: Props) {
         context.restore()
       }
 
-      context.save()
-      context.font = `800 ${11 / zoom}px Cairo, sans-serif`
-      context.textAlign = 'center'
-      context.fillStyle = '#ffffff'
-      context.shadowColor = 'rgba(0,0,0,0.95)'
-      context.shadowBlur = 7
-      context.fillText(`${player.avatar} ${player.name} · ${player.score.toFixed(1)}٪`, player.x, player.y - 22 / zoom)
-      context.restore()
+      if (quality !== 'low' || player.id === playerIdRef.current || player.id === leaderIdRef.current) {
+        context.save()
+        context.font = `800 ${11 / zoom}px Cairo, sans-serif`
+        context.textAlign = 'center'
+        context.fillStyle = '#ffffff'
+        context.shadowColor = 'rgba(0,0,0,0.95)'
+        context.shadowBlur = quality === 'low' ? 0 : 7
+        context.fillText(`${player.avatar} ${player.name} · ${player.score.toFixed(1)}٪`, player.x, player.y - 29 / zoom)
+        context.restore()
+      }
     }
     context.restore()
+
+    const pointer = pointerRef.current
+    if (pointer.active) {
+      const dx = pointer.current.x - pointer.origin.x
+      const dy = pointer.current.y - pointer.origin.y
+      const length = Math.hypot(dx, dy)
+      const scale = length > 42 ? 42 / length : 1
+      const handle = {
+        x: pointer.origin.x + dx * scale,
+        y: pointer.origin.y + dy * scale,
+      }
+      context.save()
+      context.fillStyle = 'rgba(2, 12, 25, 0.46)'
+      context.strokeStyle = 'rgba(125, 211, 252, 0.5)'
+      context.lineWidth = 2
+      context.beginPath()
+      context.arc(pointer.origin.x, pointer.origin.y, 48, 0, Math.PI * 2)
+      context.fill()
+      context.stroke()
+      context.fillStyle = 'rgba(56, 189, 248, 0.8)'
+      context.beginPath()
+      context.arc(handle.x, handle.y, 19, 0, Math.PI * 2)
+      context.fill()
+      context.restore()
+    }
   }, [rebuildTerritoryTexture])
 
   useEffect(() => {
@@ -817,11 +988,15 @@ export default function OnlinePaper({ onExit }: Props) {
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return
-      const ratio = preferredPixelRatio()
+      const ratio = preferredPixelRatio(qualityRef.current)
       viewportRef.current = { width: rect.width, height: rect.height }
       pixelRatioRef.current = ratio
-      canvas.width = Math.round(rect.width * ratio)
-      canvas.height = Math.round(rect.height * ratio)
+      const targetWidth = Math.round(rect.width * ratio)
+      const targetHeight = Math.round(rect.height * ratio)
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth
+        canvas.height = targetHeight
+      }
       const context = canvas.getContext('2d')
       if (context) {
         const gradient = context.createLinearGradient(0, 0, 0, rect.height)
@@ -832,10 +1007,14 @@ export default function OnlinePaper({ onExit }: Props) {
       }
       renderScene(performance.now())
     }
+    resizeSceneRef.current = resize
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
-    return () => observer.disconnect()
+    return () => {
+      if (resizeSceneRef.current === resize) resizeSceneRef.current = null
+      observer.disconnect()
+    }
   }, [renderScene])
 
   useEffect(() => {
@@ -845,13 +1024,27 @@ export default function OnlinePaper({ onExit }: Props) {
         frame = requestAnimationFrame(loop)
         return
       }
-      const elapsed = Math.min(0.05, (timestamp - (lastFrameRef.current || timestamp)) / 1_000)
+      const frameInterval = timestamp - (lastFrameRef.current || timestamp)
+      const elapsed = Math.min(0.05, frameInterval / 1_000)
       lastFrameRef.current = timestamp
       updateRenderedPlayers(elapsed)
       renderScene(timestamp)
       if (timestamp - lastMinimapFrameRef.current >= MINIMAP_INTERVAL_MS) {
         lastMinimapFrameRef.current = timestamp
         renderMinimap()
+      }
+      const budgetSample = frameBudgetRef.current.record(frameInterval)
+      if (budgetSample?.changed) {
+        qualityRef.current = budgetSample.quality
+        territoryDirtyRef.current = true
+        resizeSceneRef.current?.()
+        window.dispatchEvent(new CustomEvent('dedos-render-quality', {
+          detail: {
+            game: 'paper',
+            quality: budgetSample.quality,
+            p95FrameMs: Math.round(budgetSample.p95FrameMs * 10) / 10,
+          },
+        }))
       }
       frame = requestAnimationFrame(loop)
     }
@@ -883,23 +1076,26 @@ export default function OnlinePaper({ onExit }: Props) {
   }
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || (event.pointerType === 'mouse' && event.button !== 0)) return
     const point = pointerPosition(event)
-    pointerRef.current = { active: true, start: point, last: point, travelled: 0 }
+    pointerRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      origin: point,
+      current: point,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
     event.preventDefault()
   }
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const pointer = pointerRef.current
-    if (!pointer.active) return
+    if (!pointer.active || pointer.pointerId !== event.pointerId) return
     const point = pointerPosition(event)
-    const dx = point.x - pointer.last.x
-    const dy = point.y - pointer.last.y
-    const distance = Math.hypot(dx, dy)
-    if (distance >= 4) {
-      pointer.last = point
-      pointer.travelled += distance
+    pointer.current = point
+    const dx = point.x - pointer.origin.x
+    const dy = point.y - pointer.origin.y
+    if (Math.hypot(dx, dy) >= 5) {
       setShowGuide(false)
       sendSteering(Math.atan2(dy, dx))
     }
@@ -908,16 +1104,28 @@ export default function OnlinePaper({ onExit }: Props) {
 
   const handlePointerEnd = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const pointer = pointerRef.current
-    if (pointer.active && pointer.travelled < 8) {
-      const point = pointerPosition(event)
+    if (!pointer.active || pointer.pointerId !== event.pointerId) return
+    const point = pointerPosition(event)
+    pointer.current = point
+    const dx = point.x - pointer.origin.x
+    const dy = point.y - pointer.origin.y
+    if (Math.hypot(dx, dy) < 8) {
       const viewport = viewportRef.current
       sendSteering(Math.atan2(point.y - viewport.height / 2, point.x - viewport.width / 2), true)
       setShowGuide(false)
-    } else if (pointer.active) {
-      sendSteering(desiredAngleRef.current, true)
+    } else {
+      sendSteering(Math.atan2(dy, dx), true)
     }
     pointer.active = false
+    pointer.pointerId = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+
+  const handlePointerCancel = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (pointerRef.current.pointerId !== event.pointerId) return
+    pointerRef.current.active = false
+    pointerRef.current.pointerId = null
   }
 
   const respawn = () => {
@@ -938,7 +1146,12 @@ export default function OnlinePaper({ onExit }: Props) {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={(event) => {
+          if (pointerRef.current.pointerId !== event.pointerId) return
+          pointerRef.current.active = false
+          pointerRef.current.pointerId = null
+        }}
         onContextMenu={(event) => event.preventDefault()}
         aria-label="ساحة سيطر العامة — اسحب في أي اتجاه للتحرك"
       />

@@ -4,7 +4,7 @@
 
 Dedos is an Arabic-first, RTL social gaming app for Android and the web. It combines polished offline games, realtime multiplayer, direct and group chat, friends, profiles, stats, leaderboards, and native push notifications in one app.
 
-The Android release is currently prepared for Google Play closed testing as **1.12.2 (version code 20)**.
+The Android release is currently prepared for Google Play closed testing as **1.12.3 (version code 21)**.
 
 ## Screenshots
 
@@ -56,7 +56,7 @@ Online play no longer uses create-room or join-by-code screens. Players start ga
 - Offline game logic and rich game assets are packaged into the Android bundle.
 - Snake uses interpolated rendering, compact snapshots, spatial lookup, client prediction, adaptive visual quality, and a capped public arena.
 - The server exposes realtime simulation, snapshot, and event-loop timings through `/health` and `/metrics`.
-- سيطر renders and predicts movement on the phone at 60 FPS while the server sends compact territory patches and validates captures.
+- سيطر renders at native phone density with smooth territory contours, stable touch steering, and 60 FPS client prediction while the server sends compact territory patches and validates captures.
 - حلاوة uses a WebGL renderer with a DOM fallback, optimistic online swaps, cascades, particles, haptics, and special-piece effects.
 - Android uses AGP 9, R8 optimization/obfuscation, resource shrinking, generated baseline/startup profiles, asynchronous WebView warm-up, Game Mode awareness, release signing, and native-debug metadata configuration.
 - Package: `com.dedos.game`; minimum Android API 24; target API 36.
