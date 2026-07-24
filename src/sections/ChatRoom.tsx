@@ -1,10 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Gamepad2, Heart, Loader2, Search, Send, Trophy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Gamepad2, Heart, Loader2, Send, Trophy } from 'lucide-react'
 import { useOnline, type ChatMessage } from '@/online/OnlineContext'
 import { AvatarCircle, StatusDot } from './components'
-import { ONLINE_GAMES, getGame } from '@/games'
-import { DEFAULT_ROUNDS, gameUsesRounds, type Difficulty } from '@/types'
+import { CATEGORIES, ONLINE_GAMES, getGame } from '@/games'
+import { DEFAULT_ROUNDS, gameUsesRounds, type Difficulty, type GameCategory } from '@/types'
 import { statusLabel } from '@/data/friends'
 import { ROUND_AR, RoundsStepper } from './OnlineLobby'
 import { sounds } from '@/lib/sounds'
@@ -244,16 +244,6 @@ const MessageBubble = memo(function MessageBubble({ m, mine, isGroup, currentUse
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 
-function normalizeGameSearch(value: string): string {
-  return value
-    .trim()
-    .toLocaleLowerCase('ar')
-    .normalize('NFKD')
-    .replace(/[\u064b-\u065f\u0670]/g, '')
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-}
-
 export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const { status, me, friends, threads, messages, loadThread, setOpenThreadId, chatSend, chatReact, chatSendInvite } = useOnline()
   const thread = threads.find((t) => t.id === threadId)
@@ -264,7 +254,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const [inviteGame, setInviteGame] = useState<string | null>(null)
   const [inviteRounds, setInviteRounds] = useState<number>(DEFAULT_ROUNDS)
   const [inviteDifficulty, setInviteDifficulty] = useState<Difficulty>('easy')
-  const [inviteSearch, setInviteSearch] = useState('')
+  const [inviteCategory, setInviteCategory] = useState<'الكل' | GameCategory>('الكل')
   const [profileOpen, setProfileOpen] = useState(false)
   const [showNewestButton, setShowNewestButton] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -275,13 +265,12 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
   const dmPresence = status === 'online' ? dmFriend?.presence : 'offline'
   const isGroup = thread?.kind === 'group'
   const myId = me?.userId
-  const filteredInviteGames = useMemo(() => {
-    const query = normalizeGameSearch(inviteSearch)
-    if (!query) return ONLINE_GAMES
-    return ONLINE_GAMES.filter((game) => normalizeGameSearch(
-      `${game.name} ${game.description} ${game.category} ${game.id}`,
-    ).includes(query))
-  }, [inviteSearch])
+  const filteredInviteGames = useMemo(
+    () => inviteCategory === 'الكل'
+      ? ONLINE_GAMES
+      : ONLINE_GAMES.filter((game) => game.category === inviteCategory),
+    [inviteCategory],
+  )
 
   // مرجع ثابت لزر قبول التحدي حتى لا تُكسر مذكرة الفقاعات
   const handleJoin = useCallback(
@@ -389,7 +378,15 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
     setInviteOpen(false)
     setInviteGame(null)
     setInviteDifficulty('easy')
-    setInviteSearch('')
+    setInviteCategory('الكل')
+  }
+
+  const openInvitePicker = () => {
+    sounds.click()
+    composerRef.current?.blur()
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    setInviteCategory('الكل')
+    setInviteOpen(true)
   }
 
   return (
@@ -502,10 +499,7 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
         <div className="flex items-end gap-2 glass rounded-3xl p-2">
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              sounds.click()
-              setInviteOpen(true)
-            }}
+            onClick={openInvitePicker}
             className="w-11 h-11 rounded-2xl bg-amber-400/15 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0 glow-amber"
             aria-label="دعوة لعبة"
           >
@@ -622,16 +616,30 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
             </div>
           ) : (
             <div className="flex min-h-0 flex-col gap-2.5 py-1">
-              <div className="relative shrink-0">
-                <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={inviteSearch}
-                  onChange={(event) => setInviteSearch(event.target.value)}
-                  placeholder="دوّر على لعبة…"
-                  aria-label="ابحث عن لعبة"
-                  className="h-11 w-full rounded-2xl border border-white/10 bg-white/5 pe-3 ps-10 text-sm font-bold outline-none placeholder:text-muted-foreground/60 focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/10"
-                />
+              <div
+                className="-mx-1 flex shrink-0 gap-2 overflow-x-auto px-1 pb-1 no-scrollbar"
+                role="group"
+                aria-label="تصنيفات الألعاب"
+              >
+                {CATEGORIES.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => {
+                      sounds.click()
+                      setInviteCategory(category)
+                    }}
+                    aria-pressed={inviteCategory === category}
+                    className={cn(
+                      'min-h-10 shrink-0 whitespace-nowrap rounded-full border px-4 text-xs font-extrabold transition-all',
+                      inviteCategory === category
+                        ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200 glow-emerald'
+                        : 'border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10',
+                    )}
+                  >
+                    {category}
+                  </button>
+                ))}
               </div>
 
               <div className="flex shrink-0 items-center justify-between px-1 text-[10px] font-bold text-muted-foreground">
@@ -670,11 +678,11 @@ export default function ChatRoom({ threadId, onBack, onAcceptInvite }: Props) {
                 })}
                 {filteredInviteGames.length === 0 && (
                   <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 text-center">
-                    <span className="text-3xl">🎮</span>
-                    <p className="mt-2 text-xs font-extrabold">مفيش لعبة بالاسم ده</p>
+                    <span className="text-3xl">🗂️</span>
+                    <p className="mt-2 text-xs font-extrabold">مفيش ألعاب في التصنيف ده</p>
                     <button
                       type="button"
-                      onClick={() => setInviteSearch('')}
+                      onClick={() => setInviteCategory('الكل')}
                       className="mt-1 min-h-9 px-3 text-[10px] font-bold text-emerald-300"
                     >
                       اعرض كل الألعاب
